@@ -7,6 +7,15 @@ $gameDir = Get-NlGameDir
 $root = Get-NlDataSnapshotDir
 $count = 0
 
+# 지금 버전의 스냅샷은 없는데 다른 버전 것이 있으면 게임이 갱신된 것이다. 아무것도 안 하고 성공이라고 하지 않는다.
+if (-not (Test-Path -LiteralPath $root)) {
+    $others = @(Get-ChildItem -LiteralPath (Split-Path -Parent $root) -Directory -ErrorAction SilentlyContinue)
+    if ($others.Count) {
+        throw ("이 게임 버전의 스냅샷이 없고 다른 버전의 스냅샷만 있습니다: $(($others | ForEach-Object { $_.Name }) -join ', ').`n" +
+               '게임이 갱신된 것으로 보입니다. Steam 무결성 검사로 데이터 파일을 되돌린 뒤 tools\data-snapshot.ps1 을 다시 실행하세요.')
+    }
+}
+
 if (Test-Path -LiteralPath $root) {
     foreach ($f in Get-ChildItem -LiteralPath $root -Recurse -File) {
         $rel = $f.FullName.Substring($root.Length + 1)

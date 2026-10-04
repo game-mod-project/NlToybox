@@ -8,6 +8,15 @@ Assert-NlGameNotRunning
 $gameDir = Get-NlGameDir
 $root = Get-NlDataSnapshotDir
 
+# 이 버전의 스냅샷을 처음 뜨는데 다른 버전 것이 있으면 게임이 갱신된 것이다. 갱신 전에 고친 파일이 남아 있을 수 있다.
+if (-not (Test-Path -LiteralPath $root)) {
+    $others = @(Get-ChildItem -LiteralPath (Split-Path -Parent $root) -Directory -ErrorAction SilentlyContinue)
+    if ($others.Count) {
+        Write-Warning ("다른 게임 버전의 스냅샷이 있습니다: $(($others | ForEach-Object { $_.Name }) -join ', '). " +
+                       '지금 파일이 바닐라인지 확인하세요(Steam 무결성 검사 직후여야 합니다).')
+    }
+}
+
 foreach ($rel in $Files) {
     Assert-NlSafeRelPath $rel
     $src = Join-Path $gameDir $rel

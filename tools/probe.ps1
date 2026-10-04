@@ -29,7 +29,10 @@ try {
         Start-Sleep -Seconds 2
         if (Test-NlGameRunning) { $seenProcess = $true }
         elseif ($seenProcess) { Write-Host '게임 프로세스가 사라졌습니다.'; break }
-        if ((Test-Path -LiteralPath $log) -and (@(Get-Content -LiteralPath $log -ErrorAction SilentlyContinue) -contains 'dump done')) { $done = $true; break }
+        $lines = @(if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -ErrorAction SilentlyContinue })
+        # 모듈이 요청을 읽었으면 요청 파일은 더 필요 없다. 이 도구가 도중에 죽어도 남지 않게 바로 지운다.
+        if (($lines -match '^dump requested') -and (Test-Path -LiteralPath $reqDst)) { Remove-Item -LiteralPath $reqDst -Force -ErrorAction SilentlyContinue }
+        if ($lines -contains 'dump done') { $done = $true; break }
     }
     if (-not $seenProcess) { Write-Host '게임 프로세스를 한 번도 보지 못했습니다.' }
 
@@ -45,9 +48,13 @@ try {
     }
 }
 finally {
-    Write-Host "게임 종료: $(Stop-NlGame)"
-    # 요청 파일이 남으면 평소 플레이 때도 덤프가 돈다. 어떤 경로로 끝나든 지운다.
-    foreach ($f in $reqDst, $dump) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } }
+    # 요청 파일이 남으면 평소 플레이 때도 덤프가 돈다. 게임을 끄는 일보다 먼저 지운다(끄다가 실패해도 남지 않게).
+    if (Test-Path -LiteralPath $reqDst) { Remove-Item -LiteralPath $reqDst -Force -ErrorAction SilentlyContinue }
+    try { Write-Host "게임 종료: $(Stop-NlGame)" }
+    finally {
+        # 덤프는 모듈이 쓰는 중이면 잠겨 있다. 게임을 끈 뒤에 지운다.
+        foreach ($f in $reqDst, $dump) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue } }
+    }
 }
 
 if (-not $done) { Write-Host 'FAIL: dump done 을 보지 못했습니다.'; exit 1 }
