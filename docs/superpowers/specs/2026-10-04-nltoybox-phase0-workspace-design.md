@@ -2,7 +2,8 @@
 
 - 작성일: 2026-10-04
 - 대상: Norland (Steam appid 1857090), 게임 버전 `0.5588.9777.0`, buildid `25211575`
-- 상태: 설계 승인(대화) → 문서 검토 대기
+- 상태: 문서 승인(2026-10-04). 같은 날 계획 작성 중 §3.1·§4.3·§4.4·§4.5·§9를 정정했다
+  (YYToolkit 태그 `v5.0.0c`가 v5 소스를 가리키지 않는다는 발견. §3.1 참고)
 
 ## 1. 목적
 
@@ -82,8 +83,13 @@ Phase 0이 끝나면 다음 한 바퀴가 스크립트만으로 돈다.
   레지스트리와 관리자 권한을 쓰지 않는다.
 - v5.0.0c의 릴리스 노트는 Aurie 헤더를 v2.0.2로 올렸다고 적는다. 둘이 짝이다.
 
-알려진 약점: v5.0.0c는 릴리스 노트가 "Beta & unstable … FOR TESTING ONLY"라고 적은
-사전 릴리스다.
+알려진 약점 두 가지:
+- v5.0.0c는 릴리스 노트가 "Beta & unstable … FOR TESTING ONLY"라고 적은 사전 릴리스다.
+- **git 태그 `v5.0.0c`는 v5 소스를 가리키지 않는다.** 태그는 `stable` 브랜치의
+  `86c133dc`(2025-03-20, 공유 헤더가 `YYTK_MAJOR 4`)에 붙어 있다. v5 소스는 `experimental`
+  브랜치에 있다. 릴리스 바이너리가 어느 커밋에서 빌드됐는지 태그로는 알 수 없으므로
+  헤더는 `experimental`의 HEAD에 고정하고(§4.5), 모듈이 YYToolkit 버전을 로그에 찍어
+  어긋남을 드러낸다(§4.3).
 
 ### 3.2 대안과 실패 시 순서
 
@@ -111,7 +117,7 @@ E:\NlToyBox
 ├─ src/
 │   └─ ModuleMain.cpp            Phase 0 모듈 (§4.3)
 ├─ external/
-│   └─ YYToolkit/                서브모듈, 태그 v5.0.0c (커밋 86c133dc). 헤더만 쓴다
+│   └─ YYToolkit/                서브모듈, experimental 브랜치 커밋 d5cc0078 고정. 헤더만 쓴다
 ├─ tools/
 │   ├─ common.ps1                공용 함수 (§4.4)
 │   ├─ pins.json                 받을 파일의 태그·URL·크기·SHA256
@@ -161,22 +167,28 @@ E:\NlToyBox
 하는 일은 세 가지다.
 
 1. `ModuleInitialize`에서 `YYTK::GetInterface()`를 얻는다. 없으면
-   `AURIE_MODULE_DEPENDENCY_NOT_RESOLVED`를 돌려준다.
+   `AURIE_MODULE_DEPENDENCY_NOT_RESOLVED`를 돌려준다. 얻으면 `QueryVersion`으로
+   YYToolkit 버전을 읽는다.
 2. `EVENT_FRAME` 콜백을 등록하고, **첫 프레임에 한 번만** 두 가지를 시험한다.
-   - 빌트인 호출: `CallBuiltin("code_is_compiled", {})`. YYC이므로 참이어야 한다.
+   - 빌트인 호출: 전역 인스턴스로 `CallBuiltinEx(…, "code_is_compiled", …)`.
+     YYC이므로 참이어야 한다.
    - 이름으로 스크립트 찾기:
      `GetNamedRoutinePointer("gml_Script_command_line_parameters_init", …)`.
      `AURIE_SUCCESS`여야 한다.
-3. 결과를 `NlToyBox.log`(모듈 DLL 옆, `ModulePath` 기준)에 쓰고 Aurie 콘솔에도 찍는다.
+3. 결과를 `NlToyBox.log`(모듈 DLL 옆, `ModulePath` 기준)에 쓰고 Aurie 로그에도 찍는다
+   (`DbgPrintEx`. v5 인터페이스에는 `Print` 계열이 없다).
 
 로그 형식 (한 줄에 하나, `check-load.ps1`이 읽는다):
 
 ```
 NlToyBox 0.0.1 loaded
+yytk <major>.<minor>.<patch>
 builtin code_is_compiled = <true|false|error:<상태>>
 script gml_Script_command_line_parameters_init = <found|error:<상태>>
 probe done
 ```
+
+`yytk` 줄은 판정에 쓰지 않는다. 헤더(`YYTK_MAJOR 5`)와 바이너리가 어긋났는지 보는 단서다.
 
 첫 프레임에서 시험하는 이유: v5는 초기화를 세 단계로 나누고, 초기화 전에 호출하면
 안 되는 함수가 있다고 릴리스 노트가 적는다. 프레임 콜백이 도는 시점은 러너가 준비된 뒤다.
@@ -184,11 +196,13 @@ probe done
 로그는 실행마다 새로 쓴다(덮어쓰기). 프레임 콜백은 시험 뒤 아무 일도 하지 않는다.
 
 빌드:
-- CMake + Ninja, 구성 `RelWithDebInfo`, `/std:c++latest`, `/MD`.
+- CMake + Ninja, 구성 `RelWithDebInfo`, `/std:c++latest`, `/MD`, `UNICODE`.
 - 소스: `src/ModuleMain.cpp`,
-  `external/YYToolkit/ExamplePlugin/include/YYToolkit/YYTK_Shared_Types.cpp`.
-- 포함 경로: `external/YYToolkit/ExamplePlugin/include`
-  (`Aurie/`, `FunctionWrapper/`, `YYToolkit/`가 한 뿌리 아래 있다).
+  `external/YYToolkit/YYToolkit/source/YYTK/Shared/YYTK_Shared_Types.cpp`.
+- 포함 경로: `external/YYToolkit/YYToolkit/source/YYTK/Shared`(`YYTK_Shared.hpp`)와
+  `external/YYToolkit/YYToolkit/include`(`Aurie/`, `FunctionWrapper/`).
+  `ExamplePlugin/include`의 사본은 쓰지 않는다. `experimental`에서도 정본과 내용이 다르다
+  (blob 해시가 다르다).
 - 산출물: `build/NlToyBox.dll`.
 
 ### 4.4 도구 계약
@@ -205,6 +219,9 @@ probe done
 | `Test-NlGameRunning` | `Norland` 프로세스가 있으면 참 |
 | `Get-NlExeInfo` | `Norland.exe`의 버전, 크기, SHA256, PE 섹션 이름 목록, `Patched`(`.aurie` 섹션 유무) |
 | `Get-NlPins` | `pins.json`을 읽은 객체 |
+| `Get-NlPeSectionNames <경로>` | PE 파일의 섹션 이름 목록. PE가 아니면 오류 |
+| `Get-NlBackups <버전>` | `backups/`에서 그 버전의 백업 파일 목록 |
+| `Assert-NlGameNotRunning` | 게임이 실행 중이면 PID를 담아 오류 |
 
 **`game-status.ps1`** — 읽기만 한다. buildid, exe 버전·해시·패치 여부, 실행 여부,
 `mods\` 내용, 백업 유무와 해시 일치 여부를 한 화면에 찍는다.
@@ -235,7 +252,7 @@ probe done
 `AuriePatcher … remove`에 의존하지 않는다. 그것이 바이트 단위로 원본을 되살리는지
 확인하지 않았기 때문이다. Phase 0에서 한 번 실측해 `research/`에 적는다.
 
-**`build.ps1`** — Build Tools의 `VsDevCmd.bat`(x64)로 환경을 잡고 동봉 cmake·ninja로
+**`build.ps1`** — Build Tools의 `vcvars64.bat`로 환경을 잡고 동봉 cmake·ninja로
 `build/`에 빌드한다. `external/YYToolkit`이 비어 있으면
 `git submodule update --init`을 하라고 알리고 끝낸다.
 
@@ -261,8 +278,18 @@ probe done
 
 SHA256은 GitHub API가 자산마다 내주는 `digest` 값이다(2026-10-04 조회).
 
-서브모듈: `github.com/AurieFramework/YYToolkit` @ `86c133dc7f4e87991dd2cb7f2eac056dc5f13124`
-(태그 v5.0.0c).
+서브모듈: `github.com/AurieFramework/YYToolkit` @
+`d5cc0078bfbfd5907884ad3fe0b3c6cbaa1c3f54` (`experimental` 브랜치 HEAD, 2026-02-02).
+
+이 커밋을 v5.0.0c의 소스로 보는 근거:
+- 이 커밋의 `YYToolkit/include/Aurie/shared.hpp`는 Aurie v2.0.2의
+  `Aurie/source/framework/shared.hpp`와 blob 해시가 같다(`e4f0225c7b`).
+  v5.0.0c 릴리스 노트의 "Updated Aurie headers to v2.0.2"와 맞는다.
+- 릴리스 노트의 나머지 항목(RUNNER_INIT 콜백, RValue 배열 오프셋 알고리즘)이
+  `experimental`의 마지막 커밋들이다.
+- 공유 헤더가 `YYTK_MAJOR 5`다.
+
+확정은 아니다. 태그가 없으므로 추정이고, Phase 0의 실측(§7)이 판정한다.
 
 ### 4.6 `CLAUDE.md`에 적을 것
 
@@ -333,6 +360,7 @@ main ← develop ← feat/* | fix/* | chore/* | docs/*
 | 위험 | 대응 |
 |---|---|
 | v5.0.0c 베타가 이 빌드에서 붙지 않거나 게임이 죽는다 | §3.2의 순서. `restore-game.ps1`로 되돌린다 |
+| 헤더(`experimental` HEAD)와 릴리스 바이너리가 어긋난다 | 로그의 `yytk` 줄과 프로브 결과로 드러난다. 어긋나면 YYToolkit을 그 커밋에서 직접 빌드하는 안을 사용자와 다시 정한다 |
 | Steam 갱신·무결성 검사가 패치를 지운다 | `game-status.ps1`이 알려 준다. `setup-aurie.ps1`을 다시 돌린다 |
 | 게임 갱신으로 스크립트 이름이나 러너 내부가 바뀐다 | `check-load.ps1`이 실패로 알려 준다 |
 | 백신이 패치된 exe나 주입을 오탐한다 | 발생하면 보고한다. 보안 설정은 사용자가 바꾼다 |
