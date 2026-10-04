@@ -2,8 +2,10 @@
 
 - 작성일: 2026-10-04
 - 대상: Norland (Steam appid 1857090), 게임 버전 `0.5588.9777.0`, buildid `25211575`
-- 상태: 문서 승인(2026-10-04). 같은 날 계획 작성 중 §3.1·§4.3·§4.4·§4.5·§9를 정정했다
-  (YYToolkit 태그 `v5.0.0c`가 v5 소스를 가리키지 않는다는 발견. §3.1 참고)
+- 상태: 문서 승인(2026-10-04). 같은 날 두 번 정정했다
+  - 계획 작성 중: §3.1·§4.3·§4.4·§4.5·§9 (YYToolkit 태그 `v5.0.0c`가 v5 소스를 가리키지 않는다)
+  - 실행 중, 사용자 승인: §4.2·§4.3 (`EVENT_FRAME`이 불리지 않아 프로브 시점을 게임 스레드
+    콜백으로 바꿨다. Aurie가 게임 폴더에 `aurie.log`를 쓴다)
 
 ## 1. 목적
 
@@ -152,6 +154,7 @@ E:\NlToyBox
 ```
 <게임 폴더>
 ├─ Norland.exe                   AuriePatcher가 패치 (.aurie 섹션 추가)
+├─ aurie.log                     Aurie가 쓴다 (실행 중 0바이트, 게임을 끌 때 채워진다)
 └─ mods/
     ├─ Native/AurieCore.dll
     └─ Aurie/
@@ -169,7 +172,10 @@ E:\NlToyBox
 1. `ModuleInitialize`에서 `YYTK::GetInterface()`를 얻는다. 없으면
    `AURIE_MODULE_DEPENDENCY_NOT_RESOLVED`를 돌려준다. 얻으면 `QueryVersion`으로
    YYToolkit 버전을 읽는다.
-2. `EVENT_FRAME` 콜백을 등록하고, **첫 프레임에 한 번만** 두 가지를 시험한다.
+2. 게임 스레드에서 도는 콜백 두 개(`EVENT_OBJECT_CALL`, `EVENT_WNDPROC`)를 등록하고,
+   **먼저 오는 쪽에서 한 번만** 두 가지를 시험한다. 어느 쪽이 왔는지 로그에 남긴다.
+   (`EVENT_FRAME`은 쓰지 않는다. 실측: YYToolkit v5.0.0c는 Present 훅을 걸지 않아
+   이 콜백이 불리지 않는다. 소스의 `Hooks::InitializeStage3Hooks`에 호출부가 없다.)
    - 빌트인 호출: 전역 인스턴스로 `CallBuiltinEx(…, "code_is_compiled", …)`.
      YYC이므로 참이어야 한다.
    - 이름으로 스크립트 찾기:
@@ -183,17 +189,21 @@ E:\NlToyBox
 ```
 NlToyBox 0.0.1 loaded
 yytk <major>.<minor>.<patch>
+trigger <object_call|wndproc>
 builtin code_is_compiled = <true|false|error:<상태>>
 script gml_Script_command_line_parameters_init = <found|error:<상태>>
 probe done
 ```
 
-`yytk` 줄은 판정에 쓰지 않는다. 헤더(`YYTK_MAJOR 5`)와 바이너리가 어긋났는지 보는 단서다.
+`yytk`와 `trigger` 줄은 판정에 쓰지 않는다. `yytk`는 헤더(`YYTK_MAJOR 5`)와 바이너리가
+어긋났는지 보는 단서이고, `trigger`는 이후 기능이 올라갈 게임 스레드 진입점이 어느 것인지
+알려 준다.
 
-첫 프레임에서 시험하는 이유: v5는 초기화를 세 단계로 나누고, 초기화 전에 호출하면
-안 되는 함수가 있다고 릴리스 노트가 적는다. 프레임 콜백이 도는 시점은 러너가 준비된 뒤다.
+`ModuleInitialize`에서 바로 시험하지 않는 이유: 이 모듈은 Aurie의 "나머지 모드 적재" 단계에서
+Aurie의 스레드로 초기화된다(실측: 게임 창이 뜬 뒤). 그때 러너는 이미 메인 루프를 돌고 있으므로,
+러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다.
 
-로그는 실행마다 새로 쓴다(덮어쓰기). 프레임 콜백은 시험 뒤 아무 일도 하지 않는다.
+로그는 실행마다 새로 쓴다(덮어쓰기). 두 콜백은 시험 뒤 아무 일도 하지 않는다.
 
 빌드:
 - CMake + Ninja, 구성 `RelWithDebInfo`, `/std:c++latest`, `/MD`, `UNICODE`.

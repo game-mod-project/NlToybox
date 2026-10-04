@@ -4,6 +4,7 @@
 
 #include <YYTK_Shared.hpp>
 
+#include <atomic>
 #include <fstream>
 #include <string>
 
@@ -18,7 +19,7 @@ namespace
 
 	YYTKInterface* g_Yytk = nullptr;
 	fs::path g_LogPath;
-	bool g_Probed = false;
+	std::atomic<bool> g_Probed = false;
 
 	void LogLine(const std::string& Line, bool Truncate = false)
 	{
@@ -59,18 +60,40 @@ namespace
 		return routine ? "found" : "error:null pointer";
 	}
 
-	void FrameCallback(FWFrame& FrameContext)
+	// 게임 스레드의 콜백에서 한 번만 시험한다. 어느 콜백이 먼저 왔는지 남긴다.
+	// EVENT_FRAME 은 쓰지 않는다. YYToolkit v5.0.0c 는 Present 훅을 걸지 않는다 (스펙 §4.3).
+	void ProbeOnce(const char* Trigger)
 	{
-		UNREFERENCED_PARAMETER(FrameContext);
-
-		// 첫 프레임에 한 번만 시험한다. 러너가 준비된 뒤여야 빌트인을 부를 수 있다.
-		if (g_Probed)
+		if (g_Probed.exchange(true))
 			return;
-		g_Probed = true;
 
+		LogLine(std::string("trigger ") + Trigger);
 		LogLine(std::string("builtin ") + k_ProbeBuiltin + " = " + ProbeBuiltin());
 		LogLine(std::string("script ") + k_ProbeScript + " = " + ProbeScript());
 		LogLine("probe done");
+	}
+
+	// 오브젝트 이벤트 코드가 실행될 때마다 온다. 래퍼의 내용은 쓰지 않는다.
+	void CodeCallback(FWCodeEvent& CodeContext)
+	{
+		UNREFERENCED_PARAMETER(CodeContext);
+		ProbeOnce("object_call");
+	}
+
+	// 게임 창이 메시지를 받을 때마다 온다.
+	void WndProcCallback(FWWndProc& WndProcContext)
+	{
+		UNREFERENCED_PARAMETER(WndProcContext);
+		ProbeOnce("wndproc");
+	}
+
+	AurieStatus Register(AurieModule* Module, EventTriggers Trigger, PVOID Routine, const char* Name)
+	{
+		const AurieStatus status = g_Yytk->CreateCallback(Module, Trigger, Routine, 0);
+		if (!AurieSuccess(status))
+			LogLine(std::string("error:CreateCallback ") + Name + " " + AurieStatusToString(status));
+
+		return status;
 	}
 }
 
@@ -98,12 +121,13 @@ EXPORTED AurieStatus ModuleInitialize(
 	g_Yytk->QueryVersion(major, minor, patch);
 	LogLine("yytk " + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch));
 
-	const AurieStatus status = g_Yytk->CreateCallback(Module, EVENT_FRAME, FrameCallback, 0);
+	AurieStatus status = Register(Module, EVENT_OBJECT_CALL, CodeCallback, "object_call");
 	if (!AurieSuccess(status))
-	{
-		LogLine("error:CreateCallback " + std::string(AurieStatusToString(status)));
 		return status;
-	}
+
+	status = Register(Module, EVENT_WNDPROC, WndProcCallback, "wndproc");
+	if (!AurieSuccess(status))
+		return status;
 
 	return AURIE_SUCCESS;
 }
