@@ -3,7 +3,7 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 설계 승인(대화) → 문서 검토 대기
+- 상태: 단계 0 완료(`research/01-data-overlay.md`). 단계 0b(§3.7)는 검토 대기
 
 ## 1. 목적
 
@@ -131,6 +131,115 @@
 질문 2의 답이 세 파일 모두 "아니다"이면 단계 1을 시작하지 않는다. 로드맵으로 돌아가 하위 프로젝트 2를
 먼저 할지 정한다.
 
+### 3.7 단계 0b — 새 게임 상태에서 다시 잰다
+
+단계 0은 메인 메뉴에서만 쟀고 `debug_params.json`과 `battle_params.json`은 "확인하지 못함"으로 남았다
+(`research/01-data-overlay.md`). 새 게임에 들어간 상태에서 다시 잰다. 새 게임은 사용자가 메뉴에서 시작하고,
+**모듈이 게임에 들어간 것을 알아보고 덤프한다.**
+
+#### 근거 (2026-10-04, 게임을 켜지 않고 얻은 것)
+
+- `data.win`의 `ROOM` 청크는 18개이고 첫 항목이 `rm_game`이다. 거기 놓인 인스턴스는 `o_game_launch` 하나다.
+  메인 메뉴만의 룸은 없다(`rm_main_menu_test`는 인스턴스가 없다). **룸 이름으로는 메뉴와 게임을 가릴 수 없다.**
+- 오브젝트는 64개다. `o_main_menu`의 Step 이벤트가 메인 메뉴에서 돈다(단계 0 실행 1의 오류 창).
+  게임 안의 것으로 보이는 이름: `o_character`, `o_building`, `o_time_controller`, `o_province_controller`.
+  이들이 메뉴에서 이미 있는지는 모른다.
+- 새 게임 설정 화면은 `gui_main_menu_choose_province*` 스크립트와 `global.__main_menu_manager`의 멤버
+  (`__choose_province`, `__family_editor`, `__conditions_editor`)에 있다. 메뉴의 일부로 보인다(이름뿐, 동작은 모른다).
+- 상태 변수 후보(메인 메뉴 덤프의 값): `global.__new_game_initializer.__is_active` = 0, `.__current_step` = 0,
+  `global.__game_load_operator.__main_menu_state` = 0, `.__game_is_loading` = 0.
+- 수 하나로 된 전역이 많다(`__map_of_cached_loaded_files__` = 19, `__map_of_buffers` = 326 등). ds_map 번호로
+  보인다(추정). 단계 0의 찾기는 ds_map·ds_list 안을 보지 않았다. JSON을 `json_decode`로 읽는 게임이라면
+  파일 값은 거기에 있다.
+- 세이브 폴더 `%LOCALAPPDATA%\Strategy`는 67개 784KB이고 `saves\`에는 `steam_autocloud.vdf`뿐이다(세이브 없음).
+
+#### 답할 질문
+
+4. 새 게임 상태에서 `debug_params.json`, `battle_params.json`, `director_params.json`,
+   `knowledge\technology\*.json`의 바꾼 값이 런타임에 있는가. 어디에 있는가.
+5. 그 값은 언제 읽히는가. 메인 메뉴에서 이미 있는가, 새 게임에서 생기는가.
+6. "게임 안"을 무엇으로 알아보는가(오브젝트의 유무, 상태 변수).
+
+#### 모듈
+
+요청 파일에 키를 더한다. 기존 키의 뜻은 그대로이되 `find_name`은 **부분 일치**로 바뀐다
+(평평한 이름 `…_battle_dodge_base`를 찾으려고).
+
+```
+trigger=!o_main_menu&o_character     # 조건 한 줄. 항은 오브젝트 이름(인스턴스가 있다) 또는 !이름(없다). & 는 "그리고"
+trigger=!o_main_menu&o_building      # 여러 줄이면 어느 하나
+settle_seconds=20                    # 조건이 이만큼 이어서 참이면 덤프한다
+trigger_timeout_seconds=600          # 적재 뒤 이때까지 안 걸리면 그대로 덤프하고 timeout 이라고 적는다
+watch=global.__new_game_initializer.__is_active   # 값이 바뀔 때마다 로그에 적는다
+trace_events=1                       # 처음 보는 오브젝트 이벤트 코드의 이름을 로그에 적는다
+skip=ds                              # 찾기의 구역을 건너뛴다 (ds, instances)
+```
+
+- **상태 재기.** 0.5초마다 오브젝트 64개의 인스턴스 수(`instance_number`)와 `watch`의 값을 잰다.
+  인스턴스가 있는 오브젝트의 집합이 바뀌면 `state t=<초> +이름 -이름`을, `watch` 값이 바뀌면 `watch t=<초> …`을
+  `NlToyBox.log`에 적는다. 이 기록이 질문 6의 답이다.
+- **조건.** 한 번이라도 거짓이었던 조건이 참이 되어 `settle_seconds` 동안 이어지면 걸린다. 처음부터 참인 조건은
+  걸리지 않는다. 모르는 오브젝트 이름이 있으면 `dump failed: …`를 적고 그만둔다.
+- **덤프 두 번.** `trigger=`가 있으면 `delay_seconds`에 한 번(`NlToyBox.dump.menu.json`), 조건이 걸리면 한 번
+  (`NlToyBox.dump.game.json`) 쓴다. `trigger=`가 없으면 앞의 것만 쓴다. 다 끝나면 `dump done`을 적는다.
+  같은 실행의 두 덤프를 비교하면 질문 5의 답이 나온다.
+- **찾기를 고친다.** 단계 0에서 드러난 한계를 없앤다.
+  - 너비 우선으로 내려가고, 구조체·배열마다 닿은 가장 얕은 깊이를 적어 둔다. 깊은 길로 먼저 닿아서 빠지는 것이 없다.
+  - ds_map과 ds_list를 번호 0부터 훑는다(`ds_exists`). 이름으로 찾은 항목이 중첩된 map·list이면 그 속을 한 단계 적는다.
+  - 오브젝트 인스턴스의 변수를 본다(`variable_instance_get_names`). 오브젝트마다 16개까지.
+  - 자가 점검: 표식을 넣은 ds_map과 ds_list를 하나씩 만들어 찾기가 그것을 보는지 확인한 뒤 지운다.
+    "없다"가 "보지 못했다"가 아님을 보이기 위한 것이다. **이것이 §3.2의 "읽기만 한다"의 유일한 예외다.** 게임의 값은 바꾸지 않는다.
+  - 러너 내부 구조체의 배치에 기대는 호출(`GetInstanceObject`, `GetInstanceMemberCount`, `CRoom`)은 쓰지 않는다.
+    빌트인만 쓴다. 멤버 열거가 중간에 끊기는지는 여전히 알 수 없다.
+- 덤프의 순서는 덜 위험한 것부터다: 전역 목록, 전역 찾기, ds 찾기, 인스턴스, 스크립트 호출. 구역이 끝날 때마다
+  로그에 한 줄을 적는다. 도중에 죽으면 어느 구역이었는지 남는다.
+- 요청 파일은 모듈이 읽은 뒤 스스로 지운다. 덤프에는 모듈 버전과 한도를 적는다. 요청에 모르는 키나 잘못된 값이
+  있으면 `dump failed: bad request`를 적고 아무것도 하지 않는다.
+- 러너에 기대지 않는 부분(요청 읽기, 조건 판정, 글 처리)은 `src/core/`로 나누고 게임 없이 시험한다.
+
+#### 도구
+
+- `tools/probe.ps1`: 덤프를 단계별 이름으로 가져온다(`-Out x.json` → `x.menu.json`, `x.game.json`).
+  로그에 `dump failed`가 보이면 기다리지 않고 실패한다. 요청에 `trigger=`가 있으면 새 게임을 시작하라고 알린다.
+  끌 때 기다리는 시간을 `-GraceSec`로 받는다.
+- `tools/saves-backup.ps1`: 세이브 폴더의 사본을 `backups\saves\<시각>\`에 뜬다. `-Diff <사본>`은 사본과 지금의
+  차이를 보여 준다. **세이브 폴더에는 쓰지 않는다.** 새 게임이 세이브를 만들 수 있어서 실행 전에 사본을 뜬다.
+- `tools/test-native.ps1`: `src/core`의 시험을 돌린다. `tools/probes/*.txt`가 오류 없이 읽히는지도 본다
+  (요청 파일의 오타로 게임 실행 한 번을 버리지 않으려고).
+- `tools/re/dump_tool.py`: 새 덤프 형식을 읽는다. 옛 형식도 읽는다.
+
+#### 실행
+
+게임을 한 번 켜고, 한 번을 예비로 둔다. **사용자가 할 일이 있다**: 메인 메뉴가 뜨고 약 1분 뒤 화면이 잠깐 멈췄다
+풀리면(메뉴 덤프) 새 게임을 기본 설정으로 시작한다. 게임 화면이 나온 뒤에는 기다리면 도구가 덤프를 받고 게임을 끈다.
+
+| 파일 | 바꾸는 값 | 찾는 법 |
+|---|---|---|
+| `debug_params.json` | `budget_money` 2000 → 2345 | 값 2345, 이름 `budget_money` |
+| `gameplay_variables.json` | `initial_budget` 700 → 745 | 값 745. **양성 대조**: `global.__gameplay_vars`에서 찾아져야 한다 |
+| `battle_params.json` | `battle_dodge_base` 20 → 23 | 이름 `dodge_base` |
+| `director_params.json` | `group_cooldown_days.EPIDEMY` 7 → 3391 | 값 3391, 이름 `EPIDEMY` |
+| `knowledge\technology\cultural_knowledge\addiction_resist.json` | `population` 110 → 3767 | 값 3767, 이름 `addiction_resist` |
+
+값을 바꾸지 않고 이름으로만 찾는 것: `production_cost`, `building_resources`, `building_duration_factor`,
+`product_count`, `fair_trade`, `group_cooldown_days`.
+
+"없다"를 답으로 쓰기 전에 확인할 것:
+
+1. 게임 덤프의 조건이 `timeout`이 아니고, 그때 있던 오브젝트에 게임 안의 것이 있다.
+2. 값 745가 두 덤프 모두 `global.__gameplay_vars.global_map_ai_economy_initial_budget`에서 찾아졌다.
+3. ds 자가 점검이 둘 다 참이다.
+4. 어느 구역도 한도에 걸리지 않았다(`truncated` 거짓).
+5. 인스턴스 구역에 변수가 적힌 오브젝트가 하나 이상 있다.
+
+예비 실행은 위 다섯 가운데 하나가 어긋났고 요청 파일을 고쳐 바로잡을 수 있을 때만 쓴다.
+
+#### 산출물과 완료 기준
+
+- `research/02-new-game-state.md`: 질문 4~6의 답과 근거, 상태 기록, 확인하지 못한 것.
+- 완료 기준: (1) 질문 4~6 각각에 "그렇다 / 아니다 / 확인하지 못함"과 근거가 있다. (2) 위 다섯 확인의 결과가 적혀 있다.
+  (3) 끝난 뒤 게임이 바닐라다(§3.6의 4와 같다). (4) 세이브 폴더에 생긴 파일을 사용자에게 알렸다.
+
 ## 4. 단계 1 — 오버레이 도구
 
 단계 0의 결과: `research/01-data-overlay.md`. 요약하면 `gameplay_variables.json`은 반영이 확인됐고
@@ -221,3 +330,8 @@ tools/apply-preset.ps1    게임 상태를 검사하고 cli.py 를 부른다
 | 전역 변수 이름을 얻는 빌트인이 YYC에서 기대대로 동작하지 않는다 | 단계 0의 첫 실행에서 드러난다. 안 되면 요청의 스크립트 호출만으로 질문 2를 본다 |
 | 메인 메뉴에서는 값이 아직 로드되지 않는다 (새 게임을 시작해야 한다) | 덤프로 드러난다. 그러면 사용자가 새 게임을 시작한 뒤 덤프하도록 절차를 바꾸고 다시 승인받는다 |
 | 게임 실행 횟수 | 세 번. 더 필요하면 멈추고 묻는다 |
+| (0b) 조건이 너무 일찍 걸린다 (설정 화면에서 `o_main_menu`가 사라지는 경우) | 조건에 게임 안의 오브젝트를 함께 넣는다. 걸린 때의 오브젝트 집합을 덤프와 로그에 적어 판별한다. 일찍 걸렸으면 기록을 보고 조건을 고쳐 예비 실행을 쓴다 |
+| (0b) 조건이 끝내 걸리지 않는다 | `trigger_timeout_seconds`에 그대로 덤프한다. 사용자가 그때 게임 안에 있었으면 그 덤프를 쓴다 |
+| (0b) 새로 쓰는 빌트인이 게임을 죽인다 | 덜 위험한 구역부터 쓰고 구역마다 로그를 남긴다. 죽은 구역은 `skip=`으로 빼고 예비 실행을 쓴다 |
+| (0b) 새 게임이 세이브를 만든다 | 실행 전에 세이브 폴더의 사본을 뜬다. 끝나고 생긴 파일을 사용자에게 알린다. 지우는 것은 사용자가 정한다 |
+| (0b) 게임 안에서 `WM_CLOSE`가 확인 창에 막혀 강제 종료된다 | 끄는 기한을 30초로 늘린다. 강제 종료로 끊긴 자동 저장은 이번 실행이 만든 것뿐이다 |
