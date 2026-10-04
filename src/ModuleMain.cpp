@@ -3,6 +3,7 @@
 // 줄 형식은 tools/check-load.ps1 이 그대로 찾는다 (스펙 §4.3). 바꾸면 그쪽도 바꾼다.
 
 #include <YYTK_Shared.hpp>
+#include "Dump.hpp"
 
 #include <atomic>
 #include <fstream>
@@ -13,7 +14,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.0.1";
+	constexpr const char* k_Version = "0.1.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -78,6 +79,7 @@ namespace
 	{
 		UNREFERENCED_PARAMETER(CodeContext);
 		ProbeOnce("object_call");
+		NlDump::Tick();
 	}
 
 	// 게임 창이 메시지를 받을 때마다 온다.
@@ -128,6 +130,9 @@ EXPORTED AurieStatus ModuleInitialize(
 	status = Register(Module, EVENT_WNDPROC, WndProcCallback, "wndproc");
 	if (!AurieSuccess(status))
 		return status;
+
+	// 요청 파일이 있을 때만 덤프를 준비한다 (스펙: 데이터 오버레이 §3.2).
+	NlDump::Init(g_Yytk, module_dir, [](const std::string& Line) { LogLine(Line); });
 
 	return AURIE_SUCCESS;
 }
