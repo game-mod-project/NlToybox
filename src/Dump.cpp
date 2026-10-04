@@ -229,6 +229,15 @@ namespace
 			WriteMembers(out, RValue(global_instance), global_instance, true, true);
 		out << "\n}";
 
+		// 찾기를 스크립트 호출보다 먼저 한다. 게임 스크립트는 인자가 맞지 않으면 GML 오류로 게임을 끝낸다
+		// (실측: 정수를 기대하는 스크립트에 문자열을 넘겼다). 위험한 호출을 맨 뒤에 둬야 앞의 결과가 남는다.
+		out << ",\"find\":{\"hits\":[";
+		Finder finder{ out, global_instance };
+		if (have_global && (!g_FindValues.empty() || !g_FindNames.empty()))
+			finder.Walk(RValue(global_instance), "global", "", 0);
+		out << "\n],\"visited\":" << finder.Visited << ",\"truncated\":" << (finder.Truncated ? "true" : "false") << "}";
+		out.flush();
+
 		out << ",\"scripts\":[";
 		bool first = true;
 		for (const ScriptCall& call : g_Scripts)
@@ -263,12 +272,6 @@ namespace
 			out.flush();
 		}
 		out << "\n]";
-
-		out << ",\"find\":{\"hits\":[";
-		Finder finder{ out, global_instance };
-		if (have_global && (!g_FindValues.empty() || !g_FindNames.empty()))
-			finder.Walk(RValue(global_instance), "global", "", 0);
-		out << "\n],\"visited\":" << finder.Visited << ",\"truncated\":" << (finder.Truncated ? "true" : "false") << "}";
 
 		out << "}\n";
 		out.close();

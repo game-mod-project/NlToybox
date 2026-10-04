@@ -1,7 +1,7 @@
 # 단계 0 실행 1: 바닐라. 원래 값과 이름으로 찾는다.
 delay_seconds=60
 script=gml_Script_budget_default_money_get
-script=gml_Script_resource_default_count_get|wood
+# resource_default_count_get 은 부르지 않는다. 정수 인자를 기대해서 문자열을 넘기면 게임이 GML 오류로 끝난다(실측).
 find=2000
 find=700
 find_name=budget_money

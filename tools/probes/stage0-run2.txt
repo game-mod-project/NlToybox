@@ -1,7 +1,6 @@
 # 단계 0 실행 2: 세 값을 바꾼 뒤. 바꾼 값(2345, 745)을 찾는다.
 delay_seconds=60
 script=gml_Script_budget_default_money_get
-script=gml_Script_resource_default_count_get|wood
 find=2345
 find=745
 find_name=budget_money
