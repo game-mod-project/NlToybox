@@ -76,3 +76,8 @@ function Get-NlBackups([string]$Version) {
     if (-not (Test-Path -LiteralPath $dir)) { return @() }
     @(Get-ChildItem -LiteralPath $dir -File -Filter "Norland.exe.$Version.*")
 }
+
+# 받을 파일의 출처·크기·SHA256. downloads\<project>-<tag>\<name> 에 받는다.
+function Get-NlPins {
+    Get-Content -LiteralPath (Join-Path $PSScriptRoot 'pins.json') -Raw | ConvertFrom-Json
+}
