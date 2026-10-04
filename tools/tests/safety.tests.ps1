@@ -89,6 +89,13 @@ try {
         Assert-True ($r.Out -match 'AurieCore\.dll') "빠진 파일을 알려 줘야 한다`n$($r.Out)"
     }
 
+    Test-Case 'check-load 는 준비가 다 되어 있으면 게임을 켜는 데까지 간다' {
+        $r = Invoke-Tool 'setup-aurie.ps1'                    # 빠진 AurieCore.dll 을 다시 놓는다
+        Assert-Equal $r.Exit 0 "setup 종료 코드`n$($r.Out)"
+        $r = Invoke-Tool 'check-load.ps1' '-TimeoutSec 4' $noLaunch
+        Assert-True ($r.Out -match 'LAUNCH-ATTEMPTED') "사전 검사를 지나 켜는 단계에 닿아야 한다`n$($r.Out)"
+    }
+
     Write-Host "safety tests: $($script:passed) passed"
 }
 finally {
