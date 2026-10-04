@@ -1,0 +1,19 @@
+# 게임 저작물과 그 파생물 (Long Jaunt) - 커밋하지 않는다
+refs/
+backups/
+
+# 제3자 배포물 - tools/pins.json 으로 다시 받는다
+downloads/
+
+# 빌드 산출물
+build/
+dist/
+*.user
+.vs/
+__pycache__/
+
+# 도구 상태
+.omc/
+**/.omc/
+.superpowers/
+.semgrep/
