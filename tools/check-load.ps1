@@ -5,17 +5,9 @@ param(
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 
-Assert-NlGameNotRunning
+Assert-NlReadyToLaunch
 $gameDir = Get-NlGameDir
 $log = Join-Path $gameDir 'mods\Aurie\NlToyBox.log'
-if (-not (Test-Path -LiteralPath (Join-Path $gameDir 'mods\Aurie\NlToyBox.dll'))) {
-    throw 'mods\Aurie\NlToyBox.dll 이 없습니다. 먼저 tools\deploy.ps1 을 실행하세요.'
-}
-# 결과가 정해진 실행에 게임 켜기 한 번을 쓰지 않는다. 게임 갱신으로 패치가 사라졌거나 설치가 반쯤 된 상태를 거른다.
-if (-not (Get-NlExeInfo).Patched) { throw 'exe 가 패치되지 않았습니다. 먼저 tools\setup-aurie.ps1 을 실행하세요.' }
-foreach ($rel in 'mods\Native\AurieCore.dll', 'mods\Aurie\YYToolkit.dll') {
-    if (-not (Test-Path -LiteralPath (Join-Path $gameDir $rel))) { throw "$rel 이 없습니다. tools\setup-aurie.ps1 을 다시 실행하세요." }
-}
 if (Test-Path -LiteralPath $log) { Remove-Item -LiteralPath $log -Force }
 
 Write-Host "게임을 켭니다 (steam://rungameid/$($script:NlAppId)). 게임 창을 누르지 마세요."
@@ -40,8 +32,8 @@ Write-Host '--------------------'
 if (-not $seenProcess) { Write-Host '게임 프로세스를 한 번도 보지 못했습니다.' }
 
 if (-not $KeepRunning) {
-    $p = Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue
-    if ($p) { $p | Stop-Process -Force; Write-Host '게임을 끝냈습니다.' }
+    $how = Stop-NlGame
+    if ($how -ne 'not-running') { Write-Host "게임 종료: $how" }
 }
 
 # 줄 형식은 src/ModuleMain.cpp 가 쓴다 (스펙 §4.3). 'yytk' 줄은 판정에 쓰지 않는다.

@@ -81,3 +81,68 @@ function Get-NlBackups([string]$Version) {
 function Get-NlPins {
     Get-Content -LiteralPath (Join-Path $PSScriptRoot 'pins.json') -Raw | ConvertFrom-Json
 }
+
+# 게임 폴더 안의 상대경로만 받는다.
+function Assert-NlSafeRelPath([string]$Rel) {
+    if ([IO.Path]::IsPathRooted($Rel) -or (($Rel -split '[\\/]') -contains '..')) {
+        throw "게임 폴더 안의 상대경로여야 합니다: $Rel"
+    }
+}
+
+# 데이터 파일의 바닐라 스냅샷을 두는 곳. 게임 버전별로 나눈다.
+function Get-NlDataSnapshotDir {
+    Join-Path (Get-NlRepoRoot) "backups\data\$((Get-NlExeInfo).Version)"
+}
+
+# 게임을 켜는 도구가 켜기 전에 부른다. 결과가 정해진 실행에 게임 켜기 한 번을 쓰지 않는다.
+function Assert-NlReadyToLaunch {
+    Assert-NlGameNotRunning
+    $gameDir = Get-NlGameDir
+    if (-not (Test-Path -LiteralPath (Join-Path $gameDir 'mods\Aurie\NlToyBox.dll'))) {
+        throw 'mods\Aurie\NlToyBox.dll 이 없습니다. 먼저 tools\deploy.ps1 을 실행하세요.'
+    }
+    if (-not (Get-NlExeInfo).Patched) { throw 'exe 가 패치되지 않았습니다. 먼저 tools\setup-aurie.ps1 을 실행하세요.' }
+    foreach ($rel in 'mods\Native\AurieCore.dll', 'mods\Aurie\YYToolkit.dll') {
+        if (-not (Test-Path -LiteralPath (Join-Path $gameDir $rel))) { throw "$rel 이 없습니다. tools\setup-aurie.ps1 을 다시 실행하세요." }
+    }
+}
+
+# 게임 창(클래스 YYGameMakerYY)에 WM_CLOSE 를 보내 정상 종료시킨다. 그래야 aurie.log 가 채워진다.
+# 기한 안에 끝나지 않으면 강제 종료한다. 돌려주는 값: 'not-running' | 'closed' | 'killed'
+function Stop-NlGame([int]$GraceSec = 15) {
+    $procs = @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return 'not-running' }
+
+    if (-not ('NlToyBox.Win' -as [type])) {
+        Add-Type -Namespace NlToyBox -Name Win -MemberDefinition @'
+public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
+[DllImport("user32.dll")] public static extern bool EnumWindows(EnumProc cb, System.IntPtr l);
+[DllImport("user32.dll")] public static extern uint GetWindowThreadProcessId(System.IntPtr h, out uint pid);
+[DllImport("user32.dll", CharSet=CharSet.Unicode)] public static extern int GetClassNameW(System.IntPtr h, System.Text.StringBuilder s, int n);
+[DllImport("user32.dll")] public static extern bool PostMessageW(System.IntPtr h, uint msg, System.IntPtr w, System.IntPtr l);
+'@
+    }
+
+    $ids = @($procs.Id)
+    $windows = New-Object System.Collections.Generic.List[IntPtr]
+    $callback = [NlToyBox.Win+EnumProc]{ param($h, $l)
+        $procId = [uint32]0
+        [void][NlToyBox.Win]::GetWindowThreadProcessId($h, [ref]$procId)
+        if ($ids -contains [int]$procId) {
+            $class = New-Object System.Text.StringBuilder 256
+            [void][NlToyBox.Win]::GetClassNameW($h, $class, 256)
+            if ($class.ToString() -eq 'YYGameMakerYY') { $windows.Add($h) }
+        }
+        $true
+    }
+    [void][NlToyBox.Win]::EnumWindows($callback, [IntPtr]::Zero)
+    foreach ($h in $windows) { [void][NlToyBox.Win]::PostMessageW($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }   # WM_CLOSE
+
+    $deadline = (Get-Date).AddSeconds($GraceSec)
+    while ((Get-Date) -lt $deadline -and (Test-NlGameRunning)) { Start-Sleep -Milliseconds 500 }
+    if (-not (Test-NlGameRunning)) { return 'closed' }
+
+    Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    'killed'
+}

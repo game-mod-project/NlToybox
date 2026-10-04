@@ -96,12 +96,50 @@ try {
         Assert-True ($r.Out -match 'LAUNCH-ATTEMPTED') "사전 검사를 지나 켜는 단계에 닿아야 한다`n$($r.Out)"
     }
 
+    $x = Join-Path $fake 'x.json'
+
+    Test-Case 'data-snapshot 은 바닐라를 보관하고, 달라진 파일에는 거부한다' {
+        [IO.File]::WriteAllText($x, 'AAA=1')
+        $r = Invoke-Tool 'data-snapshot.ps1' '-Files x.json'
+        Assert-Equal $r.Exit 0 "snapshot 종료 코드`n$($r.Out)"
+        [IO.File]::WriteAllText($x, 'AAA=2')                     # 스냅샷을 뜬 뒤 고친 파일
+        $r = Invoke-Tool 'data-snapshot.ps1' '-Files x.json'
+        Assert-Equal $r.Exit 1 "고친 파일을 바닐라로 보관하면 안 된다`n$($r.Out)"
+    }
+
+    Test-Case 'data-edit 은 찾는 글이 정확히 한 번일 때만 바꾼다' {
+        [IO.File]::WriteAllText($x, 'AAA=1 BBB=1 BBB=1')
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find BBB=1 -Replace BBB=9'
+        Assert-Equal $r.Exit 1 "두 번 나오는 글은 거부해야 한다`n$($r.Out)"
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find CCC=1 -Replace CCC=9'
+        Assert-Equal $r.Exit 1 "없는 글은 거부해야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=1 BBB=1 BBB=1' '거부했으면 파일은 그대로여야 한다'
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find AAA=1 -Replace AAA=7'
+        Assert-Equal $r.Exit 0 "edit 종료 코드`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=7 BBB=1 BBB=1' '한 번 나오는 글만 바뀌어야 한다'
+    }
+
+    Test-Case 'data-restore 는 스냅샷으로 되돌린다' {
+        $r = Invoke-Tool 'data-restore.ps1'
+        Assert-Equal $r.Exit 0 "restore 종료 코드`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=1' '스냅샷의 내용으로 돌아와야 한다'
+    }
+
+    Test-Case '게임 폴더 밖을 가리키는 경로는 거부한다' {
+        $r = Invoke-Tool 'data-snapshot.ps1' '-Files ..\x.json'
+        Assert-Equal $r.Exit 1 "snapshot 은 .. 을 거부해야 한다`n$($r.Out)"
+        $r = Invoke-Tool 'data-edit.ps1' '-File ..\x.json -Find A -Replace B'
+        Assert-Equal $r.Exit 1 "edit 은 .. 을 거부해야 한다`n$($r.Out)"
+    }
+
     Write-Host "safety tests: $($script:passed) passed"
 }
 finally {
     $env:NORLAND_GAME_DIR = $savedEnv
     if (Test-Path -LiteralPath $fake) { Remove-Item -LiteralPath $fake -Recurse -Force }
     if (Test-Path -LiteralPath $pristine) { Remove-Item -LiteralPath $pristine -Force }
+    $fakeData = Join-Path $backupDir "data\$($orig.Version)"   # 가짜 게임의 버전이다. 진짜 게임의 스냅샷은 버전이 달라 걸리지 않는다.
+    if (Test-Path -LiteralPath $fakeData) { Remove-Item -LiteralPath $fakeData -Recurse -Force }
     # 가짜 게임의 백업만 지운다. 진짜 게임의 백업은 버전이 달라 이 필터에 걸리지 않는다.
     Get-ChildItem -LiteralPath $backupDir -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "Norland.exe.$($orig.Version).*" -or $_.Name -like '*.partial' } |

@@ -37,7 +37,9 @@ $ours = @(
     'mods\Native\AurieCore.dll',
     'mods\Aurie\YYToolkit.dll',
     'mods\Aurie\NlToyBox.dll',
-    'mods\Aurie\NlToyBox.log'
+    'mods\Aurie\NlToyBox.log',
+    'mods\Aurie\NlToyBox.probe.txt',
+    'mods\Aurie\NlToyBox.dump.json'
 )
 foreach ($rel in $ours) {
     $p = Join-Path $gameDir $rel
