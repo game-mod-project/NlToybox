@@ -30,6 +30,60 @@ namespace NlCore
 			Out = parsed;
 			return true;
 		}
+
+		// 범위 안의 정수만 받는다.
+		bool ParseWhole(const std::string& Value, double Min, double Max, double& Out)
+		{
+			double parsed = 0;
+			if (!ParseNumber(Value, parsed) || parsed != std::floor(parsed) || parsed < Min || parsed > Max)
+				return false;
+			Out = parsed;
+			return true;
+		}
+
+		// 찾기의 한도 하나를 읽는다. 모르는 키이거나 범위 밖이면 거짓.
+		bool SetBound(Limits& Bounds, const std::string& Key, const std::string& Value)
+		{
+			double v = 0;
+			if (Key == "max_depth")
+			{
+				if (!ParseWhole(Value, 1, 12, v)) return false;
+				Bounds.MaxDepth = static_cast<int>(v);
+			}
+			else if (Key == "max_visited")
+			{
+				if (!ParseWhole(Value, 1000, 100000000, v)) return false;
+				Bounds.MaxVisited = v;
+			}
+			else if (Key == "max_array")
+			{
+				if (!ParseWhole(Value, 1, 1000000, v)) return false;
+				Bounds.MaxArray = v;
+			}
+			else if (Key == "max_hits")
+			{
+				if (!ParseWhole(Value, 1, 100000, v)) return false;
+				Bounds.MaxHits = static_cast<int>(v);
+			}
+			else if (Key == "max_ds_keys")
+			{
+				if (!ParseWhole(Value, 1, 10000000, v)) return false;
+				Bounds.MaxDsKeys = v;
+			}
+			else if (Key == "max_ds_id")
+			{
+				if (!ParseWhole(Value, 1, 10000000, v)) return false;
+				Bounds.MaxDsId = static_cast<int>(v);
+			}
+			else if (Key == "max_instances")
+			{
+				if (!ParseWhole(Value, 1, 4096, v)) return false;
+				Bounds.MaxInstances = static_cast<int>(v);
+			}
+			else
+				return false;
+			return true;
+		}
 	}
 
 	Request ParseRequest(std::istream& In)
@@ -128,6 +182,11 @@ namespace NlCore
 					call.Args.assign(parts.begin() + 1, parts.end());
 					request.Scripts.push_back(std::move(call));
 				}
+			}
+			else if (key.rfind("max_", 0) == 0)
+			{
+				if (!SetBound(request.Bounds, key, value))
+					request.Errors.push_back(where + key + " is not a known limit or its value is out of range");
 			}
 			else
 				request.Errors.push_back(where + "unknown key '" + key + "'");

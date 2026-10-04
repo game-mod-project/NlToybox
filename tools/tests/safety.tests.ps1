@@ -214,6 +214,7 @@ try {
             Assert-Equal ([IO.File]::ReadAllText((Join-Path $fake "out\rep.$($pair.Key).json")).Trim()) $pair.Value "덤프 $($pair.Key) 의 내용"
         }
         Assert-True ($r.Out -match '새 게임') "되풀이 요청이면 새 게임을 시작하라고 알려야 한다`n$($r.Out)"
+        Assert-True ($r.Out -match '게임 종료: not-running') "이 도구가 게임을 끄면 안 된다. 사용자가 끈 뒤여야 한다`n$($r.Out)"
         Assert-Equal @(Get-ChildItem -LiteralPath $modDir -Filter 'NlToyBox.dump*').Count 0 '덤프가 게임 폴더에 남으면 안 된다'
     }
 
@@ -234,6 +235,24 @@ try {
         Assert-True ($r.Exit -eq 1 -and $r.Out -match 'FAIL: dump failed: bad request') "모듈이 적은 이유로 실패해야 한다`n$($r.Out)"
         Assert-True ($watch.Elapsed.TotalSeconds -lt 25) "시간이 다 될 때까지 기다리면 안 된다 ($([int]$watch.Elapsed.TotalSeconds)초)"
         Assert-True (-not (Test-Path -LiteralPath (Join-Path $modDir 'NlToyBox.probe.txt'))) '요청 파일이 남으면 안 된다'
+    }
+
+    Test-Case 'probe 는 덤프를 복사하지 못하면 게임 폴더의 덤프를 지우지 않는다' {
+        $req = Join-Path $fake 'req.txt'
+        [IO.File]::WriteAllText($req, "delay_seconds=1`n")
+        $blocked = Join-Path $fake 'blocked'
+        [IO.File]::WriteAllText($blocked, 'x')      # 폴더가 와야 할 자리에 파일이 있다. 복사가 실패한다
+        $prelude = New-FakeModule @('request consumed', 'dump requested: x', 'dump menu done seq 1', 'dump done') @{ 'NlToyBox.dump.menu.json' = 'MENU' }
+        try {
+            $r = Invoke-Tool 'probe.ps1' "-Request '$req' -Out '$(Join-Path $blocked 'x.json')' -TimeoutSec 20" $prelude
+            Assert-Equal $r.Exit 1 "복사하지 못했으면 실패여야 한다`n$($r.Out)"
+            Assert-True (Test-Path -LiteralPath (Join-Path $modDir 'NlToyBox.dump.menu.json')) "하나뿐인 덤프를 지우면 안 된다`n$($r.Out)"
+            Assert-True (-not (Test-Path -LiteralPath (Join-Path $modDir 'NlToyBox.probe.txt'))) '요청 파일은 그래도 지워야 한다'
+        }
+        finally {
+            Remove-Item -LiteralPath (Join-Path $modDir 'NlToyBox.dump.menu.json') -Force -ErrorAction SilentlyContinue
+            Remove-Item -LiteralPath $blocked -Force
+        }
     }
 
     Test-Case 'saves-backup 은 사본을 뜨고 달라진 것을 알려 주며, 세이브 폴더에는 쓰지 않는다' {

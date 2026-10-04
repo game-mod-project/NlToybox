@@ -12,8 +12,9 @@ import json
 import sys
 
 FIND_SECTIONS = ("find", "find_global", "find_ds", "find_instances")  # "find" 는 옛 형식(module_dump 1)
-FIND_STATS = ("visited", "containers", "depth_cut", "array_skipped", "hits_cut", "truncated",
-              "maps", "lists", "highest_map", "highest_list", "skipped_large", "instances", "selfcheck", "skipped")
+FIND_STATS = ("visited", "containers", "depth_cut", "matches", "hits_cut", "truncated", "enum_failed", "enum_short",
+              "maps", "lists", "highest_map", "highest_list", "instances", "selfcheck", "skipped")
+TOO_LONG_SHOWN = 15  # 길어서 들어가지 않은 배열·ds 를 요약에 보여 주는 수
 
 
 def load(path):
@@ -90,6 +91,11 @@ def summary(dump):
         print(f"{section}: hits={len(found.get('hits', []))} {stats}")
         for hit in found.get("hits", []):
             print("  " + describe_hit(hit))
+        too_long = found.get("too_long", [])
+        if too_long:
+            print(f"  길어서 들어가지 않은 것 {len(too_long)}개 (cut={found.get('too_long_cut')}):")
+            for item in too_long[:TOO_LONG_SHOWN]:
+                print(f"    {item.get('path')} length={item.get('length')}")
 
 
 def find(dump, terms):
@@ -163,7 +169,7 @@ def controls(dump, expectations):
     ds = dump.get("find_ds", {})
     selfcheck = ds.get("selfcheck")
     if selfcheck is not None:
-        results.append(("selfcheck", all(selfcheck.get(key) for key in ("made", "ds_map", "ds_list")), str(selfcheck)))
+        results.append(("selfcheck", all(selfcheck.get(key) for key in ("types", "made", "ds_map", "ds_list")), str(selfcheck)))
     limit = dump.get("limits", {}).get("max_ds_id")
     if limit is not None and "highest_map" in ds:
         highest = max(ds.get("highest_map", -1), ds.get("highest_list", -1))
@@ -171,6 +177,15 @@ def controls(dump, expectations):
 
     cut = [s for s in FIND_SECTIONS if dump.get(s, {}).get("truncated")]
     results.append(("truncated", not cut, f"sections={cut}"))
+
+    # 히트를 다 적지 못했으면 찾는 값이 적히지 않은 쪽에 있을 수 있다.
+    hits_cut = [s for s in FIND_SECTIONS if dump.get(s, {}).get("hits_cut")]
+    results.append(("hits_cut", not hits_cut, f"sections={hits_cut}"))
+
+    # 구조체의 멤버를 다 보지 못했으면 그 안의 값은 본 적이 없다.
+    short = {s: (dump[s].get("enum_failed", 0), dump[s].get("enum_short", 0)) for s in FIND_SECTIONS
+             if dump.get(s, {}).get("enum_failed") or dump.get(s, {}).get("enum_short")}
+    results.append(("enumeration", not short, f"(failed, short) by section={short}"))
 
     if "instances" in dump:
         with_members = [name for name, node in dump["instances"].items() if node.get("members")]

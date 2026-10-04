@@ -21,6 +21,14 @@ $modDir = Join-Path (Get-NlGameDir) 'mods\Aurie'
 $reqDst = Join-Path $modDir 'NlToyBox.probe.txt'
 $log = Join-Path $modDir 'NlToyBox.log'
 function Get-NlDumps { @(Get-ChildItem -LiteralPath $modDir -File -Filter 'NlToyBox.dump*.json' -ErrorAction SilentlyContinue) }
+# 덤프 하나를 -Out 옆으로 복사하고 사본의 경로를 돌려준다. 복사하지 못하면 예외를 낸다.
+function Copy-NlDump($Dump) {
+    $suffix = $Dump.BaseName.Substring('NlToyBox.dump'.Length)      # ".menu" / ".late0" / 옛 형식이면 빈 글
+    $dst = "$outBase$suffix.json"
+    New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
+    Copy-Item -LiteralPath $Dump.FullName -Destination $dst -Force
+    $dst
+}
 foreach ($f in @(Get-NlDumps | ForEach-Object { $_.FullName }) + $log) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } }
 
 $repeat = [bool](Select-String -LiteralPath $Request -Pattern '^\s*repeat_seconds\s*=\s*[1-9]' -Quiet)
@@ -30,6 +38,7 @@ $exited = $false
 $failed = $null
 $toldMenu = $false
 $copied = @()
+$kept = @()
 try {
     Copy-Item -LiteralPath $Request -Destination $reqDst -Force
     if ($repeat) {
@@ -66,11 +75,8 @@ try {
 
     # 반쯤 쓰인 덤프도 가져온다. 어디서 멈췄는지가 증거다.
     foreach ($d in Get-NlDumps) {
-        $suffix = $d.BaseName.Substring('NlToyBox.dump'.Length)      # ".menu" / ".late0" / 옛 형식이면 빈 글
-        $dst = "$outBase$suffix.json"
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $dst) | Out-Null
-        Copy-Item -LiteralPath $d.FullName -Destination $dst -Force
-        $copied += $dst
+        $dst = Copy-NlDump $d
+        if ($copied -notcontains $dst) { $copied += $dst }
         Write-Host "덤프: $dst ($((Get-Item -LiteralPath $dst).Length) B)"
     }
 }
@@ -79,13 +85,25 @@ finally {
     if (Test-Path -LiteralPath $reqDst) { Remove-Item -LiteralPath $reqDst -Force -ErrorAction SilentlyContinue }
     try { Write-Host "게임 종료: $(Stop-NlGame $GraceSec)" }
     finally {
-        # 덤프는 모듈이 쓰는 중이면 잠겨 있다. 게임을 끈 뒤에 지운다.
-        foreach ($f in @($reqDst) + @(Get-NlDumps | ForEach-Object { $_.FullName })) {
-            if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force -ErrorAction SilentlyContinue }
+        if (Test-Path -LiteralPath $reqDst) { Remove-Item -LiteralPath $reqDst -Force -ErrorAction SilentlyContinue }
+        # 덤프는 다시 켜야만 얻는다. 게임이 꺼진 뒤의 온전한 파일로 한 번 더 복사하고, 복사한 것만 지운다.
+        # 복사하지 못한 덤프는 게임 폴더에 남겨 둔다(위에서 예외로 빠져나왔을 때도 여기서 건진다).
+        foreach ($d in Get-NlDumps) {
+            try {
+                $dst = Copy-NlDump $d
+                if ($copied -notcontains $dst) { $copied += $dst }
+                Remove-Item -LiteralPath $d.FullName -Force
+            }
+            catch { $kept += $d.Name }
+        }
+        if ($kept.Count) {
+            Write-Host ("주의: 복사하지 못한 덤프를 게임 폴더에 남겨 둡니다: $($kept -join ', ') ($modDir). " +
+                        '원인을 고친 뒤 직접 옮기세요. tools\restore-game.ps1 은 이 파일들을 지웁니다.')
         }
     }
 }
 
+if ($kept.Count) { Write-Host 'FAIL: 덤프를 복사하지 못했습니다.'; exit 1 }
 if ($failed) { Write-Host "FAIL: $failed"; exit 1 }
 if ($repeat) {
     if (-not @($copied | Where-Object { $_ -match '\.late\d+\.json$' }).Count) { Write-Host 'FAIL: 되풀이 덤프를 하나도 받지 못했습니다.'; exit 1 }

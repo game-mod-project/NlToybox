@@ -162,6 +162,30 @@ int main(int argc, char** argv)
 		CHECK(Parse("repeat_seconds=45\nscript=gml_Script_x\n").Errors.size() == 1);
 	});
 
+	Test("요청: 찾기의 한도는 기본값이 있고 요청으로 바꿀 수 있다", [] {
+		const Request d = Parse("");
+		CHECK(d.Bounds.MaxDepth == 6 && d.Bounds.MaxVisited == 2000000 && d.Bounds.MaxArray == 64 && d.Bounds.MaxHits == 2000);
+		CHECK(d.Bounds.MaxDsKeys == 20000 && d.Bounds.MaxDsId == 100000 && d.Bounds.MaxInstances == 16);
+
+		const Request r = Parse(
+			"max_depth=8\n"
+			"max_visited=5000000\n"
+			"max_array=256\n"
+			"max_hits=5000\n"
+			"max_ds_keys=50000\n"
+			"max_ds_id=300000\n"
+			"max_instances=64\n");
+		CHECK(r.Errors.empty());
+		CHECK(r.Bounds.MaxDepth == 8 && r.Bounds.MaxVisited == 5000000 && r.Bounds.MaxArray == 256 && r.Bounds.MaxHits == 5000);
+		CHECK(r.Bounds.MaxDsKeys == 50000 && r.Bounds.MaxDsId == 300000 && r.Bounds.MaxInstances == 64);
+
+		CHECK(Parse("max_depth=0\n").Errors.size() == 1);
+		CHECK(Parse("max_depth=2.5\n").Errors.size() == 1);
+		CHECK(Parse("max_hits=abc\n").Errors.size() == 1);
+		CHECK(Parse("max_ds_id=-5\n").Errors.size() == 1);
+		CHECK(Parse("max_visited=10\n").Errors.size() == 1);		// 너무 작다
+	});
+
 	Test("일정: 첫 덤프는 delay 뒤의 menu 다", [] {
 		Schedule s(60, 0, 3);
 		CHECK_STR(s.Due(59.9), "");

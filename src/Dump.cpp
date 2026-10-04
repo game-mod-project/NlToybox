@@ -24,14 +24,14 @@ namespace
 {
 	constexpr double k_SampleSeconds = 0.5;		// 상태를 재는 간격
 	// 기록 줄의 한도. 종류마다 따로 센다(이벤트나 자주 바뀌는 watch 가 state 줄을 밀어내지 않게).
-	constexpr int k_MaxStateLines = 300;
-	constexpr int k_MaxWatchLines = 200;
-	constexpr int k_MaxEventLines = 250;
+	// 이 기록이 "게임 안을 무엇으로 알아보는가"의 답이므로 넉넉히 둔다. 얼마나 나오는지는 재 본 적이 없다.
+	constexpr int k_MaxStateLines = 5000;
+	constexpr int k_MaxWatchLines = 2000;
+	constexpr int k_MaxEventLines = 1000;
 	constexpr int k_MaxOwnedPerObject = 512;	// 오브젝트마다 훑는 인스턴스 수
 
 	NlCore::Request g_Request;
 	NlCore::Schedule g_Schedule;
-	const NlDump::Limits g_Limits{};
 	std::function<void(const std::string&)> g_Log;
 	fs::path g_Dir;
 	std::string g_Version;
@@ -46,6 +46,8 @@ namespace
 	int g_StateLines = 0;
 	int g_WatchLines = 0;
 	int g_EventLines = 0;
+	int g_CodeNamed = 0;			// 이름을 읽어 낸 코드 객체의 수
+	int g_CodeUnnamed = 0;			// 이름을 읽지 못한 코드 객체의 수 (CCode 의 배치가 이 러너와 맞는지의 답)
 	bool g_RoomKnown = false;
 	std::string g_Room;										// 지난번의 룸 이름. 못 얻었으면 빈 글
 	std::vector<std::string> g_Present;						// 지난번에 인스턴스가 있던 오브젝트
@@ -116,9 +118,12 @@ namespace
 	// 룸 이름, 오브젝트별 인스턴스 수, watch 의 값을 재고, 달라진 것만 로그에 적는다.
 	void Sample(double Now)
 	{
-		if (!g_Announced)
+		// 첫 표본은 이 프로젝트에서 처음 쓰는 호출들이다. 호출마다 앞에 한 줄을 적어, 게임이 죽으면 어느 호출이었는지 남긴다.
+		const bool first = !g_Announced;
+		g_Announced = true;
+		if (first)
 		{
-			g_Announced = true;
+			g_Log("sample: objects");
 			g_Log("objects " + std::to_string(NlGame::Objects().size()));
 		}
 
@@ -126,6 +131,8 @@ namespace
 
 		if (!Skipped("room"))
 		{
+			if (first)
+				g_Log("sample: room");
 			const std::string room = NlGame::RoomName();
 			if (!g_RoomKnown || room != g_Room)
 			{
@@ -135,6 +142,8 @@ namespace
 			}
 		}
 
+		if (first)
+			g_Log("sample: counts");
 		std::vector<std::string> present;
 		g_Counts.clear();
 		for (const NlGame::Object& object : NlGame::Objects())
@@ -145,6 +154,8 @@ namespace
 				present.push_back(object.Name);
 		}
 
+		if (first)
+			g_Log("sample: watch");
 		for (const std::string& name : present)
 			if (std::find(g_Present.begin(), g_Present.end(), name) == g_Present.end())
 				changes += " +" + name;
@@ -164,6 +175,9 @@ namespace
 			g_WatchLast[i] = text;
 			Trace("watch t=" + Fixed(Now, 1) + " " + g_Request.Watches[i] + " {" + text + "}", g_WatchLines, k_MaxWatchLines, "watch");
 		}
+
+		if (first)
+			g_Log("sample: ok");
 	}
 
 	// 인스턴스를 오브젝트별로 모은다. 인스턴스 수가 적은 오브젝트부터 본다. instance_number 와 instance_find 는
@@ -263,10 +277,11 @@ namespace
 		out << "{\"module_dump\":2,\"module_version\":" << Quote(g_Version) << ",\"name\":" << Quote(Name)
 			<< ",\"seq\":" << Seq << ",\"elapsed_seconds\":" << Number(Now) << ",\"room\":" << Quote(g_Room)
 			<< ",\"delay_seconds\":" << g_Request.DelaySeconds << ",\"repeat_seconds\":" << Number(g_Request.RepeatSeconds)
-			<< ",\"limits\":{\"max_depth\":" << g_Limits.MaxDepth << ",\"max_visited\":" << g_Limits.MaxVisited
-			<< ",\"max_array\":" << Number(g_Limits.MaxArray) << ",\"max_hits\":" << g_Limits.MaxHits
-			<< ",\"max_ds_keys\":" << Number(g_Limits.MaxDsKeys) << ",\"max_ds_id\":" << g_Limits.MaxDsId
-			<< ",\"max_instances\":" << g_Limits.MaxInstances << "}";
+			<< ",\"limits\":{\"max_depth\":" << g_Request.Bounds.MaxDepth << ",\"max_visited\":" << Number(g_Request.Bounds.MaxVisited)
+			<< ",\"max_array\":" << Number(g_Request.Bounds.MaxArray) << ",\"max_hits\":" << g_Request.Bounds.MaxHits
+			<< ",\"max_ds_keys\":" << Number(g_Request.Bounds.MaxDsKeys) << ",\"max_ds_id\":" << g_Request.Bounds.MaxDsId
+			<< ",\"max_instances\":" << g_Request.Bounds.MaxInstances << "}"
+			<< ",\"code_names\":{\"read\":" << g_CodeNamed << ",\"unreadable\":" << g_CodeUnnamed << "}";
 
 		out << ",\"present\":{";
 		for (size_t i = 0; i < g_Present.size(); i++)
@@ -288,15 +303,15 @@ namespace
 		out.flush();
 		g_Log(tag + ": globals");
 
-		NlDump::Finder finder(out, g_Request, g_Limits);
+		NlDump::Finder finder(out, g_Request);
 		finder.FindGlobal(global);
-		g_Log(tag + ": find_global visited " + std::to_string(finder.Visited()));
+		g_Log(tag + ": find_global visited " + std::to_string(finder.Visited()) + " matches " + std::to_string(finder.Matches()));
 
 		if (Skipped("ds"))
 			finder.Skip("find_ds");
 		else
 			finder.FindDataStructures();
-		g_Log(tag + ": find_ds visited " + std::to_string(finder.Visited()));
+		g_Log(tag + ": find_ds visited " + std::to_string(finder.Visited()) + " matches " + std::to_string(finder.Matches()));
 
 		if (Skipped("instances"))
 		{
@@ -309,7 +324,7 @@ namespace
 			WriteInstances(out, refs);
 			finder.FindInstances(refs);
 		}
-		g_Log(tag + ": find_instances visited " + std::to_string(finder.Visited()));
+		g_Log(tag + ": find_instances visited " + std::to_string(finder.Visited()) + " matches " + std::to_string(finder.Matches()));
 
 		// 스크립트 호출은 맨 뒤다. 게임 스크립트는 인자가 맞지 않으면 GML 오류로 게임을 끝낸다(단계 0 실측).
 		out << ",\"scripts\":[";
@@ -426,7 +441,12 @@ void NlDump::Tick(CCode* Code)
 	{
 		char name[160];
 		if (SafeCodeName(Code, name, sizeof(name)))
+		{
+			g_CodeNamed++;
 			Trace("event t=" + Fixed(now, 1) + " " + name, g_EventLines, k_MaxEventLines, "event");
+		}
+		else
+			g_CodeUnnamed++;
 	}
 
 	if (now - g_LastSample < k_SampleSeconds)

@@ -40,6 +40,9 @@ namespace NlGame
 	// "global.a.b" 를 따라간다. 없으면 거짓.
 	bool Resolve(const std::string& Path, YYTK::RValue& Out);
 
+	// 러너가 말하는 구조체의 멤버 수. 알 수 없으면 -1.
+	int MemberCount(const YYTK::RValue& Struct);
+
 	// 배열 길이. 못 얻으면 음수.
 	double ArrayLength(const YYTK::RValue& Value);
 

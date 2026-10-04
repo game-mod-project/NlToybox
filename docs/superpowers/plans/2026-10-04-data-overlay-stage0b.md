@@ -18,7 +18,7 @@
 - 세이브 폴더(`%LOCALAPPDATA%\Strategy`)에는 **쓰지 않는다.** 읽어서 사본을 뜰 뿐이다. 새 게임이 만든 세이브를 지우는 것은 사용자가 정한다.
 - `refs/`, `backups/`, `downloads/`, `build/`는 커밋하지 않는다. 커밋 전에 `git -C E:\NlToyBox ls-files | Select-String "^(refs|backups|downloads|build)/"`가 비어 있어야 한다.
 - 서브모듈 `external/YYToolkit`의 파일은 고치지 않는다.
-- 러너에 닿는 호출은 빌트인(`CallBuiltinEx`)과 문서·실행으로 확인한 인터페이스(`EnumInstanceMembers`, `GetGlobalInstance`, `GetInstanceMember`, `GetBuiltin`, `CallGameScriptEx`)만 쓴다. `GetInstanceObject`, `GetInstanceMemberCount`, `CRoom`은 쓰지 않는다(러너 내부 구조체의 배치에 기댄다).
+- 러너에 닿는 호출은 빌트인(`CallBuiltinEx`)과 문서·소스·실행으로 확인한 인터페이스(`EnumInstanceMembers`, `GetGlobalInstance`, `GetBuiltin`, `GetRunnerInterface().StructGetKeys`, `CallGameScriptEx`)만 쓴다. `GetInstanceObject`와 `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다. `GetInstanceMember`(없는 이름일 때)와 `GetInstanceMemberCount`는 이 러너에서 확인하지 못한 빌트인을 구조체에 대고 부르므로(서브모듈 `MI_Public.cpp`) 쓰지 않는다.
 - 정적 저장 기간의 `RValue`를 두지 않는다(프로세스가 끝날 때 소멸자가 YYToolkit을 부른다). `RValue`는 함수 안에서만 든다.
 - 인자의 형을 모르는 게임 스크립트는 부르지 않는다. 실행 1의 요청에는 `script=` 줄이 없다.
 - 스크립트는 `pwsh`(PowerShell 7), Python은 `py -3.14`.
@@ -27,6 +27,8 @@
 - 커밋 메시지는 `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>`으로 끝낸다.
 
 **TDD의 예외(계획 승인에 포함해 달라):** 러너에 닿는 모듈 코드(`src/Game.cpp`, `src/Finder.cpp`, `src/Dump.cpp`)는 게임 없이는 시험할 수 없다. 이 코드의 관문은 빌드 성공이고, 시험은 실행 1의 다섯 확인(Task 5 Step 6)이다. 게임 없이 시험할 수 있는 부분은 모두 `src/core/`와 도구로 빼서 먼저 실패하는 시험을 쓴다.
+
+**실행 전 검토에서 고친 것 (2026-10-04):** Task 1~4를 마친 뒤, 게임을 켜기 전에 전체 검토를 받고 고쳤다(커밋 `fix(review): …`). 아래 Task 1~4의 코드 블록은 처음 쓴 그대로이고 **지금의 소스가 정본이다.** 달라진 것: 찾기의 한도를 요청 키(`max_*`)로 받는다, 한도와 통계를 구역마다 따로 센다, ds 형 상수를 만들고 지워서 먼저 확인한다, 중첩 ds는 `ds_exists`를 본 뒤에만 연다, 히트 경로를 자르지 않는다, 멤버 열거가 끊긴 수(`enum_failed`, `enum_short`)와 길어서 들어가지 않은 것(`too_long`)을 적는다, `watch`는 열거로 찾는다, 첫 표본의 호출마다 로그를 남긴다, 기록 줄의 한도를 올린다, `probe.ps1`은 복사한 덤프만 지운다, `dump_tool.py controls`가 `hits_cut`과 열거 끊김을 본다. 시험 수는 네이티브 18, 파이썬 9, 안전 19다.
 
 ## Review Focus
 
@@ -2881,7 +2883,7 @@ pwsh -NoProfile -File E:\NlToyBox\tools\probe.ps1 -Request E:\NlToyBox\tools\pro
 
 도는 동안 게임 폴더의 `mods\Aurie\NlToyBox.log`를 읽어 `dump menu done`이 보이면 사용자에게 한 줄을 보낸다: "메뉴 덤프가 끝났습니다. 이제 새 게임을 시작해 주세요." 로그에 `dump failed`가 보이거나 게임이 덤프 도중 꺼지면 도구가 실패로 끝난다. 그때는 Step 6의 표를 본다.
 
-Expected: 끝줄 `PASS`, `probe exit=0`. `refs\runtime\stage0b-run1.menu.json`과 `stage0b-run1.late*.json`이 있다. 출력의 로그에 Phase 0의 줄(`NlToyBox 0.2.0 loaded`, `builtin code_is_compiled = true`, `script gml_Script_command_line_parameters_init = found`, `probe done`)과 `request consumed`, `objects 64`, `dump menu done …`, `dump late… done …`이 있다.
+Expected: 끝줄 `PASS`, `probe exit=0`. `refs\runtime\stage0b-run1.menu.json`과 `stage0b-run1.late*.json`이 있다. 출력의 로그에 Phase 0의 줄(`NlToyBox 0.2.0 loaded`, `builtin code_is_compiled = true`, `script gml_Script_command_line_parameters_init = found`, `probe done`)과 `request consumed`, `sample: objects`, `objects 64`, `sample: room`, `sample: counts`, `sample: watch`, `sample: ok`, `dump menu done …`, `dump late… done …`이 있다.
 
 - [ ] **Step 6: 어느 덤프가 게임 안의 것인지 정하고, 믿을 만한지 본다**
 
@@ -2908,19 +2910,22 @@ Expected: 두 `controls` 모두 줄마다 `ok`이고 종료 코드 0.
 | `expect …initial_budget` 실패 | 찾기가 알려진 값을 못 찾았다. 찾기가 고장이다 | 원인을 찾는다. 요청으로 못 고치면 멈추고 사용자에게 알린다 |
 | `selfcheck` 실패 | ds 안을 보지 못했다(형 상수가 이 러너에서 다르거나 빌트인이 실패했다) | ds에 대한 "없다"는 "확인하지 못함"으로 적는다. Step 8 |
 | `ds_range` 실패 | ds 번호가 본 범위의 끝에 닿았다 | ds에 대한 "없다"는 "확인하지 못함"으로 적는다. Step 8 |
-| `truncated` 실패 | 한도에 걸렸다 | 걸린 구역 뒤의 "없다"는 "확인하지 못함"으로 적는다. Step 8 |
+| `truncated` 실패 | 한도에 걸렸다 | 그 구역의 "없다"는 "확인하지 못함"으로 적는다. 요청의 `max_visited`를 올려 Step 7을 쓸지 정한다 |
+| `hits_cut` 실패 | 맞은 것을 다 적지 못했다(이름으로 맞은 것이 많다) | 그 구역의 "없다"는 "확인하지 못함"이다. 로그의 `matches`를 보고 요청의 `max_hits`를 올리거나 `find_name`을 좁혀 Step 7 |
+| `enumeration` 실패 | 멤버를 다 보지 못한 구조체가 있다 | 그 구역의 "없다"는 "확인하지 못함"으로 적는다. 요청으로는 못 고친다. Step 8 |
+| 로그가 `sample: …` 줄에서 끊기고 게임이 죽었다 | 첫 표본의 그 호출이 게임을 죽였다 | `sample: room`이면 `skip=room`으로 빼고 Step 7. `objects`·`counts`·`watch`면 요청으로 못 고친다(`watch`는 `watch=` 줄을 빼면 된다). 멈추고 사용자에게 알린다 |
 | 게임이 덤프 도중 죽었다(로그가 어느 구역 줄에서 끊김) | 그 구역의 호출이 게임을 죽였다 | 끊긴 구역을 `skip=`으로 빼고 Step 7 |
 | 로그에 `state … room=?`만 있다 | 룸 이름을 읽지 못했다 | 질문 6에서 룸은 "확인하지 못함"으로 적는다. 다른 것은 그대로 쓴다 |
 
 - [ ] **Step 7: 예비 실행 (필요할 때만)**
 
-Step 6의 표가 여기로 보냈을 때만 한다. `tools/probes/stage0b-run1.txt`를 `stage0b-run2.txt`로 복사해 **요청만** 고친다(`repeat_seconds`, `keep_last`, `skip=`, `trace_events`). 무엇을 왜 고쳤는지, 그 근거가 된 로그 줄을 원장에 `Ruling:`으로 적는다. 모듈 코드를 고쳐야 하면 예비 실행을 쓰지 말고 멈춰서 사용자에게 알린다.
+Step 6의 표가 여기로 보냈을 때만 한다. `tools/probes/stage0b-run1.txt`를 `stage0b-run2.txt`로 복사해 **요청만** 고친다(`repeat_seconds`, `keep_last`, `skip=`, `trace_events`, `watch=`, `find_name=`, 한도 `max_*`). 무엇을 왜 고쳤는지, 그 근거가 된 로그 줄을 원장에 `Ruling:`으로 적는다. 모듈 코드를 고쳐야 하면 예비 실행을 쓰지 말고 멈춰서 사용자에게 알린다.
 
 ```powershell
 pwsh -NoProfile -File E:\NlToyBox\tools\test-native.ps1 | Select-Object -Last 1
 ```
 
-Expected: `core tests: 17 passed`(새 요청 파일이 오류 없이 읽힌다).
+Expected: `core tests: 18 passed`(새 요청 파일이 오류 없이 읽힌다).
 
 사용자에게 Step 5의 글을 다시 보내고(달라진 점이 있으면 덧붙인다), Step 5의 명령에서 `stage0b-run1`을 `stage0b-run2`로 바꿔 돌린다. 끝나면 Step 6을 `stage0b-run2`로 다시 한다. 이번에도 어긋나면 더 켜지 않는다. 얻은 것까지로 Task 6을 쓴다.
 
@@ -2957,6 +2962,14 @@ Run: `pwsh -NoProfile -File E:\NlToyBox\tools\saves-backup.ps1 -Diff <Step 2의 
 Expected: `새로 생김: …` / `바뀜: …` 줄과 `saves diff (<n>)`. 이 출력을 원장에 그대로 적는다. **아무것도 지우지 않는다.**
 
 - [ ] **Step 10: 되돌린다**
+
+먼저 복사하지 못한 덤프가 게임 폴더에 남았는지 본다. `restore-game.ps1`은 그것을 지운다.
+
+```powershell
+Get-ChildItem -LiteralPath 'E:\SteamLibrary\steamapps\common\Norland Story Generating Strategy\mods\Aurie' -Filter 'NlToyBox.dump*.json' -ErrorAction SilentlyContinue | ForEach-Object { "{0}  {1} B" -f $_.Name, $_.Length }
+```
+
+Expected: 출력이 없다. 있으면 `refs\runtime\`로 직접 복사한 뒤에 다음으로 간다.
 
 ```powershell
 pwsh -NoProfile -File E:\NlToyBox\tools\data-restore.ps1;  "data-restore exit=$LASTEXITCODE"
@@ -3042,8 +3055,9 @@ Expected: 다섯 줄 모두 `same`, 마지막 줄 `False`.
 
 ```
 - 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다. 러너에 닿는 호출은
-  `src/Game.cpp`를 거친다. 빌트인과 문서·실행으로 확인한 인터페이스만 쓴다. `GetInstanceObject`,
-  `GetInstanceMemberCount`, `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다.
+  `src/Game.cpp`를 거친다. 빌트인과 문서·소스·실행으로 확인한 인터페이스만 쓴다. `GetInstanceObject`와
+  `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다. 없는 이름으로 부르는 `GetInstanceMember`와
+  `GetInstanceMemberCount`는 확인하지 못한 빌트인을 구조체에 대고 부르므로 쓰지 않는다(이름은 열거로 찾는다).
 - 정적 저장 기간의 `RValue`를 두지 않는다. 함수 안에서만 든다.
 - 빌트인을 새로 쓸 때는 먼저 이름이 `refs/exe_strings.txt`에 있는지, 인자와 반환값이 매뉴얼
   (Context7 `/yoyogames/gamemaker-manual`)에 어떻게 적혀 있는지 확인한다. GML 상수는 C++에서 이름으로 쓸 수
@@ -3095,7 +3109,7 @@ py -3.14 -m unittest discover -s E:\NlToyBox\tools\re\tests 2>&1 | Select-Object
 pwsh -NoProfile -File E:\NlToyBox\tools\tests\safety.tests.ps1 2>&1 | Select-Object -Last 1
 ```
 
-Expected: `build ok -> …`, `core tests: 17 passed`, `OK`, `safety tests: 18 passed`.
+Expected: `build ok -> …`, `core tests: 18 passed`, `OK`, `safety tests: 19 passed`.
 
 `tools/check-load.ps1`은 따로 돌리지 않는다. 게임 실행 횟수를 아끼려는 것이고, 실행 1의 로그에 Phase 0의 판정 줄이 모두 있었던 것(Task 5 Step 5)으로 갈음한다. 그 줄이 없었으면 병합하지 않고 사용자에게 알린다.
 

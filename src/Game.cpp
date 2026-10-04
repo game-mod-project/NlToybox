@@ -102,10 +102,22 @@ bool NlGame::Resolve(const std::string& Path, RValue& Out)
 		if (!current.IsStruct())
 			return false;
 
-		RValue* member = nullptr;
-		if (!AurieSuccess(g_Yytk->GetInstanceMember(current, name.c_str(), member)) || !member)
+		// 이름이 같은 멤버를 열거로 찾는다. 없는 이름으로 GetInstanceMember 를 부르면 YYToolkit 이 구조체에 대고
+		// variable_instance_exists 를 부르는데(MI_Public.cpp 268~291행), 이 러너에서 그것이 되는지는 확인하지 못했다.
+		// 열거는 단계 0 에서 써 본 길이다.
+		RValue next;
+		bool found = false;
+		g_Yytk->EnumInstanceMembers(current, [&](const char* MemberName, RValue* Value) -> bool
+		{
+			if (!MemberName || !Value || name != MemberName)
+				return false;
+			next = *Value;
+			found = true;
+			return true;	// 찾았으니 그만 돈다
+		});
+		if (!found)
 			return false;
-		current = *member;
+		current = next;
 
 		if (dot == std::string::npos)
 			break;
@@ -113,6 +125,18 @@ bool NlGame::Resolve(const std::string& Path, RValue& Out)
 	}
 	Out = current;
 	return true;
+}
+
+int NlGame::MemberCount(const RValue& Struct)
+{
+	// EnumInstanceMembers 가 멤버 수를 얻는 바로 그 호출이다(YYToolkit MI_Public.cpp 350행).
+	// 러너가 이 함수를 주지 않으면 알 수 없다.
+	const YYRunnerInterface& runner = g_Yytk->GetRunnerInterface();
+	if (!runner.StructGetKeys || !Struct.IsStruct())
+		return -1;
+
+	RValue copy = Struct;
+	return runner.StructGetKeys(&copy, nullptr, nullptr);
 }
 
 double NlGame::ArrayLength(const RValue& Value)

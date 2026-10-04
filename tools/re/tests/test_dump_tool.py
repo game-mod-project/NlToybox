@@ -21,7 +21,7 @@ NEW = {
                     "visited": 10, "truncated": False},
     "find_ds": {"hits": [{"path": "ds_map[19].budget_money", "why": "name", "kind": "number", "value": 2345}],
                 "maps": 3, "lists": 1, "highest_map": 412, "highest_list": 97,
-                "selfcheck": {"made": True, "ds_map": True, "ds_list": True},
+                "selfcheck": {"types": True, "made": True, "ds_map": True, "ds_list": True},
                 "visited": 20, "truncated": False},
     "instances": {"o_data": {"count": 1, "own": 1, "members": {"state": {"kind": "number", "value": 3}}}},
     "find_instances": {"hits": [], "instances": 1, "visited": 25, "truncated": False},
@@ -71,6 +71,20 @@ class DumpToolTests(unittest.TestCase):
         bad["instances"]["o_data"]["members"] = {}              # 인스턴스 변수를 하나도 읽지 못했다
         failed = {name for name, ok, _ in dump_tool.controls(bad, [("global.nope", 1.0)]) if not ok}
         self.assertEqual(failed, {"expect global.nope", "selfcheck", "ds_range", "truncated", "instances"})
+
+    def test_controls_flag_cut_hits_and_cut_enumeration(self):
+        bad = json.loads(json.dumps(NEW))
+        bad["find_global"]["hits_cut"] = True                  # 히트를 다 적지 못했다
+        bad["find_ds"]["enum_short"] = 2                       # 구조체 둘의 멤버를 다 보지 못했다
+        bad["find_instances"]["enum_failed"] = 1
+        failed = {name for name, ok, _ in dump_tool.controls(bad, []) if not ok}
+        self.assertEqual(failed, {"hits_cut", "enumeration"})
+
+    def test_controls_require_the_type_constants_to_be_verified(self):
+        bad = json.loads(json.dumps(NEW))
+        bad["find_ds"]["selfcheck"]["types"] = False            # ds 형 상수가 이 러너에서 확인되지 않았다
+        failed = {name for name, ok, _ in dump_tool.controls(bad, []) if not ok}
+        self.assertEqual(failed, {"selfcheck"})
 
     def test_controls_flag_a_skipped_section(self):
         bad = json.loads(json.dumps(NEW))
