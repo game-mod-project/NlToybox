@@ -94,6 +94,11 @@ function Get-NlDataSnapshotDir {
     Join-Path (Get-NlRepoRoot) "backups\data\$((Get-NlExeInfo).Version)"
 }
 
+# 세이브·설정 폴더. 이 레포의 도구는 여기에 쓰지 않는다(읽어서 사본을 뜰 뿐이다). 시험은 NORLAND_SAVES_DIR 로 바꾼다.
+function Get-NlSavesDir {
+    if ($env:NORLAND_SAVES_DIR) { $env:NORLAND_SAVES_DIR } else { Join-Path $env:LOCALAPPDATA 'Strategy' }
+}
+
 # 게임을 켜는 도구가 켜기 전에 부른다. 결과가 정해진 실행에 게임 켜기 한 번을 쓰지 않는다.
 function Assert-NlReadyToLaunch {
     Assert-NlGameNotRunning
