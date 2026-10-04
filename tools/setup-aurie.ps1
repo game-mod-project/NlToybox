@@ -34,11 +34,20 @@ if ($info.Patched) {
 } else {
     $backupDir = Join-Path $repo 'backups'
     $backupPath = Join-Path $backupDir "Norland.exe.$($info.Version).$($info.Sha256.Substring(0, 12))"
-    if (-not (Test-Path -LiteralPath $backupPath)) {
+    # 이름만 보고 믿지 않는다. 내용이 지금의 원본과 같을 때만 "이미 있다"로 친다.
+    $have = (Test-Path -LiteralPath $backupPath) -and
+            ((Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash -eq $info.Sha256)
+    if (-not $have) {
+        if (Test-Path -LiteralPath $backupPath) { Write-Host "백업이 원본과 달라 다시 만듭니다: $backupPath" }
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
-        Copy-Item -LiteralPath $info.Path -Destination $backupPath
-        $copied = (Get-FileHash -LiteralPath $backupPath -Algorithm SHA256).Hash
-        if ($copied -ne $info.Sha256) { throw "백업 복사본의 해시가 원본과 다릅니다: $backupPath" }
+        # 복사가 중간에 끊겨도 반쯤 된 파일이 백업 이름으로 남지 않게, 임시 이름으로 복사해 확인한 뒤 옮긴다.
+        $partial = Join-Path $backupDir "tmp-$($info.Sha256.Substring(0, 12)).partial"
+        Copy-Item -LiteralPath $info.Path -Destination $partial -Force
+        if ((Get-FileHash -LiteralPath $partial -Algorithm SHA256).Hash -ne $info.Sha256) {
+            Remove-Item -LiteralPath $partial -Force
+            throw '백업 복사본의 해시가 원본과 다릅니다. exe 는 건드리지 않았습니다.'
+        }
+        Move-Item -LiteralPath $partial -Destination $backupPath -Force
         Write-Host "백업: $backupPath"
     }
 }

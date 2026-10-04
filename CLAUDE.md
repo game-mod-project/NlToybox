@@ -16,8 +16,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - `main`에는 릴리스 시점에 `develop`에서만 들어간다.
 - 원격 저장소가 없다. PR 대신 로컬 merge commit(`git merge --no-ff`)을 쓴다.
   원격을 만들면 2단계 PR로 바꾸고 이 절을 고친다.
-- CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공과
+- CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/tests/safety.tests.ps1` 통과,
   `tools/check-load.ps1` 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
+  `safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돌며 게임을 켜지 않는다.
 - 머지한 브랜치는 지운다(`git branch -d`).
 
 ## 경로
@@ -50,8 +51,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - `check-load.ps1`이 찾는 줄 형식은 `src/ModuleMain.cpp`가 쓴다. 한쪽을 바꾸면 다른 쪽도 바꾼다.
 - 게임을 켜는 확인은 한 번에 몰아서 하고 끝나면 바로 끈다. 켜기 전에 사용자에게
   게임 창을 누르지 말라고 알린다. 켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
-- 판정이 `FAIL`이면 게임을 강제 종료하기 전에 게임 창(클래스 `YYGameMakerYY`)에 `WM_CLOSE`를 보내
-  정상 종료시킨다. 그래야 `aurie.log`가 채워진다.
+- `check-load.ps1`은 판정을 내기 전에 게임을 강제 종료한다(`Stop-Process`). 그러면 `aurie.log`는
+  비어 있다. 실패를 조사할 때는 `-KeepRunning`으로 돌리고, 게임 창(클래스 `YYGameMakerYY`)에
+  `WM_CLOSE`를 보내 정상 종료시킨 뒤 `aurie.log`를 읽는다.
 
 ## 모듈을 쓸 때
 
@@ -65,7 +67,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - `tools/setup-aurie.ps1`: `Norland.exe` 패치(원본은 `backups/`에 보관),
   `mods\Native\AurieCore.dll`, `mods\Aurie\YYToolkit.dll`.
 - `tools/restore-game.ps1`: 같은 버전의 백업으로 exe를 덮어쓰고, `mods\`에서 이 레포가 놓은
-  파일과 `aurie.log`를 지운다.
+  파일과 게임 폴더 최상위의 `aurie.log`를 지운다. 백업의 내용이 이름의 해시와 다르면 거부한다.
 - 게임 갱신이나 Steam 무결성 검사 뒤에는 `tools/game-status.ps1`로 패치가 남았는지 보고
   `tools/setup-aurie.ps1`을 다시 돌린다. 그 뒤 `tools/check-load.ps1`로 다시 확인한다.
 

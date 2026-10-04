@@ -16,8 +16,14 @@ if ($info.Patched) {
                (($backups | ForEach-Object { "  $($_.FullName)" }) -join "`n"))
     }
     $backup = $backups[0]
-    Copy-Item -LiteralPath $backup.FullName -Destination $info.Path -Force
+    # 백업 이름의 끝 12자는 원본 SHA256 의 앞부분이다. 내용이 이름과 다르면 그 백업은 원본이 아니다.
     $want = (Get-FileHash -LiteralPath $backup.FullName -Algorithm SHA256).Hash
+    $tag = $backup.Name.Substring($backup.Name.LastIndexOf('.') + 1)
+    if (-not $want.StartsWith($tag, [StringComparison]::OrdinalIgnoreCase)) {
+        throw ("백업의 내용이 이름의 해시($tag)와 다릅니다. 이 백업으로 덮어쓰지 않습니다: $($backup.FullName)`n" +
+               'Steam 무결성 검사로 되돌리세요.')
+    }
+    Copy-Item -LiteralPath $backup.FullName -Destination $info.Path -Force
     $got = (Get-NlExeInfo).Sha256
     if ($got -ne $want) { throw "복원 뒤 exe 해시가 백업과 다릅니다 (exe $got, 백업 $want)" }
     Write-Host "exe 복원: $($backup.Name)"
