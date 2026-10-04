@@ -10,6 +10,19 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-04-nltoybox-phase0-workspace-design.md`
 
+## 실행 중 바뀐 것 (2026-10-04)
+
+이 문서의 본문은 승인받은 그대로 두었다. 실행하면서 달라진 점은 다음과 같다.
+
+- Task 5 Step 6의 첫 실행은 `FAIL`이었다. YYToolkit v5.0.0c가 Present 훅을 걸지 않아
+  `EVENT_FRAME` 콜백이 불리지 않았다. 사용자 승인을 받아 Task 3의 모듈을 고쳤다:
+  `EVENT_OBJECT_CALL`·`EVENT_WNDPROC` 중 먼저 오는 쪽에서 프로브하고, 로그에
+  `trigger <object_call|wndproc>` 줄을 더한다. 게임은 두 번 켰다. 두 번째 실행이 `PASS`다.
+- `restore-game.ps1`의 `$ours`에 `aurie.log`가 들어갔다(Task 5 Step 8의 조건부 수정).
+- 게임은 `Stop-Process`가 아니라 게임 창에 `WM_CLOSE`를 보내 닫았다.
+
+지금의 정본은 스펙과 `src/ModuleMain.cpp`, `research/00-game-structure.md`다.
+
 ## Global Constraints
 
 - 게임 경로는 `$env:NORLAND_GAME_DIR` 우선, 없으면 `E:\SteamLibrary\steamapps\common\Norland Story Generating Strategy`. 기본값은 `tools/common.ps1` 한 곳에만 적는다.
