@@ -27,6 +27,8 @@ target_link_libraries(nlcore_tests PRIVATE nlcore)
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Dump.cpp
+  src/Finder.cpp
+  src/Game.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
 )
 
@@ -43,3 +45,4 @@ target_include_directories(nltoybox PRIVATE
 
 target_compile_options(nltoybox PRIVATE /std:c++latest /W3 /utf-8)
 target_compile_definitions(nltoybox PRIVATE UNICODE _UNICODE)
+target_link_libraries(nltoybox PRIVATE nlcore)
