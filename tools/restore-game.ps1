@@ -27,6 +27,7 @@ if ($info.Patched) {
 
 # 이 레포가 놓은 파일만 지운다. 다른 파일이 있으면 남기고 알린다.
 $ours = @(
+    'aurie.log',                      # Aurie 가 게임 폴더에 쓴다 (게임을 끌 때 채워진다)
     'mods\Native\AurieCore.dll',
     'mods\Aurie\YYToolkit.dll',
     'mods\Aurie\NlToyBox.dll',
