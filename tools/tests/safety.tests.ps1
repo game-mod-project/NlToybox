@@ -132,6 +132,14 @@ try {
         Assert-Equal $r.Exit 1 "edit 은 .. 을 거부해야 한다`n$($r.Out)"
     }
 
+    Test-Case 'probe 는 켜는 데 실패해도 요청 파일을 게임 폴더에 남기지 않는다' {
+        $req = Join-Path $fake 'req.txt'
+        [IO.File]::WriteAllText($req, "delay_seconds=1`n")
+        $r = Invoke-Tool 'probe.ps1' "-Request '$req' -Out '$(Join-Path $fake 'out.json')' -TimeoutSec 4" $noLaunch
+        Assert-True ($r.Out -match 'LAUNCH-ATTEMPTED') "사전 검사를 지나 켜는 단계에 닿아야 한다`n$($r.Out)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fake 'mods\Aurie\NlToyBox.probe.txt'))) '요청 파일이 남으면 안 된다'
+    }
+
     Write-Host "safety tests: $($script:passed) passed"
 }
 finally {
