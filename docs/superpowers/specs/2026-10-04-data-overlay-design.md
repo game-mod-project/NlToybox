@@ -47,23 +47,28 @@
 
 `NlToyBox.dll`에 덤프 기능을 더한다.
 
-- 요청 파일 `mods\Aurie\NlToyBox.probe.json`이 있을 때만 동작한다. 없으면 Phase 0과 똑같이 동작한다.
-- 요청 파일의 내용:
+- 요청 파일 `mods\Aurie\NlToyBox.probe.txt`가 있을 때만 동작한다. 없으면 Phase 0과 똑같이 동작한다.
+- 요청 파일은 줄 단위 `키=값`이다(모듈에 JSON 파서를 넣지 않으려고). `#`으로 시작하는 줄은 주석이다.
 
-  ```json
-  { "delay_seconds": 60,
-    "scripts": [ { "name": "gml_Script_budget_default_money_get", "args": [] },
-                 { "name": "gml_Script_resource_default_count_get", "args": ["wood"] } ] }
+  ```
+  delay_seconds=60
+  script=gml_Script_budget_default_money_get
+  script=gml_Script_resource_default_count_get|wood
+  find=2345
+  find_name=battle_dodge_base
   ```
 
 - 모듈이 적재된 뒤 `delay_seconds`가 지나고 처음 오는 `EVENT_OBJECT_CALL`에서(게임 스레드) 한 번 실행한다.
   기다리는 이유: 모듈은 게임 창이 뜬 직후 적재되고, 데이터 로딩은 그 뒤 약 30초 동안 이어진다(실측).
 - 하는 일:
-  1. 전역 변수의 이름을 모두 얻는다. 이름마다 형을 적고, 수·문자열·불리언이면 값을 적는다.
-     구조체면 멤버 이름과 수·문자열·불리언 멤버의 값을 한 단계만 적는다. 배열이면 길이를 적는다.
-  2. 요청의 스크립트를 차례로 부르고 반환값을 적는다. 부르지 못하면 오류 상태를 적는다.
+  1. **전역 목록.** 전역 변수의 이름을 모두 얻는다. 이름마다 형을 적고, 수·문자열·불리언이면 값을 적는다.
+     구조체면 멤버를 한 단계만 적는다. 배열이면 길이를 적는다.
+  2. **스크립트.** `script=` 줄의 스크립트를 차례로 부르고 반환값을 적는다(`|` 뒤는 인자. 수로 읽히면 수, 아니면 문자열).
+  3. **찾기.** 전역에서 출발해 구조체와 배열을 따라 내려가며(깊이 6, 방문 40만 개, 배열 2,048개까지)
+     `find=`의 수와 같은 값, `find_name=`의 이름과 같은 멤버를 찾아 경로와 값을 적는다. 이름으로 찾은 것이
+     구조체면 그 멤버를 한 단계 적는다. 파일의 값이 메모리 어디에 앉는지 한 번의 실행으로 찾기 위한 것이다.
 - 결과를 `mods\Aurie\NlToyBox.dump.json`에 쓴다. 다 쓴 뒤 `NlToyBox.log`에 `dump done`을 남긴다.
-- 문자열 값은 200자에서 자른다. 값을 읽다 실패한 항목은 건너뛰지 않고 `"error"`로 적는다.
+- 문자열 값은 200바이트에서 자른다. 전역 하나를 적을 때마다 파일을 비운다(도중에 죽어도 어디까지 왔는지 남는다).
 
 덤프는 읽기만 한다. 게임의 값을 바꾸지 않는다.
 
@@ -72,8 +77,12 @@
 - `tools/probe.ps1 [-Request <파일>] [-Out <파일>] [-TimeoutSec 240]`
   - 요청 파일을 `mods\Aurie\`에 놓고, 게임을 켜고, `dump done`을 기다리고, 덤프를 `-Out`으로 복사하고,
     게임 창에 `WM_CLOSE`를 보내 정상 종료시킨다. 15초 안에 끝나지 않으면 강제 종료한다.
-  - 거부 조건은 `check-load.ps1`과 같다(실행 중, 미패치, DLL 누락).
-  - 요청 파일과 덤프는 끝난 뒤 게임 폴더에서 지운다. `restore-game.ps1`의 삭제 목록에도 넣는다.
+  - 거부 조건은 `check-load.ps1`과 같다(실행 중, 미패치, DLL 누락). 두 도구가 같은 함수
+    (`Assert-NlReadyToLaunch`)를 쓴다.
+  - 요청 파일과 덤프는 끝난 뒤 게임 폴더에서 지운다(실패해도 지운다). `restore-game.ps1`의 삭제 목록에도 넣는다.
+  - 게임을 끄는 함수(`Stop-NlGame`: `WM_CLOSE` 뒤 기한이 지나면 강제 종료)는 `check-load.ps1`도 쓴다.
+- `tools/data-edit.ps1 -File <상대경로> -Find <글> -Replace <글>`
+  - 스냅샷이 있는 파일에서 찾는 글이 정확히 한 번 나올 때만 바꾼다. 아니면 거부하고 파일을 그대로 둔다.
 - `tools/data-snapshot.ps1 -Files <상대경로…>`
   - 게임 파일을 `backups\data\<게임 버전>\<상대경로>`로 복사한다. 이미 있고 해시가 같으면 건너뛴다.
     해시가 다르면 거부한다(스냅샷은 바닐라여야 한다).
@@ -88,15 +97,16 @@
 
 | 실행 | 파일 상태 | 얻는 것 |
 |---|---|---|
-| 1 | 바닐라 | 기준 덤프 `refs\runtime\dump-vanilla.json` |
-| 2 | 세 값을 바꿈: `debug_params.json`의 `budget_money` 2000 → 2345, `gameplay_variables.json`의 값 하나, `battle_params.json`의 `battle_dodge_base` 20 → 23 | 덤프 `dump-changed.json`. 기준과 비교해 어느 값이 움직였는지 본다 |
-| 3 | 2의 상태에 더해, `gameplay_variables.json`에 exe에만 있는 이름에 대응하는 키를 하나 추가 | 덤프 `dump-added.json`. 추가한 키가 반영됐는지 본다 |
+| 1 | 바닐라 | 기준 덤프 `refs\runtime\dump-vanilla.json`. 원래 값(2000, 700)과 이름으로 찾기 |
+| 2 | 세 값을 바꿈: `debug_params.json`의 `budget_money` 2000 → 2345, `gameplay_variables.json`의 `global_map.ai_economy.initial_budget` 700 → 745, `battle_params.json`의 `battle_dodge_base` 20 → 23 | 덤프 `dump-changed.json`. 2345와 745를 값으로 찾고, `battle_dodge_base`를 이름으로 찾는다 |
+| 3 | 2의 상태에 더해, `gameplay_variables.json`에 파일에 없던 키를 하나 추가 | 덤프 `dump-added.json`. 추가한 키가 반영됐는지 본다 |
 
-- 실행 2에서 바꿀 `gameplay_variables.json`의 값과 실행 3에서 추가할 키는 실행 1의 덤프를 보고 고른다.
-  덤프에서 위치를 찾을 수 있는 것이어야 비교가 된다. 고른 값과 이유를 조사 기록에 적는다.
-- 실행 3에서 키를 어디에 어떤 이름으로 넣을지는, 덤프의 변수 이름과 파일의 키 경로가 어떻게 대응하는지
-  (예: `farm.rye.duration`과 전역 이름) 본 뒤에 정한다. 대응 규칙이 보이지 않으면 실행 3은 하지 않고
-  "확인하지 못함"으로 적는다.
+- 2345와 745는 흔치 않은 값이라 메모리에서 값으로 찾으면 파일 값이 앉은 자리가 드러난다.
+- 실행 3의 키는 이렇게 고른다: 실행 2에서 `initial_budget`이 앉은 런타임 구조체(`ai_economy`에 대응)의
+  멤버 가운데 파일의 `ai_economy`에 없는 수 멤버가 있으면, 그 이름을 파일에 추가하고 값을 원래 값 + 45로 준다.
+  그런 멤버가 없으면 `gameplay_variables.json`의 다른 범주에 대응하는 런타임 구조체에서 같은 방법으로 찾는다
+  (실행 2의 덤프에 이름으로 찾은 구조체들의 멤버가 있다). 어디에도 없으면 실행 3은 하지 않고
+  "런타임 구조체가 파일과 같은 키만 가진다"로 적는다. 파일 값이 메모리에서 아예 안 보였어도 실행 3은 하지 않는다.
 - 끝나면 `data-restore.ps1`과 `restore-game.ps1`로 되돌리고, 게임 파일이 스냅샷과 같은지 확인한다.
 
 ### 3.5 산출물
@@ -108,7 +118,9 @@
 
 ### 3.6 단계 0의 완료 기준
 
-1. 모듈이 요청 파일 없이 켜졌을 때 Phase 0과 같은 로그를 낸다(`tools/check-load.ps1`의 판정 기준 유지).
+1. 덤프 기능을 넣은 뒤에도 Phase 0의 판정 줄(`loaded`, `builtin … = true`, `script … = found`, `probe done`)이
+   실행 1의 `NlToyBox.log`에 모두 있다. 요청 파일이 없을 때의 동작은 게임을 따로 켜서 보지 않는다(실행 횟수를
+   아끼려고. 요청 파일이 없으면 덤프 코드는 초기화에서 바로 돌아간다).
 2. 실행 1의 덤프가 생기고, 전역 변수 항목이 하나 이상 있으며, `gml_Script_budget_default_money_get`의
    반환값이 적혀 있다.
 3. 세 질문 각각에 "그렇다 / 아니다 / 확인하지 못함"과 그 근거가 `research/01-data-overlay.md`에 있다.
