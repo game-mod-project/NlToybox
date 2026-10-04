@@ -22,8 +22,10 @@ namespace
 
 	constexpr size_t k_MaxString = 200;		// 문자열 값은 이 바이트에서 자른다
 	constexpr int k_MaxDepth = 6;			// 찾기가 내려가는 깊이
-	constexpr size_t k_MaxVisited = 400000;	// 찾기가 방문하는 값의 수
-	constexpr double k_MaxArray = 2048;		// 이보다 긴 배열은 들어가지 않는다
+	// 실측: 한도 40만·배열 2,048 로는 에셋 배열(소리, 스프라이트, 지도의 점)에 한도를 다 쓰고 끝까지 돌지 못했다.
+	// 설정 값은 구조체와 짧은 배열에 있으므로 긴 배열은 건너뛴다.
+	constexpr size_t k_MaxVisited = 2000000;	// 찾기가 방문하는 값의 수
+	constexpr double k_MaxArray = 64;			// 이보다 긴 배열은 들어가지 않는다
 	constexpr size_t k_MaxHits = 300;
 
 	YYTKInterface* g_Yytk = nullptr;

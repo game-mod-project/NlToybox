@@ -1,0 +1,12 @@
+# 단계 0 실행 3: 실행 2 의 상태에 더해, gameplay_variables.json 의 game 객체에 파일에 없던 키 speed_slower_div 를 넣은 뒤.
+# 런타임의 global.__gameplay_vars.game_speed_slower_div 가 2 에서 47 로 바뀌는지 본다(전역 목록으로 확인한다).
+delay_seconds=60
+script=gml_Script_budget_default_money_get
+find=2345
+find_name=budget_money
+find_name=default_budget_money
+find_name=battle_dodge_base
+find_name=production_cost
+find_name=building_resources
+find_name=product_count
+find_name=fair_trade_purchase
