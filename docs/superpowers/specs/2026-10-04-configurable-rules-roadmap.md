@@ -118,6 +118,10 @@ exe에는 `gameplay_variables.json`의 키와 같은 꼴의 이름이 파일보�
 - 내용: 게임 안에서 값을 보고 고치는 창.
 - 먼저 정할 것: 내장 디버그 창을 켤 수 있는가(`is_debug_forced`, `command_line_parameters_init`),
   아니면 Present 훅을 직접 걸고 ImGui를 올리는가.
+- 단서(확인하지 않았다): Steam 토론 "Any way to edit stats (cheat/hack)?"의 3월 14일 글에 `-debug`로 켜고
+  인물을 누른 뒤 Ctrl+D를 누르면 디버그 창이 열린다고 적혀 있다. exe 문자열에서 `-debug`는 GameMaker 러너의
+  옵션 목록(`-trace`, `-noaudio` 등) 사이에 있고, 러너의 `parameter_count`·`parameter_string`도 있다.
+  Norland가 그것으로 디버그 창을 켜는지는 재 보지 않았다. 이 하위 프로젝트의 첫 실측 대상이다.
 - 시작 조건: 하위 프로젝트 1 또는 2가 조작할 대상을 제공한다.
 
 ### 4. 규칙과 확장

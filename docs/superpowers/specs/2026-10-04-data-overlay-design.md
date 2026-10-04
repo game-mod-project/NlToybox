@@ -3,7 +3,7 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 설계 승인(대화) → 문서 검토 대기
+- 상태: 단계 0 완료(`research/01-data-overlay.md`). 단계 0b(§3.7)는 검토 대기
 
 ## 1. 목적
 
@@ -131,6 +131,142 @@
 질문 2의 답이 세 파일 모두 "아니다"이면 단계 1을 시작하지 않는다. 로드맵으로 돌아가 하위 프로젝트 2를
 먼저 할지 정한다.
 
+### 3.7 단계 0b — 새 게임 상태에서 다시 잰다
+
+단계 0은 메인 메뉴에서만 쟀고 `debug_params.json`과 `battle_params.json`은 "확인하지 못함"으로 남았다
+(`research/01-data-overlay.md`). 새 게임에 들어간 상태에서 다시 잰다.
+
+**이 단계는 기록만 한다.** "게임에 들어갔다"를 무엇으로 알아볼지는 아직 재 본 적이 없다. 그래서 조건을 미리
+정하지 않고, 상태가 바뀌는 것을 기록하면서 일정 간격으로 덤프한다. 감지 로직은 이 기록에서 나온 신호로
+다음 계획에서 만든다. 추측한 조건을 넣고 틀리면 대비하는 방식은 쓰지 않는다.
+
+#### 근거
+
+계획과 코드가 기대는 사실과 그 출처다. 출처가 없는 것은 "모른다"에 적고 이번 실행에서 잰다.
+
+| 사실 | 출처 |
+|---|---|
+| 러너 버전 문자열은 `2023.4.0.113` 하나다 | `refs/exe_strings.txt` |
+| 계획이 쓰는 빌트인의 이름이 exe에 있다: `ds_exists`, `ds_map_keys_to_array`, `ds_map_is_map`, `ds_map_is_list`, `ds_map_find_value`, `ds_map_size`, `ds_map_create`, `ds_map_add`, `ds_map_destroy`, `ds_list_create`, `ds_list_add`, `ds_list_destroy`, `ds_list_size`, `ds_list_find_value`, `variable_instance_get_names`, `variable_instance_get`, `instance_number`, `instance_find`, `object_exists`, `object_get_name`, `room_get_name`, `array_length` | `refs/exe_strings.txt`에 이름마다 한 번씩 있다 |
+| `ds_type_map` = 1, `ds_type_list` = 2 (stack 3, queue 4, grid 5, priority 6) | 공개된 공식 러너 소스 `YoYoGames/GameMaker-HTML5`의 `scripts/functions/Function_YoYo.js` 36~41행. 이 러너에서도 맞는지는 실행 때 자가 점검으로 다시 잰다 |
+| `ds_exists(ind, type)`은 불리언을 돌려준다. 같은 번호가 형이 다른 여러 자료구조에 쓰일 수 있다 | GameMaker 매뉴얼 `ds_exists` (Context7 `/yoyogames/gamemaker-manual`) |
+| `instance_number(obj)`는 자식 오브젝트의 인스턴스를 포함하고 비활성 인스턴스는 세지 않는다 | 매뉴얼 `instance_number` |
+| `instance_find(obj, n)`은 없으면 `noone`을 돌려준다. `noone`은 -4다 | 매뉴얼 `instance_find`, `Instance Keywords` |
+| `variable_instance_get_names(id)`는 인스턴스 변수 이름의 배열을 돌려준다 | 매뉴얼 `variable_instance_get_names` |
+| `ds_map_keys_to_array(id)`는 키의 배열을, `ds_map_is_map`·`ds_map_is_list(id, key)`는 불리언을 돌려준다 | 매뉴얼 |
+| `json_decode`는 중첩된 ds_map·ds_list를 만든다 | 매뉴얼 `json_decode` |
+| `EnumInstanceMembers`의 콜백이 거짓을 돌려주면 열거가 이어진다 | YYToolkit 위키 `EnumInstanceMembers` (Context7 `/aurieframework/yytoolkit`), 단계 0의 실행 |
+| `GetBuiltin`으로 전역 빌트인 변수(`room`)를 읽을 수 있다. 이 게임에서 YYToolkit의 빌트인 변수 표 초기화가 성공했다 | YYToolkit 위키 `GetBuiltin`, `refs/phase0/aurie.pass.log`의 `Zeus::YYC::GetBuiltinInformation => AURIE_SUCCESS` |
+| 오브젝트 이벤트 콜백의 인자는 (Self, Other, CCode, Arguments, Flags) 순서다. 코드 이름은 `CCode::m_Name`이다 | 서브모듈 `Module Internals/Hooks/Hooks.cpp` 122행, `Private Interface/PI_Public.cpp` 646행 |
+| 게임의 첫 룸은 `rm_game`이고 거기 놓인 인스턴스는 `o_game_launch` 하나다. 룸은 18개, 오브젝트는 64개다 | `data.win`의 `GEN8` 룸 순서(첫 값 0)와 `ROOM`·`OBJT` 청크. 필드 배치는 UndertaleModTool `UndertaleGeneralInfo.cs` |
+| 데이터 파일을 읽는 스크립트로 보이는 이름: `file_get_nested_value`, `file_get_nested_value_cached`, `file_set_nested_value`. 전역 `__map_of_cached_loaded_files__` = 19, `____cache_file_nested_value` = 18 | `refs/strg.txt`(이름), 단계 0의 메뉴 덤프(값). **동작은 모른다** |
+| 게임은 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 `Menu Opened`, `Save game: <이름>`, `Load game: <이름>`을 시각과 함께 적는다. 자동 저장의 이름은 `…_Autosave_Morning_…`, `…_Autosave_Evening_…`다 | 그 파일의 2026-09-24 기록 |
+| 세이브 폴더는 67개 784KB이고 `saves\`에는 `steam_autocloud.vdf`뿐이다 | 2026-10-04에 읽음 |
+
+모른다 (이번 실행에서 잰다):
+
+- 메인 메뉴와 게임 안에서 어떤 오브젝트의 인스턴스가 있는가. 룸이 바뀌는가.
+- 값이 든 자리. 수 하나로 된 전역(19, 18 등)이 ds_map 번호인가.
+- `CCode`의 배치가 이 러너와 맞는가(이름을 읽을 수 있는가).
+- 덤프 한 번에 걸리는 시간.
+
+커뮤니티에서 본 것 (확인하지 않았다. 이 단계에서는 쓰지 않는다):
+
+- Steam 토론 "Any way to edit stats (cheat/hack)?"(2024-08-10): `knowledge\technology\textbooks`의 JSON을 고쳐
+  효과를 봤다는 글. 같은 글타래의 3월 14일 글: `-debug`로 켜고 인물을 누른 뒤 Ctrl+D를 누르면 디버그 창이 열린다.
+  `-debug`는 exe 문자열에서 GameMaker 러너의 옵션 목록(`-trace`, `-noaudio` 등) 사이에 있다. Norland가 그것으로
+  디버그 창을 켜는지는 재 보지 않았다. 하위 프로젝트 3에서 잴 것이다.
+- Steam 토론 "Cheats"(2025-05-22): 개발사 계정이 "디버그 모드는 다음 패치에 들어간다, 37 패치에는 치트가 없다"고 썼다.
+
+#### 답할 질문
+
+4. 새 게임 상태에서 `debug_params.json`, `battle_params.json`, `director_params.json`,
+   `knowledge\technology\*.json`의 바꾼 값이 런타임에 있는가. 어디에 있는가.
+5. 그 값은 언제 읽히는가. 메인 메뉴에서 이미 있는가, 새 게임에서 생기는가.
+6. "게임 안"을 무엇으로 알아볼 수 있는가(룸, 오브젝트의 유무, 전역 값). 기록에서 뽑는다.
+
+#### 모듈
+
+요청 파일에 키를 더한다. 기존 키의 뜻은 그대로이되 `find_name`은 **부분 일치**로 바뀐다
+(평평한 이름 `…_battle_dodge_base`를 찾으려고).
+
+```
+repeat_seconds=45        # 첫 덤프 뒤로, 앞 덤프가 끝난 때부터 이만큼 지나면 다시 덤프한다. 없으면 첫 덤프만 한다
+keep_last=3              # 되풀이 덤프는 마지막 이만큼만 남긴다 (late0, late1, late2 를 돌려 쓴다)
+watch=global.__new_game_initializer.__is_active   # 값이 바뀔 때마다 로그에 적는다
+trace_events=1           # 처음 보는 오브젝트 이벤트 코드의 이름을 로그에 적는다
+skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
+```
+
+- **상태 재기.** 0.5초마다 룸 이름, 오브젝트 64개의 인스턴스 수(`instance_number`), `watch`의 값을 잰다.
+  룸이나 인스턴스가 있는 오브젝트의 집합이 바뀌면 `state t=<초> room=… +이름 -이름`을, `watch` 값이 바뀌면
+  `watch t=<초> …`을 `NlToyBox.log`에 적는다. 이 기록이 질문 6의 답이다.
+- **덤프.** `delay_seconds`에 한 번(`NlToyBox.dump.menu.json`). `repeat_seconds`가 있으면 그 뒤로 되풀이한다
+  (`NlToyBox.dump.late<k>.json`). 덤프마다 순번, 시각, 룸, 그때 있던 오브젝트를 적는다. 로그에는 시작·끝 시각과
+  걸린 시간을 적는다. 메뉴 덤프와 뒤의 덤프를 비교하면 질문 5의 답이 나온다.
+- **찾기를 고친다.** 단계 0에서 드러난 한계를 없앤다.
+  - 너비 우선으로 내려가고, 구조체·배열마다 닿은 가장 얕은 깊이를 적어 둔다. 깊은 길로 먼저 닿아서 빠지는 것이 없다.
+  - ds_map과 ds_list를 번호 0부터 한도까지 모두 본다(`ds_exists`). 가장 큰 번호를 덤프에 적는다.
+    이름으로 찾은 항목이 중첩된 map·list이면 그 속을 한 단계 적는다.
+  - 오브젝트 인스턴스의 변수를 본다(`variable_instance_get_names`). 오브젝트마다 16개까지.
+  - 자가 점검: 표식을 넣은 ds_map과 ds_list를 하나씩 만들어 찾기가 그것을 보는지 확인한 뒤 지운다.
+    형 상수(1, 2)가 이 러너에서 맞는지도 이것으로 확인된다.
+    **이것이 §3.2의 "읽기만 한다"의 유일한 예외다.** 게임의 값은 바꾸지 않는다.
+  - 러너 내부 구조체의 배치에 기대는 호출(`GetInstanceObject`, `GetInstanceMemberCount`, `CRoom`)은 쓰지 않는다.
+    코드 이름(`CCode`)만 예외이고, 잘못 읽어도 게임이 죽지 않게 감싼다. 멤버 열거가 중간에 끊기는지는 여전히 알 수 없다.
+- 덤프의 순서는 덜 위험한 것부터다: 전역 목록, 전역 찾기, ds 찾기, 인스턴스, 스크립트 호출. 구역이 끝날 때마다
+  로그에 한 줄을 적는다. 도중에 죽으면 어느 구역이었는지 남는다.
+- `script=`는 되풀이 덤프와 함께 쓸 수 없다(같은 스크립트를 여러 번 부르지 않는다).
+- 요청 파일은 모듈이 읽은 뒤 스스로 지운다. 덤프에는 모듈 버전과 한도를 적는다. 요청에 모르는 키나 잘못된 값이
+  있으면 `dump failed: bad request`를 적고 아무것도 하지 않는다.
+- 러너에 기대지 않는 부분(요청 읽기, 덤프 일정, 글 처리)은 `src/core/`로 나누고 게임 없이 시험한다.
+
+#### 도구
+
+- `tools/probe.ps1`: 덤프를 이름대로 가져온다(`-Out x.json` → `x.menu.json`, `x.late0.json` …).
+  로그에 `dump failed`가 보이면 기다리지 않고 실패한다. 되풀이 요청이면 새 게임을 시작하라고 알리고,
+  **사용자가 게임을 끌 때까지** 기다린다(게임 안에서 도구가 강제로 끄지 않는다).
+- `tools/saves-backup.ps1`: 세이브 폴더의 사본을 `backups\saves\<시각>\`에 뜬다. `-Diff <사본>`은 사본과 지금의
+  차이를 보여 준다. **세이브 폴더에는 쓰지 않는다.**
+- `tools/test-native.ps1`: `src/core`의 시험을 돌린다. `tools/probes/*.txt`가 오류 없이 읽히는지도 본다.
+- `tools/re/dump_tool.py`: 새 덤프 형식을 읽는다. 옛 형식도 읽는다.
+
+#### 실행
+
+게임을 한 번 켜고, 한 번을 예비로 둔다. **사용자가 할 일이 있다**: 메인 메뉴가 뜨고 약 1분 뒤 화면이 잠깐 멈췄다
+풀리면(메뉴 덤프) 새 게임을 기본 설정으로 시작한다. 게임 화면이 나오면 2분쯤 그대로 둔다(그 사이 화면이 두 번쯤
+멈췄다 풀린다). 그런 다음 평소처럼 게임을 끈다. 게임 화면에 들어간 때와 끈 때를 대강 알려 주면 그것이 기준이 된다.
+
+| 파일 | 바꾸는 값 | 찾는 법 |
+|---|---|---|
+| `debug_params.json` | `budget_money` 2000 → 2345 | 값 2345, 이름 `budget_money` |
+| `gameplay_variables.json` | `initial_budget` 700 → 745 | 값 745. **양성 대조**: `global.__gameplay_vars`에서 찾아져야 한다(단계 0에서 확인한 자리) |
+| `battle_params.json` | `battle_dodge_base` 20 → 23 | 이름 `dodge_base` |
+| `director_params.json` | `group_cooldown_days.EPIDEMY` 7 → 3391 | 값 3391, 이름 `EPIDEMY` |
+| `knowledge\technology\cultural_knowledge\addiction_resist.json` | `population` 110 → 3767 | 값 3767, 이름 `addiction_resist` |
+
+다섯 문자열이 파일마다 정확히 한 번 나오는 것은 2026-10-04에 세어 확인했다.
+값을 바꾸지 않고 이름으로만 찾는 것: `production_cost`, `building_resources`, `building_duration_factor`,
+`product_count`, `fair_trade`, `group_cooldown_days`.
+
+"없다"를 답으로 쓰기 전에 확인할 것:
+
+1. 그 덤프가 게임 안에서 뜬 것이다(사용자가 알려 준 때와 덤프의 시각, 상태 기록이 서로 맞는다).
+2. 값 745가 `global.__gameplay_vars.global_map_ai_economy_initial_budget`에서 찾아졌다.
+3. ds 자가 점검이 모두 참이고, 가장 큰 ds 번호가 본 범위 안에 있다.
+4. 어느 구역도 한도에 걸리거나 건너뛰지 않았다.
+5. 인스턴스 구역에 변수가 적힌 오브젝트가 하나 이상 있다.
+
+예비 실행은 위 다섯 가운데 하나가 어긋났고 요청 파일을 고쳐 바로잡을 수 있을 때만 쓴다.
+
+#### 산출물과 완료 기준
+
+- `research/02-new-game-state.md`: 질문 4~6의 답과 근거, 상태 기록, 감지에 쓸 수 있는 신호, 확인하지 못한 것.
+- 완료 기준: (1) 질문 4~6 각각에 "그렇다 / 아니다 / 확인하지 못함"과 근거가 있다. (2) 위 다섯 확인의 결과가 적혀 있다.
+  (3) 끝난 뒤 게임이 바닐라다(§3.6의 4와 같다). (4) 세이브 폴더에 생긴 파일을 사용자에게 알렸다.
+- 이 단계 뒤에 할 일: 기록에서 나온 신호로 "게임에 들어간 것을 알아보는" 로직을 만들고 한 번 켜서 확인한다.
+  따로 계획을 쓴다.
+
 ## 4. 단계 1 — 오버레이 도구
 
 단계 0의 결과: `research/01-data-overlay.md`. 요약하면 `gameplay_variables.json`은 반영이 확인됐고
@@ -221,3 +357,8 @@ tools/apply-preset.ps1    게임 상태를 검사하고 cli.py 를 부른다
 | 전역 변수 이름을 얻는 빌트인이 YYC에서 기대대로 동작하지 않는다 | 단계 0의 첫 실행에서 드러난다. 안 되면 요청의 스크립트 호출만으로 질문 2를 본다 |
 | 메인 메뉴에서는 값이 아직 로드되지 않는다 (새 게임을 시작해야 한다) | 덤프로 드러난다. 그러면 사용자가 새 게임을 시작한 뒤 덤프하도록 절차를 바꾸고 다시 승인받는다 |
 | 게임 실행 횟수 | 세 번. 더 필요하면 멈추고 묻는다 |
+| (0b) 사용자가 게임에 들어가기 전에 끈다, 또는 덤프가 게임 안에서 한 번도 돌지 않는다 | 덤프마다 시각과 그때의 상태를 적는다. 게임 안의 덤프가 없으면 답을 "확인하지 못함"으로 적고 예비 실행을 쓴다 |
+| (0b) 새로 쓰는 빌트인이 게임을 죽인다 | 덜 위험한 구역부터 쓰고 구역마다 로그를 남긴다. 죽은 구역은 `skip=`으로 빼고 예비 실행을 쓴다 |
+| (0b) 되풀이 덤프가 게임을 자주 멈춘다 | 측정용 실행이라 받아들인다. 걸린 시간을 로그에 적어 다음 설계의 근거로 쓴다 |
+| (0b) 새 게임이 세이브를 만든다 | 실행 전에 세이브 폴더의 사본을 뜬다. 끝나고 생긴 파일을 사용자에게 알린다. 지우는 것은 사용자가 정한다. 게임 로그로 보면 자동 저장은 게임 안의 아침·저녁에 생긴다 |
+| (0b) 게임 안에서 도구가 강제로 꺼서 저장을 끊는다 | 되풀이 요청에서는 사용자가 게임을 끈다. 도구는 기다린다. 제한 시간이 지났을 때만 끈다 |
