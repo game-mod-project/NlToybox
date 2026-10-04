@@ -11,6 +11,7 @@ endif()
 
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
+  src/Dump.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
 )
 

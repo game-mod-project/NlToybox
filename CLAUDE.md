@@ -51,9 +51,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - `check-load.ps1`이 찾는 줄 형식은 `src/ModuleMain.cpp`가 쓴다. 한쪽을 바꾸면 다른 쪽도 바꾼다.
 - 게임을 켜는 확인은 한 번에 몰아서 하고 끝나면 바로 끈다. 켜기 전에 사용자에게
   게임 창을 누르지 말라고 알린다. 켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
-- `check-load.ps1`은 판정을 내기 전에 게임을 강제 종료한다(`Stop-Process`). 그러면 `aurie.log`는
-  비어 있다. 실패를 조사할 때는 `-KeepRunning`으로 돌리고, 게임 창(클래스 `YYGameMakerYY`)에
-  `WM_CLOSE`를 보내 정상 종료시킨 뒤 `aurie.log`를 읽는다.
+- `check-load.ps1`과 `probe.ps1`은 게임 창에 `WM_CLOSE`를 보내 정상 종료시키고(그래야 `aurie.log`가
+  채워진다), 15초 안에 끝나지 않을 때만 강제 종료한다(`Stop-NlGame`).
 
 ## 모듈을 쓸 때
 
@@ -61,6 +60,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
   (YYToolkit v5.0.0c가 Present 훅을 걸지 않는다. `research/00-game-structure.md` 참고).
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
+- **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
+  인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.
+- `gameplay_variables.json`의 값은 런타임에서 `global.__gameplay_vars.<키 경로를 _ 로 이은 이름>`에 앉는다
+  (`research/01-data-overlay.md`).
 
 ## 게임에 가하는 변경
 
@@ -68,6 +71,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `mods\Native\AurieCore.dll`, `mods\Aurie\YYToolkit.dll`.
 - `tools/restore-game.ps1`: 같은 버전의 백업으로 exe를 덮어쓰고, `mods\`에서 이 레포가 놓은
   파일과 게임 폴더 최상위의 `aurie.log`를 지운다. 백업의 내용이 이름의 해시와 다르면 거부한다.
+- 데이터 파일은 `tools/data-snapshot.ps1`으로 바닐라 사본을 뜬 뒤에만 고친다. 되돌릴 때는
+  `tools/data-restore.ps1`. 스냅샷은 `backups\data\<게임 버전>\`에 있다(추적 안 함).
+- `tools/probe.ps1`은 요청 파일(`tools/probes/*.txt`)을 놓고 게임을 켜서 런타임 덤프를 받아 온다.
+  덤프는 `refs\runtime\`에 둔다(추적 안 함). 분석은 `py -3.14 tools/re/dump_tool.py`.
 - 게임 갱신이나 Steam 무결성 검사 뒤에는 `tools/game-status.ps1`로 패치가 남았는지 보고
   `tools/setup-aurie.ps1`을 다시 돌린다. 그 뒤 `tools/check-load.ps1`로 다시 확인한다.
 

@@ -96,12 +96,91 @@ try {
         Assert-True ($r.Out -match 'LAUNCH-ATTEMPTED') "사전 검사를 지나 켜는 단계에 닿아야 한다`n$($r.Out)"
     }
 
+    $x = Join-Path $fake 'x.json'
+
+    Test-Case 'data-snapshot 은 바닐라를 보관하고, 달라진 파일에는 거부한다' {
+        [IO.File]::WriteAllText($x, 'AAA=1')
+        $r = Invoke-Tool 'data-snapshot.ps1' '-Files x.json'
+        Assert-Equal $r.Exit 0 "snapshot 종료 코드`n$($r.Out)"
+        [IO.File]::WriteAllText($x, 'AAA=2')                     # 스냅샷을 뜬 뒤 고친 파일
+        $r = Invoke-Tool 'data-snapshot.ps1' '-Files x.json'
+        Assert-Equal $r.Exit 1 "고친 파일을 바닐라로 보관하면 안 된다`n$($r.Out)"
+    }
+
+    Test-Case 'data-edit 은 찾는 글이 정확히 한 번일 때만 바꾼다' {
+        [IO.File]::WriteAllText($x, 'AAA=1 BBB=1 BBB=1')
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find BBB=1 -Replace BBB=9'
+        Assert-Equal $r.Exit 1 "두 번 나오는 글은 거부해야 한다`n$($r.Out)"
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find CCC=1 -Replace CCC=9'
+        Assert-Equal $r.Exit 1 "없는 글은 거부해야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=1 BBB=1 BBB=1' '거부했으면 파일은 그대로여야 한다'
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find AAA=1 -Replace AAA=7'
+        Assert-Equal $r.Exit 0 "edit 종료 코드`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=7 BBB=1 BBB=1' '한 번 나오는 글만 바뀌어야 한다'
+    }
+
+    Test-Case 'data-edit 은 BOM 을 보존하고, UTF-8 이 아닌 파일은 건드리지 않는다' {
+        $hex = { param($b) [BitConverter]::ToString([byte[]]$b) }
+        [byte[]]$bom = [byte[]](0xEF, 0xBB, 0xBF) + [Text.Encoding]::ASCII.GetBytes('AAA=1')
+        [IO.File]::WriteAllBytes($x, $bom)
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find AAA=1 -Replace AAA=7'
+        Assert-Equal $r.Exit 0 "BOM 이 있는 파일의 edit 종료 코드`n$($r.Out)"
+        Assert-Equal (& $hex ([IO.File]::ReadAllBytes($x))) (& $hex ([byte[]](0xEF, 0xBB, 0xBF) + [Text.Encoding]::ASCII.GetBytes('AAA=7'))) 'BOM 이 남고 값만 바뀌어야 한다'
+
+        [byte[]]$bad = [Text.Encoding]::ASCII.GetBytes('AAA=1 ') + [byte[]](0xFF)
+        [IO.File]::WriteAllBytes($x, $bad)
+        $r = Invoke-Tool 'data-edit.ps1' '-File x.json -Find AAA=1 -Replace AAA=7'
+        Assert-Equal $r.Exit 1 "UTF-8 이 아닌 파일은 거부해야 한다`n$($r.Out)"
+        Assert-Equal (& $hex ([IO.File]::ReadAllBytes($x))) (& $hex $bad) '거부했으면 바이트가 그대로여야 한다'
+    }
+
+    Test-Case 'data-restore 는 스냅샷으로 되돌린다' {
+        $r = Invoke-Tool 'data-restore.ps1'
+        Assert-Equal $r.Exit 0 "restore 종료 코드`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($x)) 'AAA=1' '스냅샷의 내용으로 돌아와야 한다'
+    }
+
+    Test-Case 'data-restore 는 지금 버전의 스냅샷이 없고 다른 버전 것만 있으면 거부한다' {
+        $dataDir = Join-Path $backupDir 'data'
+        Rename-Item -LiteralPath (Join-Path $dataDir $orig.Version) -NewName '0.0.0.1-test'     # 게임이 갱신돼 버전이 바뀐 상황
+        try {
+            $r = Invoke-Tool 'data-restore.ps1'
+            Assert-True ($r.Exit -eq 1 -and $r.Out -match '다른 버전') "아무것도 안 하고 성공이라고 하면 안 된다`n$($r.Out)"
+        }
+        finally { Rename-Item -LiteralPath (Join-Path $dataDir '0.0.0.1-test') -NewName $orig.Version }
+    }
+
+    Test-Case '게임 폴더 밖을 가리키는 경로는 경로 검사에서 거부한다' {
+        $bait = Join-Path (Split-Path -Parent $fake) 'nl-bait.json'      # 가짜 게임 폴더의 바로 밖에 실제로 있는 파일
+        [IO.File]::WriteAllText($bait, 'AAA=1')
+        try {
+            foreach ($rel in '..\nl-bait.json', '../nl-bait.json', 'sub\..\..\nl-bait.json', $bait) {
+                $r = Invoke-Tool 'data-snapshot.ps1' "-Files '$rel'"
+                Assert-True ($r.Exit -eq 1 -and $r.Out -match '상대경로여야') "snapshot 은 경로 검사에서 거부해야 한다: $rel`n$($r.Out)"
+                $r = Invoke-Tool 'data-edit.ps1' "-File '$rel' -Find AAA=1 -Replace AAA=9"
+                Assert-True ($r.Exit -eq 1 -and $r.Out -match '상대경로여야') "edit 은 경로 검사에서 거부해야 한다: $rel`n$($r.Out)"
+            }
+            Assert-Equal ([IO.File]::ReadAllText($bait)) 'AAA=1' '밖의 파일은 그대로여야 한다'
+        }
+        finally { Remove-Item -LiteralPath $bait -Force }
+    }
+
+    Test-Case 'probe 는 켜는 데 실패해도 요청 파일을 게임 폴더에 남기지 않는다' {
+        $req = Join-Path $fake 'req.txt'
+        [IO.File]::WriteAllText($req, "delay_seconds=1`n")
+        $r = Invoke-Tool 'probe.ps1' "-Request '$req' -Out '$(Join-Path $fake 'out.json')' -TimeoutSec 4" $noLaunch
+        Assert-True ($r.Out -match 'LAUNCH-ATTEMPTED') "사전 검사를 지나 켜는 단계에 닿아야 한다`n$($r.Out)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fake 'mods\Aurie\NlToyBox.probe.txt'))) '요청 파일이 남으면 안 된다'
+    }
+
     Write-Host "safety tests: $($script:passed) passed"
 }
 finally {
     $env:NORLAND_GAME_DIR = $savedEnv
     if (Test-Path -LiteralPath $fake) { Remove-Item -LiteralPath $fake -Recurse -Force }
     if (Test-Path -LiteralPath $pristine) { Remove-Item -LiteralPath $pristine -Force }
+    $fakeData = Join-Path $backupDir "data\$($orig.Version)"   # 가짜 게임의 버전이다. 진짜 게임의 스냅샷은 버전이 달라 걸리지 않는다.
+    if (Test-Path -LiteralPath $fakeData) { Remove-Item -LiteralPath $fakeData -Recurse -Force }
     # 가짜 게임의 백업만 지운다. 진짜 게임의 백업은 버전이 달라 이 필터에 걸리지 않는다.
     Get-ChildItem -LiteralPath $backupDir -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "Norland.exe.$($orig.Version).*" -or $_.Name -like '*.partial' } |
