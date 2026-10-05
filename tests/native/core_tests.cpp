@@ -7,6 +7,7 @@
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
+#include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
 #include "core/Schedule.hpp"
 #include "core/SpeedControl.hpp"
@@ -859,6 +860,51 @@ int main(int argc, char** argv)
 		RunWorld(world, control, now, 14);
 		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && Untouched(world) && !control.Note().empty());
 	});
+
+	Test("원격 명령: 줄을 읽는다", [] {
+		CHECK(ParseRemoteLine("").Verb.empty() && ParseRemoteLine("# 주석").Verb.empty() && ParseRemoteLine("# 주석").Error.empty());
+		const RemoteCommand ask = ParseRemoteLine("  ask inst:o_debug.is_x ");
+		CHECK(ask.Error.empty() && ask.Verb == "ask" && ask.Target == "inst:o_debug.is_x");
+		const RemoteCommand list = ParseRemoteLine("list inst:o_production_manager.ppm_map_of_process as=map max=50");
+		CHECK(list.Error.empty() && list.Options.at("as") == "map" && OptionNumber(list, "max", 400) == 50 && OptionNumber(list, "depth", 2) == 2);
+		const RemoteCommand tree = ParseRemoteLine("tree map:128@{messenger_cost } depth=3");
+		CHECK(tree.Error.empty() && tree.Target == "map:128@{messenger_cost }" && OptionNumber(tree, "depth", 2) == 3);
+		const RemoteCommand find = ParseRemoteLine("find name=gold value=3000 in=global,inst");
+		CHECK(find.Error.empty() && find.Options.at("name") == "gold" && OptionNumber(find, "value", 0) == 3000 && find.Options.at("in") == "global,inst");
+		const RemoteCommand refine = ParseRemoteLine("refine value=2950");
+		CHECK(refine.Error.empty() && refine.Number == 2950);
+		const RemoteCommand write = ParseRemoteLine("write map:1@{a=b}=-4.5");
+		CHECK(write.Error.empty() && write.Target == "map:1@{a=b}" && write.Number == -4.5);
+		CHECK(ParseRemoteLine("poke inst:o_debug.x=1").Verb == "poke" && ParseRemoteLine("state").Error.empty());
+		CHECK(ParseRemoteLine("record gml_Script_budget_money_get").Target == "gml_Script_budget_money_get");
+		CHECK(ParseRemoteLine("records").Error.empty() && ParseRemoteLine("unrecord all").Target == "all");
+		CHECK(ParseRemoteLine("shot hud-1").Target == "hud-1" && ParseRemoteLine("window close").Target == "close");
+	});
+
+	Test("원격 명령: 부르는 인자를 읽는다", [] {
+		const RemoteCommand call = ParseRemoteLine("call gml_Script_x n:-3.5 s:wood s:{two words} b:1 u p:inst:o_building:1");
+		CHECK(call.Error.empty() && call.Target == "gml_Script_x" && call.Args.size() == 6);
+		CHECK(call.Args[0].Kind == 'n' && call.Args[0].Number == -3.5 && call.Args[1].Kind == 's' && call.Args[1].Text == "wood");
+		CHECK(call.Args[2].Text == "two words" && call.Args[3].Kind == 'b' && call.Args[3].Number == 1 && call.Args[4].Kind == 'u');
+		CHECK(call.Args[5].Kind == 'p' && call.Args[5].Text == "inst:o_building:1");
+		const RemoteCommand method = ParseRemoteLine("method inst:o_building.get_level");
+		CHECK(method.Error.empty() && method.Target == "inst:o_building.get_level" && method.Args.empty());
+	});
+
+	Test("원격 명령: 읽을 수 없으면 오류를 낸다", [] {
+		for (const char* line : { "dance", "ask", "ask o_debug.x", "ask global.a global.b", "list", "list global.a max", "find", "find value=abc",
+			"refine", "refine value=x", "write inst:o_debug.x", "write inst:o_debug=3", "write inst:o_debug.x=abc", "poke global=1",
+			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
+			"call x p:nowhere.x", "method global", "method o_x.y", "state now" })
+		{
+			if (ParseRemoteLine(line).Error.empty())
+			{
+				std::printf("  FAIL accepted: %s\n", line);
+				g_Failed++;
+			}
+		}
+	});
+
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {
