@@ -805,17 +805,36 @@ int main(int argc, char** argv)
 			CHECK(&GetArea(area.Id) == &area);
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
-		CHECK(Areas().size() == 17);
+		CHECK(Areas().size() == 16);
 		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
 		for (const AreaInfo& area : Areas())
 		{
-			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time || area.Id == Area::Tweaks;
+			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time;
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
+		CHECK(FindArea("tweaks") == nullptr);		// "배율" 영역은 없어졌다. 배율 7개는 제 영역의 패널에 그린다(아래)
 		CHECK_STR(GetArea(Area::Time).Key, "time");
 		for (const Cheat& cheat : Cheats())
 			CHECK(FindArea(GetArea(cheat.Where).Key) != nullptr);
+	});
+
+	Test("치트 표: 배율 7개는 제 영역에 놓인다", [] {
+		// 이름은 NlToyBox.settings.txt 의 것 그대로다(사용자의 설정 파일이 그대로 읽힌다).
+		const std::map<std::string, Area> want = {
+			{ "building_cost", Area::Build }, { "start_resources", Area::Economy }, { "book_exp", Area::Knowledge }, { "bribe_cost", Area::Diplomacy },
+			{ "free_lord_stay", Area::Lord }, { "church_capacity", Area::Religion }, { "tavern_capacity", Area::People },
+		};
+		CHECK(KnobPlaces().size() == want.size());
+		for (const KnobPlace& place : KnobPlaces())
+		{
+			const auto it = want.find(place.Id);
+			CHECK(it != want.end());
+			if (it != want.end())
+				CHECK(it->second == place.Where && KnobArea(place.Id) == place.Where);
+		}
+		CHECK(HasKnobs(Area::Build) && HasKnobs(Area::Knowledge) && HasKnobs(Area::Lord) && !HasKnobs(Area::Explorer) && !HasKnobs(Area::Time) && !HasKnobs(Area::Army));
+		CHECK(KnobArea("no_such_knob") == Area::Explorer);		// 모르는 이름: 어느 영역의 패널에도 그리지 않는다(탐색기에는 배율이 없다)
 	});
 
 	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {

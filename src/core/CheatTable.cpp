@@ -23,7 +23,6 @@ namespace NlCore
 			{ Area::Events, "events", "이벤트", 6 },
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7 },
-			{ Area::Tweaks, "tweaks", "배율", 2, true },
 		};
 		return areas;
 	}
@@ -39,6 +38,36 @@ namespace NlCore
 			if (Key == area.Key)
 				return &area;
 		return nullptr;
+	}
+
+	const std::vector<KnobPlace>& KnobPlaces()
+	{
+		static const std::vector<KnobPlace> places = {
+			{ "building_cost", Area::Build },
+			{ "start_resources", Area::Economy },
+			{ "book_exp", Area::Knowledge },
+			{ "bribe_cost", Area::Diplomacy },
+			{ "free_lord_stay", Area::Lord },
+			{ "church_capacity", Area::Religion },
+			{ "tavern_capacity", Area::People },
+		};
+		return places;
+	}
+
+	Area KnobArea(const std::string& Id)
+	{
+		for (const KnobPlace& place : KnobPlaces())
+			if (Id == place.Id)
+				return place.Where;
+		return Area::Explorer;
+	}
+
+	bool HasKnobs(Area Where)
+	{
+		for (const KnobPlace& place : KnobPlaces())
+			if (place.Where == Where)
+				return true;
+		return false;
 	}
 
 	const std::vector<Cheat>& Cheats()

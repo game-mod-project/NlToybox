@@ -12,7 +12,7 @@ namespace NlCore
 	enum class Area
 	{
 		Explorer, Economy, Build, Person, Lord, People, Knowledge, Items, Army,
-		Diplomacy, Religion, Time, World, Events, Util, Presets, Tweaks,
+		Diplomacy, Religion, Time, World, Events, Util, Presets,
 	};
 
 	struct AreaInfo
@@ -21,7 +21,7 @@ namespace NlCore
 		const char* Key;		// 시험 설정의 page= 에 쓰는 이름
 		const char* Label;		// 왼쪽 목록에 보이는 이름
 		int Stage;				// 스펙 §10 의 몇 단계에서 채우는가
-		bool Panel = false;		// 표의 항목과 따로 제 패널이 있는가(탐색기, 경제, 시간, 배율). 있으면 표가 비어도 목록에서 켜져 있다
+		bool Panel = false;		// 표의 항목과 따로 제 패널이 있는가(탐색기, 경제, 시간). 있으면 표가 비어도 목록에서 켜져 있다
 	};
 
 	// 왼쪽 목록의 차례대로. 차례는 Area 의 열거 차례와 같다.
@@ -29,6 +29,18 @@ namespace NlCore
 	const AreaInfo& GetArea(Area Id);
 	// Key 로 찾는다. 없으면 nullptr.
 	const AreaInfo* FindArea(const std::string& Key);
+
+	// 배율(src/Tweaks.cpp 의 7개. 데이터 파일을 읽은 자리에 배율을 써 넣는다)이 놓이는 영역. Id 는 NlToyBox.settings.txt 의 이름이다.
+	struct KnobPlace
+	{
+		const char* Id;
+		Area Where;
+	};
+	const std::vector<KnobPlace>& KnobPlaces();
+	// 그 배율이 놓이는 영역. 모르는 이름이면 Area::Explorer(그 패널에는 배율을 그리지 않는다).
+	Area KnobArea(const std::string& Id);
+	// 그 영역에 놓이는 배율이 있는가.
+	bool HasKnobs(Area Where);
 
 	// Toggle: 주소에 On/Off 를 써 넣는다. Number: 주소에 고른 수를 써 넣는다.
 	// Hook: Path(메서드의 주소나 스크립트의 이름)의 함수가 돌려주는 값을 불리언 On 으로 바꾼다(NlRecorder::Override). 끄면 원래대로 지나간다.

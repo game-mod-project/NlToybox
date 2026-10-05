@@ -364,13 +364,17 @@ void NlTweaks::GameTick()
 	}
 }
 
-void NlTweaks::Draw()
+void NlTweaks::DrawArea(NlCore::Area Where)
 {
-	ImGui::TextWrapped("배율을 바꾸면 바로 게임의 값에 써 넣습니다. 1.00 이 원래 값입니다.");
+	if (!NlCore::HasKnobs(Where))
+		return;
 	ImGui::Spacing();
+	ImGui::SeparatorText("배율 (1.00 이 원래 값. 바꾸면 바로 게임의 값에 써 넣습니다)");
 
 	for (Knob& knob : g_Knobs)
 	{
+		if (NlCore::KnobArea(knob.Id) != Where)
+			continue;
 		ImGui::PushID(knob.Id);
 		float factor = static_cast<float>(knob.Factor);
 		ImGui::SetNextItemWidth(210);
@@ -405,15 +409,5 @@ void NlTweaks::Draw()
 		ImGui::PopID();
 	}
 
-	ImGui::Spacing();
-	ImGui::Separator();
-	if (ImGui::Button("모두 원래대로"))
-	{
-		for (Knob& knob : g_Knobs)
-			knob.Factor = 1;
-		Changed();
-	}
-	ImGui::SameLine();
-	ImGui::TextDisabled(g_TestMode ? "시험 중: 저장하지 않음" : "설정은 자동으로 저장됩니다");
-	ImGui::TextDisabled("슬라이더를 Ctrl+클릭하면 수를 직접 넣을 수 있습니다. F8: 창 닫기");
+	ImGui::TextDisabled(g_TestMode ? "시험 중: 저장하지 않음" : "슬라이더를 Ctrl+클릭하면 수를 직접 넣을 수 있습니다. 써 넣은 값을 게임이 따르는지는 항목마다 다릅니다");
 }
