@@ -38,6 +38,7 @@ endif()
 
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
+  src/Access.cpp
   src/Dump.cpp
   src/Finder.cpp
   src/Game.cpp
