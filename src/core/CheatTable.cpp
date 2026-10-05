@@ -66,7 +66,8 @@ namespace NlCore
 			// 건설비와 업그레이드비(research/09). 건물 종류마다 등급별 비용(금화, 자원 39칸)이 있다. 모듈(src/Build.cpp)이 모두 0 으로 쓰고 끌 때 되돌린다.
 			// 업그레이드 단추가 "자원이 부족"으로 꺼지는 것도 이 비용이다(주택 2등급: 나무 10, 목재 5). 효과는 아직 플레이에서 보지 못했다.
 			{ "build_free", Area::Build, "건설·업그레이드 비용 없음", "inst:o_game_map_controller.__construction_manager",
-				C, 1, 0, 0, 0, false, "모든 건물 종류의 등급별 건설비를 0 으로 쓴다. 끄면 원래 값으로 되돌린다" },
+				C, 1, 0, 0, 0, false, "모든 건물 종류의 등급별 건설비를 0 으로 쓴다. 끄면 원래 값으로 되돌린다.\n"
+					"켠 채로 저장하지 말 것: 0 이 세이브에 남을 수 있다(남는지는 재지 않았다). 저장하기 전에 끈다" },
 
 			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
 			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
@@ -153,7 +154,11 @@ namespace NlCore
 	{
 		std::erase_if(State.On, [](const std::string& id) {
 			const Cheat* cheat = FindCheat(id);
-			return !cheat || cheat->Kind == CheatKind::Number;		// 수 항목은 Numbers 에 든다. 그 밖(Toggle, Hook, Custom)은 켠 것의 목록에 든다
+			if (!cheat || cheat->Kind == CheatKind::Number)		// 수 항목은 Numbers 에 든다. 그 밖(Toggle, Hook, Custom)은 켠 것의 목록에 든다
+				return true;
+			// 함수의 답을 바꾸거나 모듈이 게임의 값을 고쳐 쓰는 항목은 효과를 확인한 것만 켠 채로 시작한다. 확인 전의 것은 그 실행에서 사용자가 켠다:
+			// 창을 열지도 않았는데 게임의 판정이 바뀌거나 값이 고쳐 쓰여 세이브에 굳는 일이 없게.
+			return (cheat->Kind == CheatKind::Hook || cheat->Kind == CheatKind::Custom) && !cheat->Verified;
 		});
 		for (auto it = State.Numbers.begin(); it != State.Numbers.end();)
 		{

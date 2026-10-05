@@ -4,7 +4,10 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/CostBook.hpp"
+#include "core/Retry.hpp"
 #include "core/Text.hpp"
+
+#include <algorithm>
 
 using namespace YYTK;
 using NlAccess::Holder;
@@ -21,9 +24,13 @@ namespace
 	// 건물 종류.__construction_cost.levels[등급] = undefined 또는 { money, resources.__array_of_resource_quantity[39] }
 
 	NlBuild::LogFn g_Log;
-	NlCore::CostBook g_Book;		// 0 으로 쓰기 전에 본 값. 게임 스레드만 만진다
-	bool g_Applied = false;
+	NlCore::CostBook g_Book;		// 0 으로 쓰기 전에 본 값. 게임 스레드만 만진다. 비어 있지 않으면 되돌릴 것이 남아 있다
+	bool g_Applied = false;			// 마지막으로 0 으로 쓴 것이 모두 남았다
+	bool g_Wanted = false;			// 앞 틱에 켜져 있었는가
+	bool g_CheckLogged = false;
 	double g_Next = 0;
+	NlCore::Retry g_Retry(2, 60);	// 실패했거나 게임이 값을 되돌렸을 때 다시 해 볼 때. 잇달아 그러면 간격이 늘어난다
+	std::string g_Note;				// 마지막으로 한 일(창에 보인다)
 
 	void Log(const std::string& Line)
 	{
@@ -31,17 +38,22 @@ namespace
 			g_Log(Line);
 	}
 
-	// 건물 종류의 등급별 비용 구조체들을 차례로 넘긴다. 돌려주는 값: 건물 종류의 수. 못 얻으면 -1 이고 Why 에 까닭.
-	int ForEachCost(const std::function<void(const std::string& Building, int Level, const RValue& Cost)>& Visit, std::string& Why)
+	struct Walk
+	{
+		int Buildings = 0;		// 비용을 본 건물 종류의 수
+		int Skipped = 0;		// 구조체를 얻지 못했거나 비용의 자리가 없는 건물 종류의 수
+	};
+
+	// 건물 종류의 등급별 비용 구조체들을 차례로 넘긴다. 건물 종류의 목록을 얻지 못하면 거짓이고 Why 에 까닭.
+	bool ForEachCost(const std::function<void(const std::string& Building, int Level, const RValue& Cost)>& Visit, Walk& Seen, std::string& Why)
 	{
 		RValue names;		// 이 함수 안에서만 든다
 		if (!NlGame::CallScript(k_AllNames, {}, names) || !names.IsArray())
 		{
 			Why = "the list of buildings is not available";
-			return -1;
+			return false;
 		}
 
-		int buildings = 0;
 		NlAccess::ForEachChild(names, Holder::Array, [&](const PathStep&, const RValue& name) {
 			if (!name.IsString())
 				return true;
@@ -49,8 +61,11 @@ namespace
 			std::string why;
 			if (!NlGame::CallScript(k_Generic, { name }, generic) || !generic.IsStruct()
 				|| !NlAccess::Follow(generic, { { '.', "__construction_cost", 0 }, { '.', "levels", 0 } }, levels, why) || !levels.IsArray())
+			{
+				Seen.Skipped++;
 				return true;
-			buildings++;
+			}
+			Seen.Buildings++;
 			const std::string building = name.ToString();
 			NlAccess::ForEachChild(levels, Holder::Array, [&](const PathStep& step, const RValue& cost) {
 				if (cost.IsStruct())
@@ -59,7 +74,7 @@ namespace
 			});
 			return true;
 		});
-		return buildings;
+		return true;
 	}
 
 	// 등급 하나의 비용에서 칸들의 배열(자원)을 얻는다.
@@ -69,64 +84,102 @@ namespace
 		return NlAccess::Follow(Cost, { { '.', "resources", 0 }, { '.', "__array_of_resource_quantity", 0 } }, Out, why) && Out.IsArray();
 	}
 
-	// 모든 건물 종류의 비용을 0 으로 쓴다. 처음 본 값은 장부에 적는다. 돌려주는 글: 한 일.
-	std::string ZeroAll()
+	std::string Place(const std::string& Building, int Level, int Slot)
 	{
-		size_t written = 0;
-		std::string why;
-		const int buildings = ForEachCost([&](const std::string& building, int level, const RValue& cost) {
-			RValue money, quantities, ignored;
-			std::string ignored_why;
-			if (NlAccess::Follow(cost, { { '.', "money", 0 } }, money, ignored_why) && NlGame::IsNumber(money) && money.ToDouble() != 0)
-			{
-				g_Book.Remember(building, level, -1, money.ToDouble());
-				NlGame::Call("variable_struct_set", { cost, RValue(std::string_view("money")), RValue(0.0) }, ignored);
+		return Building + " level " + std::to_string(Level) + (Slot < 0 ? " money" : " resource " + std::to_string(Slot));
+	}
+
+	struct Outcome
+	{
+		bool Ok = false;
+		std::string Note;		// 창에 보일 글
+	};
+
+	// 모든 건물 종류의 비용을 0 으로 쓴다. 되돌릴 값을 장부에 적은 자리에만 쓰고, 쓴 뒤 다시 읽어 남았는지 본다.
+	Outcome ZeroAll()
+	{
+		size_t written = 0, failed = 0;
+		std::string first_failure, why;
+		Walk seen;
+		const auto zero = [&](const RValue& in, const PathStep& step, const std::string& building, int level, int slot, const RValue& value) {
+			// 0 인 자리는 쓸 것이 없다. 유한하지 않은 값은 장부가 받지 않는다: 되돌릴 수 없는 자리에는 쓰지 않는다.
+			if (!NlGame::IsNumber(value) || value.ToDouble() == 0 || !g_Book.Remember(building, level, slot, value.ToDouble()))
+				return;
+			std::string write_why;
+			if (NlAccess::SetNumber(in, step, 0, write_why))
 				written++;
-			}
+			else if (!failed++)
+				first_failure = Place(building, level, slot) + ": " + write_why;
+		};
+		const bool walked = ForEachCost([&](const std::string& building, int level, const RValue& cost) {
+			const PathStep money_step{ '.', "money", 0 };
+			RValue money, quantities;
+			std::string ignored;
+			if (NlAccess::Follow(cost, { money_step }, money, ignored))
+				zero(cost, money_step, building, level, -1, money);
 			if (!Quantities(cost, quantities))
 				return;
 			NlAccess::ForEachChild(quantities, Holder::Array, [&](const PathStep& step, const RValue& value) {
-				if (NlGame::IsNumber(value) && value.ToDouble() != 0)
-				{
-					g_Book.Remember(building, level, static_cast<int>(step.Index), value.ToDouble());
-					NlGame::Call("array_set", { quantities, RValue(step.Index), RValue(0.0) }, ignored);
-					written++;
-				}
+				zero(quantities, step, building, level, static_cast<int>(step.Index), value);
 				return true;
 			});
-		}, why);
-		if (buildings < 0)
-			return "하지 못했습니다: " + why;
-		Log("build: zeroed " + std::to_string(written) + " cost value(s) in " + std::to_string(buildings) + " building type(s), book "
-			+ std::to_string(g_Book.Size()));
-		return "건물 종류 " + std::to_string(buildings) + "개의 비용을 0 으로 썼습니다 (" + std::to_string(g_Book.Size()) + "칸)";
+		}, seen, why);
+		if (!walked)
+		{
+			Log("build: not zeroed: " + why);
+			return { false, "하지 못했습니다: " + why };
+		}
+
+		Log("build: zeroed " + std::to_string(written) + " cost value(s) in " + std::to_string(seen.Buildings) + " building type(s), book "
+			+ std::to_string(g_Book.Size()) + (seen.Skipped ? ", skipped " + std::to_string(seen.Skipped) + " type(s)" : "")
+			+ (failed ? ", " + std::to_string(failed) + " did not stick (first: " + first_failure + ")" : ""));
+		if (failed)
+			return { false, std::to_string(failed) + "칸이 써지지 않았습니다 (" + first_failure + ")" };
+		if (g_Book.Empty())
+			return { true, "비용이 이미 모두 0 입니다 (되돌릴 값이 없습니다)" };
+		return { true, "건물 종류 " + std::to_string(seen.Buildings) + "개의 비용을 0 으로 썼습니다 (" + std::to_string(g_Book.Size()) + "칸)" };
 	}
 
-	// 장부의 값으로 되돌린다.
-	std::string RestoreAll()
+	// 장부의 값으로 되돌린다. 쓴 뒤 다시 읽어 남은 자리만 장부에서 지운다. 못 되돌린 자리는 장부에 남아 다음에 다시 되돌린다.
+	Outcome RestoreAll()
 	{
-		size_t restored = 0;
+		const std::vector<NlCore::CostEntry>& entries = g_Book.Entries();
+		std::vector<char> done(entries.size(), 0);
 		std::string why;
-		const int buildings = ForEachCost([&](const std::string& building, int level, const RValue& cost) {
-			RValue quantities, ignored;
+		Walk seen;
+		const bool walked = ForEachCost([&](const std::string& building, int level, const RValue& cost) {
+			RValue quantities;
 			const bool have = Quantities(cost, quantities);
-			for (const NlCore::CostEntry& entry : g_Book.Entries())
+			for (size_t i = 0; i < entries.size(); i++)
 			{
-				if (entry.Level != level || entry.Building != building)
+				const NlCore::CostEntry& entry = entries[i];
+				if (done[i] || entry.Level != level || entry.Building != building)
 					continue;
+				std::string write_why;
 				if (entry.Slot < 0)
-					NlGame::Call("variable_struct_set", { cost, RValue(std::string_view("money")), RValue(entry.Value) }, ignored);
-				else if (have && entry.Slot < NlGame::ArrayLength(quantities))
-					NlGame::Call("array_set", { quantities, RValue(static_cast<double>(entry.Slot)), RValue(entry.Value) }, ignored);
-				else
-					continue;
-				restored++;
+					done[i] = NlAccess::SetNumber(cost, { '.', "money", 0 }, entry.Value, write_why);
+				else if (have)
+					done[i] = NlAccess::SetNumber(quantities, { '[', "", static_cast<double>(entry.Slot) }, entry.Value, write_why);
 			}
-		}, why);
-		if (buildings < 0)
-			return "되돌리지 못했습니다: " + why;
-		Log("build: restored " + std::to_string(restored) + "/" + std::to_string(g_Book.Size()) + " cost value(s)");
-		return "";
+		}, seen, why);
+		if (!walked)
+		{
+			Log("build: not restored: " + why);
+			return { false, "되돌리지 못했습니다: " + why + " (다시 해 봅니다)" };
+		}
+
+		const size_t all = entries.size();
+		const size_t restored = static_cast<size_t>(std::count(done.begin(), done.end(), static_cast<char>(1)));
+		std::string left;
+		for (size_t i = 0; i < all && left.empty(); i++)
+			if (!done[i])
+				left = Place(entries[i].Building, entries[i].Level, entries[i].Slot) + " = " + NlCore::Shortest(entries[i].Value);
+		g_Book.Forget(done);
+		Log("build: restored " + std::to_string(restored) + "/" + std::to_string(all) + " cost value(s)"
+			+ (left.empty() ? "" : ", first left: " + left));
+		if (g_Book.Empty())
+			return { true, "" };
+		return { false, std::to_string(g_Book.Size()) + "칸을 되돌리지 못했습니다 (다시 해 봅니다)" };
 	}
 
 	// 0 으로 쓴 값이 그대로인가. 게임이 건물 종류를 다시 만들면(다른 게임을 불러올 때 그런지는 모른다) 장부의 첫 자리에 값이 돌아와 있다.
@@ -135,6 +188,11 @@ namespace
 		if (g_Book.Empty())
 			return true;
 		const NlCore::CostEntry& entry = g_Book.Entries().front();
+		if (!g_CheckLogged)
+		{
+			g_CheckLogged = true;
+			Log("build: checking every second that " + Place(entry.Building, entry.Level, entry.Slot) + " is still zero (calls get_generic_building)");		// 부르기 전에 남긴다
+		}
 		RValue generic, value;
 		std::string why;
 		if (!NlGame::CallScript(k_Generic, { RValue(std::string_view(entry.Building)) }, generic) || !generic.IsStruct())
@@ -164,33 +222,56 @@ void NlBuild::GameTick(double Now)
 	g_Next = Now + 1.0;
 
 	const bool want = NlCheats::IsOn(k_Cheat);
-	if (!want && !g_Applied)
+	if (want != g_Wanted)
+	{
+		g_Wanted = want;
+		g_Retry.Succeeded();		// 사용자가 바꿨다. 기다리지 않고 바로 한다
+	}
+	if (!want && g_Book.Empty())
+	{
+		g_Applied = false;			// 되돌릴 것이 없다
 		return;
+	}
 	if (!NlAccess::InGame())
 	{
 		if (want)
 			NlCheats::SetNote(k_Cheat, "게임을 시작하면 적용");
 		return;
 	}
+	if (!g_Retry.Due(Now))
+	{
+		NlCheats::SetNote(k_Cheat, g_Note);
+		return;
+	}
 
 	if (want)
 	{
-		if (g_Applied && StillZero())
+		const bool again = g_Applied;
+		if (again && StillZero())
+		{
+			g_Retry.Succeeded();
+			NlCheats::SetNote(k_Cheat, g_Note);		// 메뉴에 다녀오면 글이 "게임을 시작하면 적용"에 머물러 있다
 			return;
-		Log(std::string("build: zeroing construction costs") + (g_Applied ? " again (the game rebuilt the building types)" : ""));		// 부르기 전에 남긴다
-		const std::string note = ZeroAll();
-		g_Applied = true;
-		NlCheats::SetNote(k_Cheat, note);
+		}
+		Log(std::string("build: zeroing construction costs") + (again ? " again (they are no longer zero)" : ""));		// 부르기 전에 남긴다
+		const Outcome done = ZeroAll();
+		g_Applied = done.Ok;
+		g_Note = done.Note;
+		if (!done.Ok || again)
+			g_Retry.Failed(Now);		// 실패했거나 게임이 값을 되돌렸다. 잇달아 그러면 1초마다 171종을 다시 쓰지 않게 간격을 늘린다
+		else
+			g_Retry.Succeeded();
 	}
 	else
 	{
-		Log("build: restoring construction costs");
-		const std::string note = RestoreAll();
-		if (note.empty())
-		{
-			g_Applied = false;
-			g_Book.Clear();
-		}
-		NlCheats::SetNote(k_Cheat, note);
+		g_Applied = false;
+		Log("build: restoring construction costs");		// 부르기 전에 남긴다
+		const Outcome done = RestoreAll();
+		g_Note = done.Note;
+		if (done.Ok)
+			g_Retry.Succeeded();
+		else
+			g_Retry.Failed(Now);
 	}
+	NlCheats::SetNote(k_Cheat, g_Note);
 }

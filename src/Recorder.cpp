@@ -4,12 +4,14 @@
 #include "Game.hpp"
 #include "core/AskPath.hpp"
 #include "core/CallLog.hpp"
+#include "core/Hooks.hpp"
 #include "core/Text.hpp"
 
 #include <array>
 #include <cstring>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 using namespace Aurie;
 using namespace YYTK;
@@ -23,6 +25,7 @@ namespace
 	struct Slot
 	{
 		bool Used = false;
+		bool Failed = false;					// 훅을 걸다 실패했다. Target 은 걸려던 함수로 남긴다(같은 함수에 다시 걸지 않게)
 		bool Recording = false;
 		std::string Name;
 		PFUNC_YYGMLScript Target = nullptr;		// 훅을 건 함수
@@ -254,18 +257,23 @@ namespace
 		if (!FindScript(given, Name, fn, Why))
 			return nullptr;
 
-		int free_slot = -1;
+		std::vector<NlCore::HookSlot> view(k_Slots);
 		for (int i = 0; i < k_Slots; i++)
+			view[i] = { g_Slots[i].Used, g_Slots[i].Failed, reinterpret_cast<const void*>(g_Slots[i].Target) };
+		int free_slot = -1;
+		switch (NlCore::PickHookSlot(view, reinterpret_cast<const void*>(fn), free_slot))
 		{
-			if (g_Slots[i].Used && g_Slots[i].Target == fn)
-				return &g_Slots[i];		// 이미 훅이 걸려 있다
-			if (!g_Slots[i].Used && free_slot < 0)
-				free_slot = i;
-		}
-		if (free_slot < 0)
-		{
+		case NlCore::SlotPick::Existing:
+			return &g_Slots[free_slot];		// 이미 훅이 걸려 있다
+		case NlCore::SlotPick::Failed:
+			// 실패한 자리는 다시 쓰지 않는다. 같은 함수에 되풀이해 걸면(치트 표의 항목은 0.5초마다 다시 해 본다) 자리가 그만큼 없어진다.
+			Why = "the hook on " + Name + " failed earlier in this run";
+			return nullptr;
+		case NlCore::SlotPick::Full:
 			Why = "no free hook slot (" + std::to_string(k_Slots) + " in use)";
 			return nullptr;
+		case NlCore::SlotPick::Free:
+			break;
 		}
 
 		Slot& slot = g_Slots[free_slot];
@@ -282,8 +290,8 @@ namespace
 			// 실패한 자리는 다시 쓰지 않는다: 같은 훅 이름("NlToyBox.rec.N")을 Aurie 에 두 번 주지 않는다(Aurie 가 실패한 이름을
 			// 표에 남기는지는 모른다. 소스가 레포에 없다). 자리는 넉넉하다.
 			slot.Used = true;
+			slot.Failed = true;
 			slot.Name = Name + " (hook failed)";
-			slot.Target = nullptr;
 			slot.Original = nullptr;
 			Why = AurieSuccess(status) ? "MmCreateHook gave no trampoline" : std::string("MmCreateHook ") + AurieStatusToString(status);
 			return nullptr;
@@ -354,6 +362,14 @@ int NlRecorder::Unoverride(const std::string& Name)
 			Log("override " + slot.Name + ": off");
 		}
 	return stopped;
+}
+
+bool NlRecorder::Overriding(const std::string& Name)
+{
+	for (const Slot& slot : g_Slots)
+		if (slot.Used && slot.Override && slot.Name == Name)
+			return true;
+	return false;
 }
 
 int NlRecorder::Unwatch(const std::string& Name)

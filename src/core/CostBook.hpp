@@ -18,9 +18,14 @@ namespace NlCore
 	class CostBook
 	{
 	public:
-		// 처음 본 값을 기억한다. 0 이거나 수가 아니면 기억하지 않는다(바꿀 것이 없다).
+		// 처음 본 값을 기억한다. 0 이거나 유한한 수가 아니면 기억하지 않는다(바꿀 것이 없거나 되돌릴 수 없다).
 		// 이미 기억한 자리는 바꾸지 않는다: 0 으로 쓴 뒤에 다시 보면 0 이 보이고, 그것은 원래 값이 아니다.
-		void Remember(const std::string& Building, int Level, int Slot, double Value);
+		// 돌려주는 값: 이 자리에 되돌릴 값이 있는가(방금 기억했거나 이미 기억했다). 거짓이면 그 자리에 0 을 쓰지 않는다.
+		bool Remember(const std::string& Building, int Level, int Slot, double Value);
+
+		// 되돌린 자리를 잊는다. Done[i] 가 0 이 아니면 Entries()[i] 를 지운다. 못 되돌린 자리는 남는다(다음에 다시 되돌린다).
+		// Done 의 수가 장부의 수와 다르면 아무것도 지우지 않는다.
+		void Forget(const std::vector<char>& Done);
 
 		const std::vector<CostEntry>& Entries() const { return m_Entries; }
 		size_t Size() const { return m_Entries.size(); }

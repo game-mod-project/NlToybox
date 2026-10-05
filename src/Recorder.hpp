@@ -41,4 +41,7 @@ namespace NlRecorder
 
 	// 바꾸기를 그만둔다(훅은 남고 원래대로 지나간다). Name: 스크립트의 이름 또는 "all". 돌려주는 값: 그만둔 수.
 	int Unoverride(const std::string& Name);
+
+	// 그 스크립트(Override 가 Name 에 돌려준 이름)가 돌려주는 값을 지금 바꾸고 있는가.
+	bool Overriding(const std::string& Name);
 }

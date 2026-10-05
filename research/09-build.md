@@ -65,7 +65,17 @@
 - `build_free` "건설·업그레이드 비용 없음": `src/Build.cpp`가 건물 종류 171개의 등급별 비용을 0 으로 쓰고 처음 본 값을 장부(`core/CostBook`)에 적는다. 끄면 되돌린다. 확인 전.
 - 원격 명령 `cheat <Id> on|off`(모드창의 체크와 같다).
 
+## 검토 뒤에 바꾼 것 (모듈 0.7.1)
+
+- 확인 전의 `Hook`·`Custom` 항목(`build_marks`, `build_free`)은 켠 채 저장돼 있어도 꺼진 채로 시작한다.
+- `build_free`: 쓴 뒤 다시 읽어 남았는지 보고, 되돌릴 값을 적은 자리에만 0 을 쓴다. 되돌린 자리만 장부에서 지우고 남은 자리는 다시 되돌린다(간격 2초에서 60초까지).
+- 훅 항목은 켠 것과 실제로 걸린 것을 틱마다 견준다(원격 `unoverride all` 뒤에도 체크가 켜져 있으면 다시 건다). 걸다 실패한 함수에는 그 실행에서 다시 걸지 않는다.
+
 ## 확인하지 못한 것
+
+- **0 으로 쓴 비용이 세이브에 들어가는가.** 건물 종류(`GenericBuilding`)에 `get_data_for_serialize`·`deserialize`·`reset_construction_cost`가,
+  비용(`GenericBuildingConstructionCostCollection`)에 `set`·`reset`·`get_data_for_serialize`·`deserialize`가 있다(조사의 답 파일에서 본 이름이다. 불리는 것은 보지 않았다).
+  들어간다면 켠 채로 저장한 세이브는 모드 없이 불러와도 비용이 0 이고, 장부가 비어 되돌릴 값이 없다. 그래서 설명에 "켠 채로 저장하지 말 것"을 적어 두었다.
 
 - 비용을 0 으로 쓴 뒤: 건설 창의 표시, 실제로 드는 자원, 업그레이드 단추.
 - `is_knowledge_unlocked`를 참으로 바꾸면 건설 창의 빨간 표시와 안내가 사라지는가. 지식 창과 연구에 무슨 일이 있는가.

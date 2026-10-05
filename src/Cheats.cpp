@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
+#include "core/Hooks.hpp"
 #include "core/SpeedControl.hpp"
 #include "core/Text.hpp"
 
@@ -83,11 +84,16 @@ namespace
 	// ---- 게임 스레드 ----
 
 	// 함수가 돌려주는 값을 바꾸는 항목(스펙 §3 의 수단 D). 켜면 훅을 걸고(없으면) 바꾸기를 켠다. 끄면 바꾸기만 끈다(훅은 떼지 않는다).
-	// 대상이 메서드의 주소이면 그 인스턴스가 있어야 스크립트를 알 수 있다. 없으면 다음 틱에 다시 해 본다.
+	// 대상이 메서드의 주소이면 그 인스턴스가 있어야 스크립트를 알 수 있다. 없으면 다음 틱에 다시 해 본다(그때는 훅의 자리를 쓰지 않는다).
+	// 켠 것과 실제로 걸린 것을 틱마다 견준다: 원격의 unoverride 가 바꾸기를 꺼도 체크가 켜져 있으면 다시 건다(core/Hooks).
 	void ApplyHook(Item& It)
 	{
-		if (It.On && !It.Applied)
+		const bool live = It.Applied && NlRecorder::Overriding(It.HookName);
+		switch (NlCore::ChooseHookStep(It.On, It.Applied, live))
 		{
+		case NlCore::HookStep::Apply:
+		{
+			const bool again = It.Applied;
 			NlRecorder::Forced value;
 			value.Kind = 'b';
 			value.Number = It.Def->On;
@@ -97,17 +103,31 @@ namespace
 				It.Applied = true;
 				It.HookName = name;
 				It.Note = "걸었습니다";
-				Log(std::string("cheat ") + It.Def->Id + ": overriding " + name);
+				It.Logged.clear();
+				Log(std::string("cheat ") + It.Def->Id + ": overriding " + name + (again ? " again (it was turned off elsewhere)" : ""));
 			}
 			else
-				It.Note = NlAccess::InGame() ? "걸지 못했습니다: " + why : "게임을 시작하면 적용";
+			{
+				It.Applied = false;
+				const bool in_game = NlAccess::InGame();
+				It.Note = in_game ? "걸지 못했습니다: " + why : "게임을 시작하면 적용";
+				const std::string line = std::string("cheat ") + It.Def->Id + ": cannot override: " + why;
+				if (in_game && line != It.Logged)		// 같은 까닭을 되풀이해 적지 않는다
+				{
+					It.Logged = line;
+					Log(line);
+				}
+			}
+			break;
 		}
-		else if (!It.On && It.Applied)
-		{
+		case NlCore::HookStep::Remove:
 			NlRecorder::Unoverride(It.HookName);
 			It.Applied = false;
 			It.Note.clear();
 			Log(std::string("cheat ") + It.Def->Id + ": off");
+			break;
+		case NlCore::HookStep::None:
+			break;
 		}
 		It.Found = true;
 		It.Restore = false;

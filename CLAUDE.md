@@ -101,11 +101,16 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.
   - 바꾼 값은 결과 자리(`Result`)에 두고 그것을 돌려준다. 원래 함수를 건너뛰는 것(`skip`)은 들어올 때의 `Result`가 `undefined`인 것을 표본에서 본 함수에만.
   - 자주 불리는 함수(`is_under_upgrade`: 초당 수천 번)에는 기록을 걸어 두지 않는다.
+  - 치트 표의 `Hook` 항목은 켠 것과 실제로 걸린 것을 틱마다 견준다(`NlCore::ChooseHookStep`). 원격 `unoverride`로 꺼도 체크가 켜져 있으면 다시 걸린다.
+    끌 때는 `cheat <Id> off`. 걸다 실패한 함수에는 그 실행에서 다시 걸지 않는다(`NlCore::PickHookSlot`. 실패한 자리는 다시 쓰지 않는다).
+  - **확인 전(`Verified = false`)의 `Hook`·`Custom` 항목은 켠 채 저장돼 있어도 꺼진 채로 시작한다**(`KeepKnown`). 창을 열지도 않았는데 판정이 바뀌거나 값이 고쳐 쓰이지 않게.
   - 건설 창이 건물을 다루는 길은 `ConstructionManager.get_building_gui_struct(이름)`이다. 사용자가 창을 다루지 않아도 이것을 직접 불러 어떤 판정이 불리는지 볼 수 있다.
 - 건물 종류(171개)는 `gml_Script_get_generic_building(이름)`으로 얻는다(이름은 `gml_Script_building_generic_get_array_of_all_buildings()`). ds_map 에 들어 있어
   전역 탐색으로는 보이지 않는다(`find … in=ds`). 건설비는 `…__construction_cost.levels[등급]`(`money`, `resources.__array_of_resource_quantity[39]`)이고
   업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`가 0 으로 쓰고 `core/CostBook`의 값으로 되돌린다.
-  함수가 돌려준 구조체 안은 `NlAccess::Follow`로 본다(주소의 뿌리가 없다).
+  함수가 돌려준 구조체 안은 `NlAccess::Follow`로 보고 `NlAccess::SetNumber`로 쓴다(주소의 뿌리가 없다. 쓴 뒤 다시 읽어 확인한다).
+  - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
+  - 건물 종류와 비용에 `get_data_for_serialize`·`deserialize`가 있다. **0 으로 쓴 비용이 세이브에 들어가는지는 `research/09`를 본다.** 재기 전에는 켠 채로 저장하지 않는다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:

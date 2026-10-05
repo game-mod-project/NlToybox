@@ -51,6 +51,7 @@ namespace NlCore
 	const std::vector<Cheat>& Cheats();
 	const Cheat* FindCheat(const std::string& Id);
 
-	// 표에 없는 Id 와 종류가 다른 Id 를 버리고, 수를 범위 안으로 당긴다. 즐겨찾기와 잠금은 그대로 둔다.
+	// 상태 파일에서 읽은 것을 표에 맞춘다: 표에 없는 Id 와 종류가 다른 Id 를 버리고, 수를 범위 안으로 당긴다. 즐겨찾기와 잠금은 그대로 둔다.
+	// Hook 과 Custom 은 Verified 인 것만 켠 채로 남긴다(확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다).
 	CheatState KeepKnown(CheatState State);
 }

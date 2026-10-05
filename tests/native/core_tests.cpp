@@ -8,11 +8,13 @@
 #include "core/CheatTable.hpp"
 #include "core/CostBook.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
+#include "core/Retry.hpp"
 #include "core/Schedule.hpp"
 #include "core/SpeedControl.hpp"
 #include "core/SpeedTrial.hpp"
@@ -618,6 +620,69 @@ int main(int argc, char** argv)
 		CHECK(book.Empty());
 	});
 
+	Test("건설비 장부: 되돌릴 값이 있는 자리인지 알려 주고, 되돌린 자리만 잊는다", [] {
+		CostBook book;
+		CHECK(book.Remember("altar", 1, 1, 30));			// 새로 기억했다. 0 으로 써도 된다
+		CHECK(book.Remember("altar", 1, 1, 0));				// 이미 기억한 자리다
+		CHECK(!book.Remember("altar", 1, 2, 0));			// 0 인 자리: 쓸 것이 없다
+		// 유한하지 않은 값은 되돌릴 수 없다. 그런 자리는 0 으로 쓰지도 않는다(건물 데이터에 inf 가 있다: __limit. research/09).
+		CHECK(!book.Remember("altar", 1, 3, std::numeric_limits<double>::infinity()));
+		CHECK(book.Remember("hut_6x10", 2, 32, 5) && book.Remember("hut_6x10", 2, 1, 10));
+		CHECK(book.Size() == 3);
+
+		book.Forget({ 1, 0, 1 });							// 되돌린 자리만 잊는다. 못 되돌린 자리는 남아 다음에 다시 되돌린다
+		CHECK(book.Size() == 1 && book.Entries()[0].Building == "hut_6x10" && book.Entries()[0].Slot == 32 && book.Entries()[0].Value == 5);
+		book.Forget({ 1, 1 });								// 수가 맞지 않으면 아무것도 잊지 않는다
+		CHECK(book.Size() == 1);
+		book.Forget({ 0 });
+		CHECK(book.Size() == 1);
+		book.Forget({ 1 });
+		CHECK(book.Empty());
+	});
+
+	Test("다시 해 보기: 실패가 이어지면 간격을 두 배씩 늘리고 성공하면 처음으로 돌아간다", [] {
+		Retry retry(2, 60);
+		CHECK(retry.Due(0) && retry.Failures() == 0);
+		retry.Failed(10);
+		CHECK(!retry.Due(11.9) && retry.Due(12) && retry.Failures() == 1);
+		retry.Failed(12);
+		CHECK(!retry.Due(15.9) && retry.Due(16) && retry.Failures() == 2);
+		for (int i = 0; i < 10; i++)
+			retry.Failed(100);
+		CHECK(!retry.Due(159.9) && retry.Due(160));			// 가장 긴 간격(60초)을 넘지 않는다
+		retry.Succeeded();
+		CHECK(retry.Due(100) && retry.Failures() == 0);
+		retry.Failed(200);
+		CHECK(!retry.Due(201.9) && retry.Due(202));			// 다시 처음 간격부터
+	});
+
+	Test("훅 항목: 켠 것과 실제로 걸린 것이 어긋나면 다시 건다", [] {
+		CHECK(ChooseHookStep(true, false, false) == HookStep::Apply);
+		CHECK(ChooseHookStep(true, true, true) == HookStep::None);
+		CHECK(ChooseHookStep(true, true, false) == HookStep::Apply);		// 다른 곳(원격 unoverride all)이 껐다. 체크가 켜져 있으면 다시 건다
+		CHECK(ChooseHookStep(true, false, true) == HookStep::Apply);		// 원격이 걸어 둔 것을 이 항목의 값으로 맞춘다
+		CHECK(ChooseHookStep(false, true, true) == HookStep::Remove);
+		CHECK(ChooseHookStep(false, true, false) == HookStep::Remove);		// 걸었다는 표시를 지운다
+		CHECK(ChooseHookStep(false, false, false) == HookStep::None);
+		CHECK(ChooseHookStep(false, false, true) == HookStep::None);		// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
+	});
+
+	Test("훅의 자리: 걸린 대상은 그 자리, 걸다 실패한 대상에는 새 자리를 주지 않는다", [] {
+		const int a = 0, b = 0, c = 0, d = 0;
+		std::vector<HookSlot> slots(3);
+		int index = -9;
+		CHECK(PickHookSlot(slots, &a, index) == SlotPick::Free && index == 0);
+		slots[0] = { true, false, &a };
+		slots[1] = { true, true, &b };						// 훅을 걸다 실패했다
+		CHECK(PickHookSlot(slots, &a, index) == SlotPick::Existing && index == 0);
+		// 같은 대상을 0.5초마다 다시 걸면 자리 64개가 32초에 없어진다. 실패한 대상은 그 실행에서 다시 걸지 않는다.
+		CHECK(PickHookSlot(slots, &b, index) == SlotPick::Failed && index == 1);
+		CHECK(PickHookSlot(slots, &c, index) == SlotPick::Free && index == 2);
+		slots[2] = { true, false, &c };
+		CHECK(PickHookSlot(slots, &d, index) == SlotPick::Full && index == -1);
+		CHECK(PickHookSlot(slots, &c, index) == SlotPick::Existing && index == 2);
+	});
+
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
 		state.On = { "instant_build", "no_dodge" };
@@ -725,11 +790,14 @@ int main(int argc, char** argv)
 		CHECK(kept.Numbers.size() == 1 && kept.Numbers.at("rest_decrease") == FindCheat("rest_decrease")->Max);
 		CHECK(kept.Pins == state.Pins && kept.Locks.size() == 1);
 		CHECK(FindCheat("nope") == nullptr && FindCheat("instant_build")->Kind == CheatKind::Toggle);
-		// 훅과 모듈 항목도 켠 채로 저장되고 불러와진다(수 항목만 On 에서 빠진다).
+		// 훅과 모듈 항목은 효과를 확인한 것만 켠 채로 시작한다(수 항목은 On 에서 빠진다).
+		// 확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다: 창을 열지도 않았는데 게임의 판정이 바뀌거나(build_marks 는 지식 창도 쓰는 함수다)
+		// 건설비가 0 으로 쓰여 세이브에 굳는 일(build_free. 세이브에 들어가는지 재지 않았다)이 없게.
 		CheatState hooks;
-		hooks.On = { "build_any", "build_free", "rest_decrease" };
+		hooks.On = { "build_any", "build_free", "build_marks", "rest_decrease", "build_all" };
 		const CheatState kept_hooks = KeepKnown(hooks);
-		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free" }));
+		CHECK(FindCheat("build_any")->Verified && !FindCheat("build_free")->Verified && !FindCheat("build_marks")->Verified);
+		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_all" }));		// 값을 쓰는 스위치(Toggle)는 확인 전이어도 그대로다
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {

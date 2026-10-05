@@ -186,12 +186,36 @@ pwsh -NoProfile -File tools/session.ps1 -Action stop -Name stage3c-session1
 
 ### Task 4: 확인 실행, 문서, 머지
 
-- [ ] 독립 코드 검토(전체 브랜치) → Critical·Important 를 시험과 함께 고친다(켜기 전에).
-- [ ] 실행 묶음 1회(사용자 승인): 적재 판정. 세이브를 불러온 뒤 원격으로 `cheat build_any on`, `cheat build_free on` → 로그(`cheat build_any: overriding …`, `build: zeroed …`)와
-  `ask`로 비용이 0 인지 본다. 사용자가 (가) 잠긴 건물 하나를 짓고 (나) 주택의 업그레이드 단추가 켜졌는지 보고 누른다 (다) 시간을 흘려 건물이 지어지는 동안
-  창고의 수가 줄지 않는지 본다(`ask …__total__[1]`). `cheat build_free off` → 비용이 원래 값으로 돌아오는지(`ask`). `cheat build_marks on` → 건설 창의 빨간 표시와 지식 창을 화면으로.
-  끝나면 `cheat … off`를 모두 보내고 끈다.
+- [x] 독립 코드 검토(`dfe8c1a`. code-reviewer, opus): Critical 1, Important 7 → 시험과 함께 고쳤다(모듈 0.7.1. 아래 "검토에서 고친 것").
+- [ ] 실행 묶음 1회(사용자 승인). 세이브의 사본을 뜬 뒤 켠다. 위험한 호출은 요청마다 따로, 그 요청의 맨 뒤에 둔다. `cheat … on`과 그 결과를 묻는 줄은 한 요청에 넣지 않는다
+  (훅은 0.5초, 비용은 1초 안에 적용된다).
+  1. 적재 판정(`NlToyBox 0.7.1 loaded`). 사용자가 시험용 세이브를 불러와 일시정지한다.
+  2. `call gml_Script_get_generic_building s:altar` → struct(모듈이 이 스크립트를 처음 부른다. 게임이 (string)으로 부르는 것을 기록한 꼴이다).
+     `find name=__allow_to_build_function_list in=ds max=2`로 건물 종류의 ds_map 번호를 찾고 바탕 값을 적어 둔다:
+     `map:<n>@hut_6x10.__construction_cost.levels[2].resources.__array_of_resource_quantity[1]`(10), `[32]`(5), `map:<n>@altar…levels[1]…[1]`(30).
+  3. 세이브에 비용이 들어가는지 잰다(검토의 C1): `record map:<n>@hut_6x10.get_data_for_serialize`, `….deserialize`, `….reset_construction_cost`,
+     `….__construction_cost.get_data_for_serialize`, `….__construction_cost.deserialize`, `….__construction_cost.reset`. 자동 저장이나 사용자의 저장 뒤에 `records`.
+  4. `cheat build_any on` → 로그 `cheat build_any: overriding …`. 다음 요청에서 `unoverride all` → 그다음 요청의 로그에 `overriding … again`(체크가 켜져 있으면 다시 건다).
+  5. `cheat build_free on` → 다음 요청에서 로그 `build: zeroed N … book K`(`did not stick` 이 없어야 한다)와 2 의 세 자리가 0 인지.
+  6. 사용자가 (가) 잠긴 건물 하나를 짓고 (나) 주택의 업그레이드 단추가 켜졌는지 보고 누른다 (다) 일시정지를 풀어 10초쯤 둔다. 앞뒤로 창고의 수(`…__total__[1]`, `[32]`)를 읽는다.
+  7. 사용자가 새 칸에 저장한다 → `records`(3 의 함수가 불렸는가).
+  8. `cheat build_free off` → 로그 `build: restored K/K`, 2 의 세 자리가 10, 5, 30.
+  9. 사용자가 7 의 세이브를 불러온다 → 2 의 세 자리: 0 이면 비용이 세이브에 들어간다(장부가 비어 되돌릴 값이 없다). 원래 값이면 들어가지 않거나 불러올 때 다시 만든다(`records`의 `deserialize`로 가린다).
+  10. `cheat build_marks on` → 사용자가 건설 창을 연 화면(`shot`). 끈다.
+  11. `cheat … off`를 모두 보내고 `state`, 끈다(`session.ps1 -Action stop -Name stage3c-session2`). 사용자의 `NlToyBox.cheats.txt`가 켜기 전과 같은지 본다.
 - [ ] `research/09-build.md`, `CLAUDE.md`, `README.md`, 스펙 §10·§13. `git merge --no-ff feat/cheat-build` → `develop`.
+
+### 검토에서 고친 것 (0.7.1)
+
+- **C1 `build_free`가 0 을 세이브에 굳힐 수 있다**: 건물 종류와 그 비용에 `get_data_for_serialize`·`deserialize`가 있다(조사의 답 파일. 이름일 뿐이고 실제로 저장되는지는 Task 4 의 3·7·9 가 잰다).
+  확인 전의 `Hook`·`Custom` 항목은 켠 채 저장돼 있어도 꺼진 채로 시작한다(`KeepKnown`). 설명에 "켠 채로 저장하지 말 것"을 적었다. 비용이 이미 모두 0 이면 창에 그렇게 보인다.
+- **I1** 되돌린 자리만 장부에서 지운다(`CostBook::Forget`). 남은 자리는 다시 되돌린다. **I2** 실패했거나 게임이 값을 되돌리면 간격을 늘려 다시 한다(`core/Retry`: 2초에서 60초까지).
+- **I3** 쓴 뒤 다시 읽어 남았는지 본다(`NlAccess::SetNumber`. 형은 원래 값의 것). 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`Remember`의 반환값. 유한하지 않은 값은 건드리지 않는다).
+- **I4** `get_generic_building`을 부르기 전에 로그를 남긴다(1초마다 보는 것은 처음 한 번). 실행의 2 가 원격으로 먼저 불러 본다.
+- **I5** 훅 항목은 켠 것과 실제로 걸린 것을 틱마다 견준다(`ChooseHookStep`, `NlRecorder::Overriding`). **I6** 걸다 실패한 함수에는 그 실행에서 다시 걸지 않는다(`PickHookSlot`).
+- **I7** `build_marks`도 꺼진 채로 시작한다(C1 과 같은 규칙).
+- 시험(RED → GREEN): "건설비 장부: 되돌릴 값이 있는 자리인지 알려 주고, 되돌린 자리만 잊는다", "다시 해 보기: …", "훅 항목: 켠 것과 실제로 걸린 것이 어긋나면 다시 건다",
+  "훅의 자리: …", "치트 표: 모르는 Id 와 …"(확인 전의 `Hook`·`Custom`은 버린다). `core tests: 76 passed`.
 
 ## Self-Review
 
