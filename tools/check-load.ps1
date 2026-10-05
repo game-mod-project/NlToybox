@@ -36,14 +36,8 @@ if (-not $KeepRunning) {
     if ($how -ne 'not-running') { Write-Host "게임 종료: $how" }
 }
 
-# 줄 형식은 src/ModuleMain.cpp 가 쓴다 (스펙 §4.3). 'yytk' 줄은 판정에 쓰지 않는다.
-$checks = [ordered]@{
-    'loaded'  = [bool]($lines -match '^NlToyBox \S+ loaded$')
-    'builtin' = $lines -contains 'builtin code_is_compiled = true'
-    'script'  = $lines -contains 'script gml_Script_command_line_parameters_init = found'
-    'done'    = $lines -contains 'probe done'
-}
-$failed = @($checks.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object { $_.Key })
+# 판정은 common.ps1 의 Get-NlLoadFailures 가 한다(ui-check.ps1 과 같이 쓴다).
+$failed = @(Get-NlLoadFailures $lines)
 if ($failed.Count) {
     Write-Host "FAIL: $($failed -join ', ')"
     exit 1

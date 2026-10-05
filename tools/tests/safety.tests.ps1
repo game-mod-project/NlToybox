@@ -43,6 +43,15 @@ $backupPath = Join-Path $backupDir "Norland.exe.$($orig.Version).$($orig.Sha256.
 $garbage = [byte[]](1..10)
 
 try {
+    Test-Case '적재 판정은 빠진 줄의 이름을 돌려준다' {
+        $good = 'NlToyBox 0.4.0 loaded', 'yytk 5.0.0', 'trigger object_call', 'builtin code_is_compiled = true',
+                'script gml_Script_command_line_parameters_init = found', 'probe done'
+        Assert-Equal @(Get-NlLoadFailures $good).Count 0 '네 줄이 다 있으면 통과다'
+        Assert-Equal (@(Get-NlLoadFailures @($good | Where-Object { $_ -ne 'probe done' })) -join ',') 'done' '빠진 줄의 이름'
+        Assert-Equal (@(Get-NlLoadFailures @()) -join ',') 'loaded,builtin,script,done' '로그가 비면 넷 다 빠진다'
+        Assert-True (@(Get-NlLoadFailures @('builtin code_is_compiled = false')) -contains 'builtin') '거짓이면 통과가 아니다'
+    }
+
     Test-Case 'setup 은 내용이 원본과 다른 기존 백업을 믿지 않고 다시 만든다' {
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
         [IO.File]::WriteAllBytes($backupPath, $garbage)      # 복사가 중간에 끊겨 남은 백업을 흉내 낸다

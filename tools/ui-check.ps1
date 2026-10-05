@@ -8,11 +8,17 @@ param(
     [int]$PressF8 = 0,   # 모드창이 준비되고 8초 뒤에 게임 창에 F8 을 이만큼 보낸다(창 메시지로. 실제 키보드를 건드리지 않는다)
     [string]$Drag,       # 'x1,y1,x2,y2': 그 뒤에 왼쪽 단추를 누른 채 끄는 메시지를 보낸다(게임 창 안의 좌표)
     [string]$TestDrag,   # 'x1,y1,x2,y2': 모듈이 화면을 뜨기 5초 전에 ImGui 에 직접 끌기를 넣는다(실제 마우스를 건드리지 않는다)
-    [string[]]$Saved = @() # 저장된 설정이 있는 것처럼 시작한다. '이름=배율' (예: building_cost=0.5)
+    [string[]]$Saved = @(),# 저장된 설정이 있는 것처럼 시작한다. '이름=배율' (예: building_cost=0.5)
+    [string]$Page,         # 왼쪽 목록에서 열 영역의 이름(explorer, time, util, …). src/core/CheatTable.cpp 의 Key
+    [string]$Path,         # 탐색기가 처음 열 주소(예: inst:o_time_controller)
+    [string[]]$Ask = @(),  # 화면을 뜨기 5초 전에 그 주소의 값을 로그에 적는다
+    [string[]]$Poke = @()  # '주소=수': 써 넣고, 다시 읽고, 원래 값으로 되돌린다. 결과를 로그에 적는다
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
 $Set = @($Set | ForEach-Object { $_ -split ',' } | Where-Object { $_ })      # pwsh -File 은 쉼표로 이은 것을 한 글로 넘긴다
+$Ask = @($Ask | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+$Poke = @($Poke | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 
 # 모드창이 제대로 그려지는지 본다. 게임을 켜고, 모듈이 ShotSeconds 초 뒤의 화면(게임이 그린 프레임)을 파일로 뜨면
 # 그것을 refs\ui\<Name>.png 로 가져오고 게임을 끈다. 화면을 긁지 않는다. 게임 창이 가려져 있어도 된다.
@@ -29,11 +35,19 @@ $settingsKept = "$settings.kept"
 if (Test-Path -LiteralPath $settings) { Move-Item -LiteralPath $settings -Destination $settingsKept -Force }
 $Saved = @($Saved | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 if ($Saved.Count) { Set-Content -LiteralPath $settings -Value $Saved -Encoding ascii }
+# 치트의 상태 파일도 같다.
+$cheats = Join-Path $modDir 'NlToyBox.cheats.txt'
+$cheatsKept = "$cheats.kept"
+if (Test-Path -LiteralPath $cheats) { Move-Item -LiteralPath $cheats -Destination $cheatsKept -Force }
 foreach ($f in $bmp, $log) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } }
 
 $result = $null
+$allLines = @()
 try {
-    Set-Content -LiteralPath $config -Value (@("open=$([int](-not $Closed))", "shot_seconds=$ShotSeconds") + @($Set | ForEach-Object { "set=$_" }) + @(if ($TestDrag) { "drag=$TestDrag" })) -Encoding ascii
+    $configLines = @("open=$([int](-not $Closed))", "shot_seconds=$ShotSeconds") + @($Set | ForEach-Object { "set=$_" }) +
+        @(if ($TestDrag) { "drag=$TestDrag" }) + @(if ($Page) { "page=$Page" }) + @(if ($Path) { "path=$Path" }) +
+        @($Ask | ForEach-Object { "ask=$_" }) + @($Poke | ForEach-Object { "poke=$_" })
+    Set-Content -LiteralPath $config -Value $configLines -Encoding ascii
     Write-Host "게임을 켭니다 (steam://rungameid/$($script:NlAppId)). 게임 창을 누르지 마세요."
     Start-Process "steam://rungameid/$($script:NlAppId)"
 
@@ -73,8 +87,9 @@ try {
     }
     if (-not $result) { $result = '제한 시간 안에 화면을 받지 못했습니다.' }
 
+    $allLines = @(if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log })
     Write-Host '--- NlToyBox.log ---'
-    if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log | ForEach-Object { Write-Host $_ } } else { Write-Host '(로그 없음)' }
+    if ($allLines.Count) { $allLines | ForEach-Object { Write-Host $_ } } else { Write-Host '(로그 없음)' }
     Write-Host '--------------------'
 }
 finally {
@@ -86,6 +101,12 @@ finally {
         Remove-Item -LiteralPath $settings -Force
     }
     if (Test-Path -LiteralPath $settingsKept) { Move-Item -LiteralPath $settingsKept -Destination $settings -Force }
+    if (Test-Path -LiteralPath $cheats) {
+        Write-Host '--- 시험이 저장한 치트 상태 ---'
+        Get-Content -LiteralPath $cheats | ForEach-Object { Write-Host $_ }
+        Remove-Item -LiteralPath $cheats -Force
+    }
+    if (Test-Path -LiteralPath $cheatsKept) { Move-Item -LiteralPath $cheatsKept -Destination $cheats -Force }
 }
 
 if (Test-Path -LiteralPath $bmp) {
@@ -96,6 +117,10 @@ if (Test-Path -LiteralPath $bmp) {
     Remove-Item -LiteralPath $bmp -Force
     Write-Host "화면: $png"
 }
+# 적재 판정도 함께 낸다(check-load.ps1 과 같은 줄). 실행 한 번으로 둘을 본다.
+$loadFailed = @(Get-NlLoadFailures $allLines)
+if ($loadFailed.Count) { Write-Host "FAIL: 적재 판정 - $($loadFailed -join ', ')"; exit 1 }
+Write-Host '적재 판정: 통과'
 if ($result -match '^ui shot done' -and (Test-Path -LiteralPath $png)) { Write-Host 'PASS'; exit 0 }
 Write-Host "FAIL: $result"
 exit 1

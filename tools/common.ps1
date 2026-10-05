@@ -165,3 +165,15 @@ public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
     [void][NlToyBox.Win]::EnumWindows($callback, [IntPtr]::Zero)
     @($windows)
 }
+
+# 모듈이 붙었다는 판정. 줄 형식은 src/ModuleMain.cpp 가 쓴다 (Phase 0 스펙 §4.3). 'yytk' 줄은 판정에 쓰지 않는다.
+# 돌려주는 값: 빠진 것의 이름들. 비어 있으면 통과다.
+function Get-NlLoadFailures([string[]]$Lines) {
+    $checks = [ordered]@{
+        'loaded'  = [bool]($Lines -match '^NlToyBox \S+ loaded$')
+        'builtin' = $Lines -contains 'builtin code_is_compiled = true'
+        'script'  = $Lines -contains 'script gml_Script_command_line_parameters_init = found'
+        'done'    = $Lines -contains 'probe done'
+    }
+    @($checks.GetEnumerator() | Where-Object { -not $_.Value } | ForEach-Object { $_.Key })
+}
