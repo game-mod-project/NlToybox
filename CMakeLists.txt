@@ -48,6 +48,7 @@ add_library(nltoybox SHARED
   src/Finder.cpp
   src/Game.cpp
   src/Menu.cpp
+  src/Recorder.cpp
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp

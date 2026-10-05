@@ -920,7 +920,9 @@ bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string
 		reinterpret_cast<PVOID>(k_Detours[free_slot]), reinterpret_cast<PVOID*>(&slot.Original));
 	if (!AurieSuccess(status) || !slot.Original)
 	{
-		slot = Slot{};
+		slot.Name.clear();
+		slot.Target = nullptr;
+		slot.Original = nullptr;
 		Why = std::string("MmCreateHook ") + AurieStatusToString(status);
 		return false;
 	}
