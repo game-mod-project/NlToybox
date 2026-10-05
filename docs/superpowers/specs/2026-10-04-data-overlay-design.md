@@ -4,7 +4,8 @@
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
 - 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1 완료
-  (계획 `docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거 `research/03-data-files.md`, 실측 결과 `research/04-overlay-verify.md`)
+  (계획 `docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거 `research/03-data-files.md`, 실측 결과 `research/04-overlay-verify.md`).
+  단계 2(효과 실측)는 계획을 썼다(`docs/superpowers/plans/2026-10-05-data-overlay-stage2-effects.md`, §5)
 
 ## 1. 목적
 
@@ -17,6 +18,8 @@
 - **단계 1 — 오버레이 도구.** 카탈로그에 올린 키만 다루고, 키마다 무엇이 확인됐는지를 등급으로 적는다(§4.3).
 
 구현 계획은 단계마다 따로 쓴다. 단계 1의 카탈로그가 단계 0의 결과에 달려 있다.
+
+단계 1 뒤에 **단계 2 — 효과 실측**(§5)을 더했다: 값을 바꾸면 게임이 달라지는지를 잰다.
 
 ## 2. 실측 근거 (2026-10-04)
 
@@ -496,7 +499,110 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 효과(`effect`)를 재는 것은 이 단계의 일이 아니다. 새 게임을 시작해 화면에서 봐야 하고 키마다 방법이 다르다.
 도구가 선 뒤에 키 묶음별로 따로 잰다.
 
-## 5. 범위 밖
+## 5. 단계 2 — 효과 실측
+
+단계 1까지는 "파일의 값이 런타임의 메모리에 올라온다"를 쟀다(`research/04-overlay-verify.md`). 이 단계는 그 다음을 잰다:
+**값을 바꾸면 게임이 달라지는가.** 지금까지 효과를 본 키는 `initial_budget` 하나다. `budget_money`는 런타임에 올라오지만 화면의 시작 금화는
+그 값이 아니었다(`research/02`).
+
+한 번의 실행으로 잴 수 있는 것부터 잰다: 새 게임의 첫 화면에서 보이는 것(시작 금화, 시작 자원)과, 게임을 시작한 뒤 값이 옮겨지는 자리.
+건물 비용, 거래 가격, 전투, 이벤트 빈도처럼 플레이해야 보이는 효과는 이 단계의 결과(값이 게임 안 어디에 앉는가)를 보고 따로 계획한다.
+
+### 5.1 근거
+
+| 사실 | 출처 |
+|---|---|
+| 새 게임의 설정에 지역과 난이도의 선택이 있다 | `refs/strg.txt`의 `gui_main_menu_choose_province_difficulty_settings`, `GAME_CONDITIONS.get_difficulty()`. 전역 `__new_game_initializer`의 멤버 `__choosed_province`, `__game_conditions`(단계 0b의 덤프) |
+| 지역은 25곳이고 지역마다 난이도(Easy, Normal, Hard, Extreme)와 마을의 자원·수량이 있다. 금화의 열은 없다 | `NewWorldParams.csv` |
+| 화면 위의 자원 표시에 금화 요소가 있다 | `refs/strg.txt`의 `gui_hud_resources_element_money_create` |
+| 금화를 다루는 스크립트: `budget_money_get`, `budget_money_change`, `budget_default_money_get`, `budget_default_money_set` | `refs/strg.txt`. 인자의 형을 모른다. **부르지 않는다** |
+| 게임 안의 덤프(깊이 6)에서 전역과 인스턴스의 한 단계 목록에 값 3000이 없다. `o_province_controller`의 변수는 여섯이고 그 가운데 `default_budget_money`, `production_cost`(배열 39), `default_resource_count`(배열 39)가 있다 | `refs/runtime/stage0b-run2.late1.json` |
+| 그 덤프에서 깊이 한도에 걸려 들어가지 못한 구조체·배열이 전역 23,810개, ds 61,603개다 | `research/02` |
+| 덤프 한 번에 깊이 6, 방문 약 186만에서 2.0~2.1초가 걸렸다. 더 깊이 볼 때의 시간은 **모른다** | `research/02` |
+| 게임 JSON에는 0~999의 정수가 972와 987을 빼고 모두 있다. 1000~1999에는 없는 정수가 369개 있다 | 2026-10-05에 4,701개 파일을 훑음. 작은 정수는 값으로 찾으면 우연히 맞는다 |
+| 이번 프리셋의 값 열 개(1006, 1031, 1057, 1101, 2767, 2.3719, 41.3719, 31.2917, 0.5719, 11.4373)는 게임 JSON 어디에도 없다 | 같은 날 `probe-request`의 프로토타입으로 확인 |
+| 단계 0b의 실행에서 게임 화면은 모듈이 적재된 뒤 약 163초에 나왔고, 2분 반 동안 새 세이브가 생기지 않았다 | `research/02` |
+| 메뉴까지만 간 실행에서 게임은 데이터 파일을 다시 쓰지 않았다. 새 게임을 시작한 실행에서는 **모른다** | `research/04` |
+
+### 5.2 무엇을 "효과를 봤다"고 하는가
+
+카탈로그의 `effect`를 `TESTED`(`effect_by: nltoybox`)로 올리는 기준이다.
+
+| 본 것 | 카탈로그에 적는 것 |
+|---|---|
+| 화면의 수치가 바꾼 값과 같다(사용자가 읽는다) | `TESTED`. `note`에 "화면에서" |
+| 게임이 만든 개체의 상태(도시의 재산, 창고의 재고처럼 플레이로 변하는 값)에서 바꾼 값을 봤다 | `TESTED`. `note`에 그 경로 |
+| 설정을 들고 있는 자리에서만 봤다(`o_debug`, `o_province_controller`의 `default_*`와 배열, 기본 가격표) | `effect`는 그대로. `note`에 "게임을 시작하면 …로 옮겨진다" |
+| 화면의 수치가 바꾼 값과 다르다 | `effect`는 그대로. `note`에 "화면의 …은 이 값이 아니었다"와 본 수치 |
+| 게임 안의 덤프 어디에도 없다(점검이 모두 `ok`이고 양성 대조가 맞았을 때) | `effect`는 그대로. `note`에 그 사실 |
+
+어느 줄에 드는지 가리기 어려우면 올리지 않고 본 것을 그대로 적는다.
+
+### 5.3 답할 질문
+
+7. 시작 금화는 어디서 오는가. 화면의 금화는 얼마이고, 런타임의 어느 변수에 있으며, `budget_money`를 바꾼 값은 어디에 있는가.
+   고른 지역과 난이도는 무엇이었는가.
+8. `product_count`를 바꾸면 시작 자원이 달라지는가(나무, 당근. 바꾸지 않는 약은 그대로인가).
+9. 게임을 시작하면 값이 어디로 옮겨지는가: `production_cost`, `fair_trade`의 가격, `building_resources`, `building_duration_factor`, `battle_dodge_shift_better`.
+10. 새 게임을 시작한 실행에서도 게임이 데이터 파일을 다시 쓰지 않는가.
+
+### 5.4 프리셋과 요청
+
+`presets/effect-stage2.json`. 값은 모두 게임 JSON에 없는 수다. 화면에서 읽을 것은 정수로, 옮겨지는 자리만 볼 것은 원래 값과 비슷한 크기의 소수로 골랐다
+(게임을 시작해 몇 분 돌아야 하므로 터무니없는 크기를 피한다).
+
+| 키 | 값 | 무엇을 보려는가 |
+|---|---|---|
+| `gameplay_variables.json` `global_map.ai_economy.initial_budget` | 700 → 1006 | **양성 대조.** `global.__gameplay_vars.…initial_budget`와 AI 도시의 `__initial_wealth`에서 나와야 한다(`research/02`) |
+| `debug_params.json` `budget_money` | 2000 → 2767 | 질문 7 |
+| `debug_params.json` `product_count.wood`, `product_count.carrot` | 300 → 1031, 200 → 1057 | 질문 8. `product_count.medicine`은 바꾸지 않는다(같은 실행 안의 대조) |
+| `debug_params.json` `production_cost.ale` | 2 → 2.3719 | 질문 9 |
+| `debug_params.json` `fair_trade.fair_trade_purchase.ale`, `fair_trade_sale.ale` | 40 → 41.3719, 30 → 31.2917 | 질문 9 |
+| `debug_params.json` `building_resources.woodcutter_lvl_1[0][1]` | 15 → 1101 | 질문 9 |
+| `debug_params.json` `building_duration_factor` | 0.5 → 0.5719 | 질문 9 |
+| `battle_params.json` `battle_dodge_shift_better` | 11 → 11.4373 | 질문 9 |
+
+요청 파일은 앞머리(`tools/probes/stage2-effect.head.txt`)에 프리셋의 값을 찾는 줄을 붙여 만든다(`overlay.ps1 probe-request -Header`).
+앞머리가 정하는 것:
+
+- 메뉴에서 한 번, 그 뒤로 60초마다 덤프하고 마지막 셋을 남긴다.
+- 깊이 8까지 본다(깊이 6에서는 금화가 든 변수가 한 단계 목록에 없었다). 방문 한도는 구역마다 800만, 히트는 2만.
+  **덤프에 걸리는 시간은 이번에 잰다.** 방문 한도가 시간을 묶는다.
+- 새 게임의 흐름을 기록한다(`__new_game_initializer`의 `__is_active`, `__current_step`, `__choosed_province`, `__game_load_operator.__game_is_loading`).
+- 금화의 출처: 값 3000, 이름에 `budget`, `money`, `difficulty`, `game_conditions`가 든 것. 시작 자원: `default_resource_count`.
+
+게임 스크립트는 부르지 않는다.
+
+### 5.5 도구의 고침
+
+- `probe-request`가 앞머리 파일을 받는다(`-Header`). 주지 않으면 지금처럼 메뉴에서 한 번 덤프하는 요청을 만든다.
+- `probe-request`가 프리셋의 값 가운데 게임 JSON에 이미 있는 수를 알려 준다(경고일 뿐 거부하지 않는다).
+  프리셋이 입혀져 있어도 카탈로그의 파일은 바닐라의 내용으로 센다.
+
+### 5.6 실행
+
+게임을 한 번 켠다(예비 한 번은 그때 다시 승인받는다). **사용자가 할 일이 있다.**
+
+1. 메인 메뉴가 뜨고 약 1분 뒤 화면이 한 번 멈췄다 풀리면(메뉴 덤프) 새 게임을 시작한다. 단계 0b와 같은 차례다.
+   메뉴에서 뜬 덤프가 게임 안의 덤프와 견줄 기준이 된다. 설정 화면에서 고른 **지역과 난이도**를 기억해 둔다.
+2. 게임 화면이 나오면 화면의 **금화, 나무, 당근, 약**의 수치를 읽는다. 보이면 건설 메뉴의 벌목꾼 건물(woodcutter)의 나무 비용도 읽는다(선택).
+3. 게임 화면에서 3분쯤 둔다. 그 사이 60초마다 화면이 멈췄다 풀린다(덤프). 얼마나 멈출지는 이번에 잰다.
+4. 평소처럼 게임을 끈다. 읽은 수치와, 게임 화면에 들어간 때와 끈 때를 대강 알려 준다.
+
+판정에는 **게임 안에서 뜬 덤프만** 쓴다: `present`에 `o_character`가 있고 `o_main_menu`가 없는 덤프(`research/02`의 신호). 그런 덤프가 없으면
+답을 "확인하지 못함"으로 적는다. "없다"를 쓰려면 그 덤프에서 `dump_tool.py controls`가 모두 `ok`이고 양성 대조가 맞아야 한다.
+
+끝나면 `overlay.ps1 status`로 게임이 데이터 파일을 다시 썼는지 보고(질문 10), 되돌린다. 다시 썼으면(`unknown`) `tools/data-restore.ps1`로 되돌린다.
+
+### 5.7 산출물과 완료 기준
+
+- `research/05-effects.md`: 질문 7~10의 답과 근거, 사용자가 읽은 수치, 값마다의 런타임 경로, 덤프에 걸린 시간, 확인하지 못한 것.
+- 카탈로그: §5.2의 기준대로 `effect`와 `note`를 고친다.
+- 완료 기준: (1) 질문마다 "그렇다 / 아니다 / 확인하지 못함"과 근거가 있다. (2) 판정에 쓴 덤프가 게임 안의 것임을 적었다.
+  (3) 끝난 뒤 게임이 바닐라다(`overlay.ps1 status`가 125개 모두 바닐라, exe 해시가 원본, `mods\`와 `aurie.log`가 없다).
+  (4) 세이브 폴더에서 달라진 파일을 사용자에게 알렸다.
+
+## 6. 범위 밖
 
 - 런타임에서 값을 쓰는 것 (하위 프로젝트 2).
 - 편집 UI (하위 프로젝트 3).
@@ -505,10 +611,10 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 - `.map_template`(바이너리가 붙어 있다)과 CSV의 수정.
 - 수가 아닌 값(문자열, 불리언)을 바꾸는 것과 키를 더하거나 빼는 것. 지식의 선행 조건(`knowledge_name`)이나 이벤트의 분류가 여기 든다.
   필요가 확인되면 다시 정한다.
-- 값이 게임을 바꾸는지(`effect`)를 재는 것. 도구가 선 뒤에 키 묶음별로 따로 잰다.
+- 플레이해야 보이는 효과(건물 비용, 거래 가격, 전투, 이벤트 빈도)를 재는 것. 단계 2(§5)가 새 게임의 첫 화면에서 보이는 것까지 잰 뒤에 따로 계획한다.
 - 카탈로그 밖의 파일(`building_constructor\`, `generator\`, `maps\`).
 
-## 6. 위험
+## 7. 위험
 
 | 위험 | 대응 |
 |---|---|
@@ -528,3 +634,8 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 | (1) 프리셋의 값이 게임을 죽인다 | 허용 범위는 잰 것이 없다. `restore`로 되돌린다. 죽인 값을 알게 되면 카탈로그에 범위를 적는다 |
 | (1) `SEEN`을 "반영된다"로 읽는다 | 등급의 뜻을 카탈로그와 `check`의 출력에 적는다. 실측 실행으로 `VERIFIED`를 늘린다 |
 | (1) 커뮤니티의 보고(2024년 빌드)를 이 빌드의 사실로 쓴다 | `effect_by: community`와 출처를 따로 적는다. `runtime` 등급은 이 레포가 잰 것만 올린다 |
+| (2) 바꾼 값 때문에 새 게임이 시작되지 않거나 도중에 끝난다 | 값을 원래 값과 비슷한 크기로 고른다. 그래도 끝나면 그것이 결과다. 되돌리고 보고한다 |
+| (2) 깊이 8의 덤프가 게임을 오래 멈춘다 | 방문 한도(구역마다 800만)가 시간을 묶는다. 사용자에게 미리 알리고, 걸린 시간을 재서 적는다 |
+| (2) 게임 안의 덤프를 하나도 얻지 못한다 | 덤프마다 `present`로 상태를 가린다. 없으면 "확인하지 못함"으로 적고 예비 실행을 승인받는다 |
+| (2) 설정을 들고 있는 자리에서 본 것을 효과로 적는다 | §5.2의 표로만 올린다. 가리기 어려우면 올리지 않는다 |
+| (2) 새 게임이 세이브를 만든다 | 실행 전에 세이브 폴더의 사본을 뜬다. 생긴 파일을 알리고, 지우는 것은 사용자가 정한다 |
