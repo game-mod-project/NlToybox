@@ -11,6 +11,7 @@
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
+#include "core/PeoplePlan.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
@@ -679,7 +680,13 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 42);
+		CHECK(Cheats().size() == 48);
+		// 4단계: 인구·욕구(research/11). 플레이어의 사람을 돌며 쓰는 항목은 모듈의 코드가 한다(src/People.cpp).
+		for (const char* id : { "no_hunger", "no_tiredness", "needs_full", "always_happy", "no_old_age_death" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People && !FindCheat(id)->Verified);
+		// 이주민 보너스는 플레이에서 봤다: 3 을 쓰자 그날 저녁 3명이 왔다.
+		CHECK(FindCheat("daily_migrants") && FindCheat("daily_migrants")->Kind == CheatKind::Number && FindCheat("daily_migrants")->Verified
+			&& FindCheat("daily_migrants")->Min == 0 && FindCheat("daily_migrants")->Max == 50);
 		// 3나-3: 거래·생산·창고 용량(research/10). 게임의 함수가 돌려주는 수에 배율을 곱하는 훅(HookScale)과, 모듈이 자료를 돌며 배율을 쓰는 항목(CustomScale).
 		for (const char* id : { "buy_price", "sell_price", "market_depth", "production_time", "worker_performance" })
 			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::HookScale);
@@ -721,7 +728,9 @@ int main(int argc, char** argv)
 		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
 		for (const AreaInfo& area : Areas())
 		{
-			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time;
+			// 인물·영주·인구는 제 패널(src/People.cpp)이 있다.
+			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time
+				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People;
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
@@ -1024,6 +1033,185 @@ int main(int argc, char** argv)
 
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.
+	Test("인물: 능력치 여덟과 욕구 여섯의 이름", [] {
+		// 능력치의 열쇠는 __soul.__skills.__level 의 이름, 욕구의 차례는 게임의 번호다(research/11).
+		const std::vector<NamedKey>& skills = SkillNames();
+		CHECK(skills.size() == 8);
+		const char* keys[] = { "combat", "command", "education", "knowledge", "management", "manners", "negotiation", "oratory" };
+		for (size_t i = 0; i < skills.size() && i < 8; i++)
+			CHECK_STR(skills[i].Key, keys[i]);
+		const std::vector<const char*>& needs = NeedNames();
+		CHECK(needs.size() == 6);
+		CHECK_STR(needs[0], "수면");
+		CHECK_STR(needs[1], "음식");
+		CHECK_STR(needs[5], "돌봄");
+	});
+
+	Test("인물: 명령의 낱말과 그것이 받는 것", [] {
+		for (const char* word : { "skill_set", "skill_add", "skills_max", "need_set", "needs_fill", "age_set", "happy", "cure", "trait_add", "trait_remove" })
+		{
+			PersonAct act = PersonAct::Cure;
+			CHECK(ParsePersonAct(word, act));
+			CHECK_STR(PersonActWord(act), word);
+		}
+		PersonAct act = PersonAct::Cure;
+		CHECK(!ParsePersonAct("kill", act) && !ParsePersonAct("", act));
+		CHECK(NeedsIndex(PersonAct::SkillSet) && NeedsIndex(PersonAct::SkillAdd) && NeedsIndex(PersonAct::NeedSet));
+		CHECK(!NeedsIndex(PersonAct::SkillsMax) && !NeedsIndex(PersonAct::AgeSet) && !NeedsIndex(PersonAct::Happy));
+		CHECK(NeedsAmount(PersonAct::SkillSet) && NeedsAmount(PersonAct::NeedSet) && NeedsAmount(PersonAct::AgeSet) && !NeedsAmount(PersonAct::Cure));
+		CHECK(NeedsText(PersonAct::TraitAdd) && NeedsText(PersonAct::TraitRemove) && !NeedsText(PersonAct::Happy));
+	});
+
+	Test("인물: 온전하지 않은 명령은 하지 않는다", [] {
+		std::string why;
+		PersonCommand c;
+		c.Who = "25556c3312bce178";
+		c.Act = PersonAct::SkillSet;
+		c.Index = 4;
+		c.Amount = 12;
+		CHECK(CheckPersonCommand(c, why));
+		c.Index = 8;		// 능력치는 여덟이다
+		CHECK(!CheckPersonCommand(c, why) && !why.empty());
+		c.Index = -1;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Index = 0;
+		c.Amount = std::numeric_limits<double>::quiet_NaN();
+		CHECK(!CheckPersonCommand(c, why));
+
+		c.Act = PersonAct::NeedSet;
+		c.Amount = 100;
+		c.Index = 5;
+		CHECK(CheckPersonCommand(c, why));
+		c.Index = 6;		// 욕구는 여섯이다
+		CHECK(!CheckPersonCommand(c, why));
+
+		c.Act = PersonAct::TraitAdd;
+		c.Text = "brave";
+		CHECK(CheckPersonCommand(c, why));
+		c.Text = "Brave!";
+		CHECK(!CheckPersonCommand(c, why));
+		c.Text.clear();
+		CHECK(!CheckPersonCommand(c, why));
+
+		c.Act = PersonAct::Happy;
+		CHECK(CheckPersonCommand(c, why));
+		c.Who.clear();		// 누구인지 없다
+		CHECK(!CheckPersonCommand(c, why));
+	});
+
+	Test("인물: 일괄 명령은 플레이어의 산 사람에게만 간다", [] {
+		// 영주 A, 주민 B, 손님 C(상인의 진영은 unique_guests 였다), 죽은 영주 D, 다른 왕국의 영주 E
+		std::vector<PersonRow> people(5);
+		people[0] = { "aaaa", "A", "player", true, 0, 3, false };
+		people[1] = { "bbbb", "B", "player", false, 0, 1, false };
+		people[2] = { "cccc", "C", "unique_guests", true, 1, 3, false };
+		people[3] = { "dddd", "D", "player", true, 2, 3, true };
+		people[4] = { "eeee", "E", "kingdom_7", true, 3, 3, false };
+		CHECK(IsPlayers(people[0]) && IsPlayers(people[1]) && !IsPlayers(people[2]) && !IsPlayers(people[3]) && !IsPlayers(people[4]));
+
+		CHECK(PickTargets(people, "lords") == std::vector<size_t>{ 0 });
+		CHECK((PickTargets(people, "people") == std::vector<size_t>{ 0, 1 }));
+		// 하나를 짚어 고른 것은 손님이어도 된다(사용자가 골랐다). 죽은 사람과 없는 사람은 안 된다.
+		CHECK(PickTargets(people, "cccc") == std::vector<size_t>{ 2 });
+		CHECK(PickTargets(people, "dddd").empty());
+		CHECK(PickTargets(people, "ffff").empty() && PickTargets(people, "").empty());
+	});
+
+	Test("인물: 쓰는 수는 범위 안의 수로 다듬는다", [] {
+		double out = -1;
+		CHECK(SkillValue(12, out) && out == 12);
+		CHECK(SkillValue(25, out) && out == 20);			// 게임의 최고 등급(get_max_level 이 20 을 돌려줬다)
+		CHECK(SkillValue(-3, out) && out == 0);
+		CHECK(SkillValue(7.6, out) && out == 8);			// 등급은 정수다
+		CHECK(!SkillValue(std::numeric_limits<double>::infinity(), out));
+		CHECK(SkillAfterAdd(19, 5, out) && out == 20);
+		CHECK(SkillAfterAdd(2, -5, out) && out == 0);
+		CHECK(!SkillAfterAdd(std::numeric_limits<double>::quiet_NaN(), 1, out));
+
+		CHECK(NeedValue(150, 100, out) && out == 100);
+		CHECK(NeedValue(-1, 100, out) && out == 0);
+		CHECK(NeedValue(40.5, 100, out) && out == 40.5);
+		CHECK(NeedValue(90, 60, out) && out == 60);			// 상한이 낮아진 욕구는 그 상한까지만
+		CHECK(!NeedValue(50, std::numeric_limits<double>::quiet_NaN(), out) && !NeedValue(50, 0, out));
+
+		CHECK(AgeValue(30.4, out) && out == 30);
+		CHECK(AgeValue(500, out) && out == 120);
+		CHECK(AgeValue(-4, out) && out == 1);
+		CHECK(!AgeValue(std::numeric_limits<double>::quiet_NaN(), out));
+	});
+
+	Test("인물: 특성 이름의 꼴과 치료가 떼는 부상", [] {
+		CHECK(GoodTraitName("brave") && GoodTraitName("pneumonia_st_1") && GoodTraitName("__wolves_wont_attack__"));
+		CHECK(!GoodTraitName("") && !GoodTraitName("a b") && !GoodTraitName("Brave") && !GoodTraitName("brave;x") && !GoodTraitName(std::string(65, 'a')));
+
+		const std::vector<const char*>& wounds = WoundTraits();
+		const auto has = [&](const char* name) {
+			for (const char* wound : wounds)
+				if (std::string(wound) == name)
+					return true;
+			return false;
+		};
+		CHECK(has("bruise_light") && has("cut") && has("wound_deep") && has("burn_heavy"));
+		CHECK(!has("human") && !has("brave") && !has("kid") && !has("lost_head") && !has("dead"));
+		for (const char* wound : wounds)
+			CHECK(GoodTraitName(wound));
+	});
+
+	Test("인구: 켠 항목이 채워 둘 욕구의 번호", [] {
+		CHECK(NeedsToHold(false, false, false).empty());
+		CHECK(NeedsToHold(true, false, false) == std::vector<int>{ 1 });				// 음식
+		CHECK((NeedsToHold(false, true, false) == std::vector<int>{ 0, 2 }));			// 수면, 휴식
+		CHECK((NeedsToHold(true, true, false) == std::vector<int>{ 0, 1, 2 }));
+		CHECK((NeedsToHold(false, false, true) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
+		CHECK((NeedsToHold(true, true, true) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
+	});
+
+	Test("인구: 한 틱에 다루는 사람의 수를 묶는다", [] {
+		// 300명을 40명씩: 여덟 틱에 한 바퀴. 끝에 닿으면 다음은 처음부터다.
+		PeopleSlice slice = NextPeopleSlice(300, 0, 40);
+		CHECK(slice.Begin == 0 && slice.End == 40 && slice.Next == 40 && !slice.Wrapped);
+		slice = NextPeopleSlice(300, 280, 40);
+		CHECK(slice.Begin == 280 && slice.End == 300 && slice.Next == 0 && slice.Wrapped);
+		// 사람이 줄어 자리가 끝을 넘었으면 처음부터 다시 한다.
+		slice = NextPeopleSlice(20, 280, 40);
+		CHECK(slice.Begin == 0 && slice.End == 20 && slice.Next == 0 && slice.Wrapped);
+		slice = NextPeopleSlice(0, 5, 40);
+		CHECK(slice.Begin == 0 && slice.End == 0 && slice.Next == 0 && slice.Wrapped);
+		slice = NextPeopleSlice(10, 0, 0);		// 묶음이 0 이어도 멈추지 않는다(한 명씩)
+		CHECK(slice.Begin == 0 && slice.End == 1);
+	});
+
+	Test("원격 명령: 인물의 줄을 읽는다", [] {
+		RemoteCommand c = ParseRemoteLine("person list");
+		CHECK(c.Error.empty() && c.Verb == "person" && c.Target == "list");
+		c = ParseRemoteLine("person list all=1");
+		CHECK(c.Error.empty() && c.Options.at("all") == "1");
+		c = ParseRemoteLine("person show 25556c3312bce178");
+		CHECK(c.Error.empty() && c.Target == "show" && c.Options.at("who") == "25556c3312bce178");
+
+		c = ParseRemoteLine("person 25556c3312bce178 skill_set index=4 amount=12");
+		CHECK(c.Error.empty() && c.Target == "25556c3312bce178" && c.Options.at("act") == "skill_set" && c.Options.at("index") == "4" && c.Number == 12);
+		c = ParseRemoteLine("person lords skills_max");
+		CHECK(c.Error.empty() && c.Target == "lords" && c.Options.at("act") == "skills_max");
+		c = ParseRemoteLine("person people needs_fill");
+		CHECK(c.Error.empty() && c.Target == "people");
+		c = ParseRemoteLine("person 25556c3312bce178 trait_add name=brave");
+		CHECK(c.Error.empty() && c.Options.at("name") == "brave");
+		c = ParseRemoteLine("person 25556c3312bce178 age_set amount=30");
+		CHECK(c.Error.empty() && c.Number == 30);
+
+		CHECK(!ParseRemoteLine("person").Error.empty());
+		CHECK(!ParseRemoteLine("person lords").Error.empty());										// 무엇을 할지 없다
+		CHECK(!ParseRemoteLine("person lords explode").Error.empty());
+		CHECK(!ParseRemoteLine("person lords skill_set amount=12").Error.empty());					// 번호가 없다
+		CHECK(!ParseRemoteLine("person lords skill_set index=9 amount=12").Error.empty());			// 능력치는 여덟이다
+		CHECK(!ParseRemoteLine("person lords skill_set index=1").Error.empty());					// 수가 없다
+		CHECK(!ParseRemoteLine("person lords trait_add").Error.empty());
+		CHECK(!ParseRemoteLine("person lords trait_add name=Bad!").Error.empty());
+		CHECK(!ParseRemoteLine("person show").Error.empty());
+		CHECK(!ParseRemoteLine("person bad/who happy").Error.empty());								// 누구: 글자·숫자·밑줄만
+	});
+
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {
 		int files = 0;
 		for (const auto& entry : std::filesystem::directory_iterator(g_ProbesDir))

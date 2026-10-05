@@ -5,6 +5,7 @@
 #include "Production.hpp"
 #include "Cheats.hpp"
 #include "Economy.hpp"
+#include "People.hpp"
 #include "Explorer.hpp"
 #include "Tweaks.hpp"
 #include "Ui.hpp"
@@ -159,6 +160,7 @@ void NlMenu::GameTick()
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
 	NlProduction::GameTick(now);
+	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People));
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;
@@ -229,8 +231,22 @@ void NlMenu::Draw()
 		ImGui::Separator();
 		NlEconomy::Draw();
 		break;
+	case Area::Person:
+		NlPeople::DrawPerson();
+		break;
+	case Area::Lord:
+		NlPeople::DrawLords();
+		NlTweaks::DrawArea(page);
+		break;
+	case Area::People:
+		// 표의 항목(욕구, 이주민)을 먼저, 그 아래에 지금 한 번 하는 단추들.
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlPeople::DrawPeople();
+		break;
 	default:
-		// 표의 항목이 없고 배율만 있는 영역(지식, 영주)에서는 "N단계에서 채웁니다"를 적지 않는다.
+		// 표의 항목이 없고 배율만 있는 영역(지식)에서는 "N단계에서 채웁니다"를 적지 않는다.
 		if (NlCheats::HasItems(page) || !NlCore::HasKnobs(page))
 			NlCheats::DrawArea(page);
 		NlTweaks::DrawArea(page);

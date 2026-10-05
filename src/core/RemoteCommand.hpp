@@ -19,6 +19,10 @@
 //   treecall <스크립트 이름> [depth=N] [max=N]      인자 없는 스크립트를 부르고 돌려준 값의 자식들을 늘어놓는다(인자가 없다는 것을 본 스크립트에만)
 //   economy <gold_add|gold_set|all> amount=<수>     금화를 더한다·맞춘다, 모든 자원을 더한다(경제 패널과 같은 길)
 //   economy <add|set> resource=<번호> amount=<수>   자원 하나를 더한다·맞춘다
+//   person list [all=1],  person show <uuid>        사람들의 목록, 한 사람의 값(인물 패널과 같은 것)
+//   person <uuid|lords|people> <할 일> [index=N] [amount=N] [name=글]
+//                                                   인물 패널과 같은 길로 고친다. 할 일: skill_set, skill_add, skills_max, need_set, needs_fill,
+//                                                   age_set, happy, cure, trait_add, trait_remove (core/PeoplePlan)
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close

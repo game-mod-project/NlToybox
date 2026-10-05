@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Economy.hpp"
+#include "People.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
 #include "Recorder.hpp"
@@ -405,6 +406,34 @@ namespace
 		Say("  " + NlEconomy::Do(command));
 	}
 
+	// 인물 패널과 같은 길로 사람을 고친다(NlPeople::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoPerson(const RemoteCommand& C)
+	{
+		std::vector<std::string> lines;
+		if (C.Target == "list")
+			lines = NlPeople::List(C.Options.count("all") > 0);
+		else if (C.Target == "show")
+			lines = NlPeople::Show(C.Options.count("who") ? C.Options.at("who") : std::string());
+		else
+		{
+			NlCore::PersonCommand command;
+			if (!C.Options.count("act") || !NlCore::ParsePersonAct(C.Options.at("act"), command.Act))
+			{
+				Say("  : unknown person command");
+				return;
+			}
+			command.Who = C.Target;
+			command.Index = static_cast<int>(NlCore::OptionNumber(C, "index", -1));
+			command.Amount = C.Number;
+			if (C.Options.count("name"))
+				command.Text = C.Options.at("name");
+			Say("  running person " + C.Target + " " + C.Options.at("act"));		// 죽으면 여기까지 남는다
+			lines = NlPeople::Do(command);
+		}
+		for (const std::string& line : lines)
+			Say("  " + line);
+	}
+
 	void DoState()
 	{
 		double game_time = 0, warp = 0;
@@ -430,6 +459,8 @@ namespace
 			DoAbout(C);
 		else if (C.Verb == "economy")
 			DoEconomy(C);
+		else if (C.Verb == "person")
+			DoPerson(C);
 		else if (C.Verb == "cheat")
 		{
 			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
