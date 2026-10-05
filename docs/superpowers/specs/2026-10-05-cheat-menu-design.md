@@ -125,6 +125,8 @@ Present 훅 (게임 스레드)                 EVENT_OBJECT_CALL 콜백 (게임 
 | `src/Explorer` | 탐색기(§7): 훑기, 고치기, 즐겨찾기와 잠금, 찾기 | `Access`, `Search` |
 | `src/Cheats` | 치트 표의 항목을 적용하고(켜기, 수, 훅, 배율) 영역의 패널을 그린다. 속도는 게임의 함수로 걸고 흐름은 `Rate`로 잰다 | `Access`, `CheatTable`, `Recorder`, `Rate` |
 | `src/Production` | 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법). 3나-3 | `Access`, `Cheats`, `core/CostBook` |
+| `src/core/PeoplePlan` | 인물 패널의 러너와 무관한 부분: 능력치·욕구의 이름, 명령의 꼴, 대상 고르기, 쓰는 수 다듬기, 표 항목이 사람을 도는 바퀴 | 없음 |
+| `src/People` | 인물·영주·인구 패널과 표의 인구 항목(4단계). 사람을 uuid 로 가리키고 틱에서 읽고 쓴다 | `Access`, `Cheats`, `core/PeoplePlan` |
 | `src/Menu` | 왼쪽 목록과 오른쪽 패널, 상태 줄, 상태 파일 | `Explorer`, `Cheats`, `Tweaks`, `CheatState` |
 
 `src/core`의 것은 `tests/native`에서 시험한다. 기존 `Tweaks`(배율 7개)는 2단계에서는 "배율" 항목으로 그대로 두고 3단계에서 영역으로 옮긴다.
@@ -239,15 +241,15 @@ lock inst:o_character:0.starving_hours=0
 | | 건설비 무료, 업그레이드 무료·즉시 | B 건설 비용의 자리를 찾는다(`building_resources`의 게임 안 자리). 안 되면 D. C `set_level` | 3 |
 | | 생산량·생산 속도·재료 소비·작업 효율 | D 배율: `resource_production_points_cost_get`, `get_worker_base_performance_factor`. B: 조리법(`__production.__map_of_production`)의 수와 재료 | 3 |
 | | 작업 효율, 노동력 무시 | B 건물의 `c_workplace`, `__cached_efficiency` 둘레에서 찾는다. 안 되면 D | 3 |
-| 인물 | 능력치 올리기·내리기·설정·최대, 경험치 | B `__soul` → `get_skills`가 읽는 자리를 찾는다 | 4 |
-| | 건강, 피로, 스트레스, 행복, 충성, 관계, 욕구 | B `get_minds`·`get_motive`가 읽는 자리. 부상·질병은 C `cure_all_disease` | 4 |
-| | 나이, 성별, 특성 더하기·빼기, 소속, 직업, 장비 | C `trait_attach`·`trait_detach`, A `is_show_traits_windows`, B `__soul`의 값 | 4 |
-| 영주 | 전원 능력치·충성·호감 최대, 상태 회복 | 인물의 것을 플레이어 진영의 `o_character` 전부에 건다 | 4 |
-| | 영입 비용 0, 체류 시간, 영입·해고·이동 | B `free_lord_stay_duration`(있음), 영입은 C 를 기록해서 | 4 |
-| 인구·욕구 | 인구 추가·제거·상한 | C `rebellion_debug_spawn_player_dummy`, `debug_spawner` | 4 |
-| | 배고픔·피로·스트레스 없음, 욕구 충족 | B `starving_hours` 잠금, `o_debug.debug_rest_decrease_per_hour`, 욕구의 자리를 찾는다 | 2(일부), 4 |
-| | 식량·음료 소비 없음 | D (소비하는 스크립트를 기록기로 찾는다) | 4 |
-| | 출생 즉시, 임신 확률, 성장 속도, 노화 정지, 사망 방지 | B `pregnancy_*`(게임플레이 변수), `debug_is_can_die_of_old_age`, D | 4 |
+| 인물 | 능력치 올리기·내리기·설정·최대, 경험치 | B `__soul.__skills.__level.<이름>`에 바로 쓴다(0~20. 게임의 인물 창에 보인다). 경험 점수(`__points`)와 경험 배율은 아직 | 4(됨) |
+| | 건강, 피로, 스트레스, 행복, 충성, 관계, 욕구 | 욕구: B `__soul.__motive.__motive[6]`. 행복: C `Minds.attach_generic_mind`(디버그용 생각 +100). 건강: C `cure_all_disease`·`cure_bleeding` + 부상 특성 떼기. 충성·관계는 아직 | 4(충성·관계 빼고 됨) |
+| | 나이, 성별, 특성 더하기·빼기, 소속, 직업, 장비 | 나이: C `set_age`. 특성: C `Traits.trait_attach`·`trait_detach`(게임의 282개 이름). 성별·소속·직업·장비는 아직 | 4(나이·특성 됨) |
+| 영주 | 전원 능력치·충성·호감 최대, 상태 회복 | 인물의 것을 플레이어 진영(`__faction.__system_name == "player"`)의 산 `o_character` 전부에 건다: 능력치 20, 욕구, 행복, 치료. 충성·호감은 아직 | 4(됨) |
+| | 영입 비용 0, 체류 시간, 영입·해고·이동 | B `free_lord_stay_duration`(배율로 있음). 영입·해고·이동과 비용은 재지 못했다 | 5 이후 |
+| 인구·욕구 | 인구 추가·제거·상한 | 추가: B 이주 관리자의 `__next_day_migrants_bonus`(다음 이주 때 그만큼 더 온다). 소환 함수는 인자의 형을 몰라 쓰지 않았다. 제거·상한은 아직 | 4(추가 됨) |
+| | 배고픔·피로·스트레스 없음, 욕구 충족 | B 모듈이 플레이어의 사람을 돌며 욕구 칸을 상한으로 써 둔다(배고픔 없음, 피로 없음, 모든 욕구). 행복은 디버그용 생각을 붙여 둔다 | 4(됨) |
+| | 식량·음료 소비 없음 | 욕구를 채워 두면 먹지 않는다(2.6시간 동안 음식의 수가 그대로였다. 하루를 돌린 대조는 아직) | 4(확인 전) |
+| | 출생 즉시, 임신 확률, 성장 속도, 노화 정지, 사망 방지 | 노화로 죽지 않음: B 인물마다의 `__aging.__old.__debug_is_can_die_of_old_age`(써지는 것까지 봤다). 임신·출생·성장은 아직(`ComponentPregnancy.begin_pregnant`, `debug_pregnancy_next_stage`가 있다) | 4(일부) |
 | 지식 | 전부·하나 해금, 즉시 완료, 선행조건 무시 | B `__knowledge_manager`, `__knowledge_unlockeds`. 안 되면 C | 5 |
 | | 연구 시간·비용·속도, 책 효과 | B 지식 구조체의 값(교본 경험은 있다) | 5 |
 | 아이템 | 아이템·장비 생성·삭제·수량, 최고 등급 지급 | C `add_resource`, 인물의 `get_inventory`·`get_equipment`, `__battle_equipment_editor` | 5 |
@@ -300,7 +302,7 @@ lock inst:o_character:0.starving_hours=0
 | 3나-1 | 경제 패널: 금화와 영지 창고의 자원을 게임의 함수로 바꾼다. 게임 속도를 게임의 함수로 건다. 계획: `plans/2026-10-05-cheat-menu-stage3b-economy.md` | 금화·자원·게임 속도의 효과를 화면에서 봤다(`research/08`. 0.6.1 까지 확인) |
 | 3나-2 | 건설비 무료, 건설 조건 제거, 업그레이드 조건 제거, 즉시 업그레이드. 계획: `plans/2026-10-05-cheat-menu-stage3c-build.md` | 됐다(모듈 0.8.1, `research/09`). 조건은 지식의 판정 함수를 바꿔 풀고, 비용은 건물 종류의 등급별 비용을 0 으로 쓰고, 업그레이드는 게임의 `build_instantly()`로 끝낸다. 사용자가 잠긴 건물을 짓고 자원 없이 올리는 것을 봤다. 건설 창의 잠금 표시 지우기만 확인 전 |
 | 3나-3 | 거래, 창고 용량, 생산. 배율 7개를 제 영역으로, 속도 시험의 정리. 계획: `plans/2026-10-05-cheat-menu-stage3d-production.md` | 됐다(모듈 0.9.1, `research/10`). 창고 용량과 생산 배율 셋(시간·작업 효율·생산량)은 플레이에서 확인. 거래 배율은 함수까지만(상단이 없었다), 생산 재료 없음은 게임의 판정까지만. 임금·세금·유지비·노동력은 재지 못해 만들지 않았다 |
-| 4 | 인물, 영주, 인구·욕구 | 고른 인물의 편집과 일괄 버튼의 효과를 본다 |
+| 4 | 인물, 영주, 인구·욕구. 계획: `plans/2026-10-06-cheat-menu-stage4-people.md` | 됐다(모듈 0.10.1, `research/11`). 한 사람의 능력치·욕구·나이·특성·행복·치료, 영주 전원·사람 전원의 일괄, 욕구 유지·언제나 행복·추가 이주민을 플레이에서 확인했다(능력치는 게임의 인물 창으로). 노화로 죽지 않음은 깃발까지만. 충성·관계, 영입, 인구 줄이기, 임신·출생, 성별·소속·직업·장비는 재지 못해 만들지 않았다 |
 | 5 | 지식, 아이템, 군대·전투 | 해금, 아이템 지급, 병사·전투 항목의 효과를 본다 |
 | 6 | 외교, 종교, 이벤트, 월드 | 관계 설정, 종교 값, 이벤트 강제 실행, 지도 공개의 효과를 본다 |
 | 7 | 프리셋, 유틸 | 18개 영역의 항목이 모두 `Verified`다 |

@@ -18,6 +18,7 @@ add_library(nlcore STATIC
   src/core/CostBook.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
+  src/core/PeoplePlan.cpp
   src/core/Rate.cpp
   src/core/RemoteCommand.cpp
   src/core/Text.cpp
@@ -51,6 +52,7 @@ add_library(nltoybox SHARED
   src/Finder.cpp
   src/Game.cpp
   src/Menu.cpp
+  src/People.cpp
   src/Recorder.cpp
   src/Remote.cpp
   src/Search.cpp

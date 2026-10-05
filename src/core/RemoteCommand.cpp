@@ -3,6 +3,7 @@
 #include "AskPath.hpp"
 #include "CheatTable.hpp"
 #include "EconomyPlan.hpp"
+#include "PeoplePlan.hpp"
 #include "Text.hpp"
 
 #include <cmath>
@@ -277,6 +278,62 @@ namespace NlCore
 				return fail("economy " + tokens[1] + " needs resource=<index>");
 			if (!NeedsResource(act) && given != command.Options.end())
 				return fail("economy " + tokens[1] + " takes no resource");
+		}
+		else if (verb == "person")
+		{
+			// person list [all=1]                                       플레이어의 영주들(all 이면 주민과 손님까지)
+			// person show <uuid>                                        그 사람의 값들
+			// person <uuid|lords|people> <할 일> [index=N] [amount=N] [name=글]
+			if (count >= 2 && tokens[1] == "list")
+			{
+				command.Target = "list";
+				options(2);
+				return command;
+			}
+			if (count >= 2 && tokens[1] == "show")
+			{
+				if (count != 3 || !GoodWho(tokens[2]))
+					return fail("person show needs one uuid");
+				command.Target = "show";
+				command.Options["who"] = tokens[2];
+				return command;
+			}
+			PersonCommand person;
+			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
+				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove)");
+			command.Target = tokens[1];
+			if (!options(3))
+				return command;
+			command.Options["act"] = tokens[2];
+			person.Who = tokens[1];
+			double index = -1;
+			const auto given = command.Options.find("index");
+			// 정수로 바꾸기 전에 범위를 본다(inf 나 1e300 을 int 로 바꾸는 것은 정의되지 않은 동작이다).
+			if (given != command.Options.end() && (!ParseNumber(given->second, index) || !std::isfinite(index) || index != std::floor(index) || index < 0 || index >= 1000))
+				return fail("person index= needs a whole number");
+			person.Index = static_cast<int>(index);
+			const auto amount = command.Options.find("amount");
+			if (NeedsAmount(person.Act) && (amount == command.Options.end() || !ParseNumber(amount->second, command.Number)))
+				return fail(std::string("person ") + tokens[2] + " needs amount=<number>");
+			person.Amount = command.Number;
+			const auto name = command.Options.find("name");
+			if (name != command.Options.end())
+				person.Text = name->second;
+			if (NeedsIndex(person.Act))
+			{
+				const size_t limit = person.Act == PersonAct::NeedSet ? NeedNames().size() : SkillNames().size();
+				if (person.Index < 0 || static_cast<size_t>(person.Index) >= limit)
+					return fail(std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(limit - 1) + ">");
+			}
+			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
+				return fail(std::string("person ") + tokens[2] + " needs name=<trait name>");
+			if (NeedsText(person.Act) && IsProtectedTrait(person.Text))
+				return fail(std::string("person ") + tokens[2] + " does not take that trait (species and death states are protected)");
+			if (IsBulkWho(person.Who) && !(person.Act == PersonAct::SkillsMax || person.Act == PersonAct::NeedsFill || person.Act == PersonAct::Happy || person.Act == PersonAct::Cure))
+				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure (name one person for the rest)");
+			std::string why;
+			if (!CheckPersonCommand(person, why))
+				return fail(std::string("person ") + tokens[2] + " cannot be read");
 		}
 		else if (verb == "cheat")
 		{
