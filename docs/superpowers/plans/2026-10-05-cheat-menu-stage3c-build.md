@@ -187,7 +187,7 @@ pwsh -NoProfile -File tools/session.ps1 -Action stop -Name stage3c-session1
 ### Task 4: 확인 실행, 문서, 머지
 
 - [x] 독립 코드 검토(`dfe8c1a`. code-reviewer, opus): Critical 1, Important 7 → 시험과 함께 고쳤다(모듈 0.7.1. 아래 "검토에서 고친 것").
-- [ ] 실행 묶음 1회(사용자 승인). 세이브의 사본을 뜬 뒤 켠다. 위험한 호출은 요청마다 따로, 그 요청의 맨 뒤에 둔다. `cheat … on`과 그 결과를 묻는 줄은 한 요청에 넣지 않는다
+- [x] (한 것: 아래 "Task 4 의 결과") 실행 묶음 1회(사용자 승인). 세이브의 사본을 뜬 뒤 켠다. 위험한 호출은 요청마다 따로, 그 요청의 맨 뒤에 둔다. `cheat … on`과 그 결과를 묻는 줄은 한 요청에 넣지 않는다
   (훅은 0.5초, 비용은 1초 안에 적용된다).
   1. 적재 판정(`NlToyBox 0.7.1 loaded`). 사용자가 시험용 세이브를 불러와 일시정지한다.
   2. `call gml_Script_get_generic_building s:altar` → struct(모듈이 이 스크립트를 처음 부른다. 게임이 (string)으로 부르는 것을 기록한 꼴이다).
@@ -204,6 +204,13 @@ pwsh -NoProfile -File tools/session.ps1 -Action stop -Name stage3c-session1
   10. `cheat build_marks on` → 사용자가 건설 창을 연 화면(`shot`). 끈다.
   11. `cheat … off`를 모두 보내고 `state`, 끈다(`session.ps1 -Action stop -Name stage3c-session2`). 사용자의 `NlToyBox.cheats.txt`가 켜기 전과 같은지 본다.
 - [ ] `research/09-build.md`, `CLAUDE.md`, `README.md`, 스펙 §10·§13. `git merge --no-ff feat/cheat-build` → `develop`.
+
+### Task 4 의 결과 (2026-10-05)
+
+- 실행은 정한 차례대로 가지 않았다: 사용자가 모드창에서 건설 영역의 항목을 직접 모두 켜고 짓고 올렸다. 그래서 4·5·6·8 은 그 옆에서 값을 읽어 확인했고, 7·9 는 사용자의 저장(19:55)과 다시 켠 실행으로 쟀다.
+  10(`build_marks`의 화면)은 하지 못했다. 답은 `research/09-build.md`의 "확인 실행".
+- 실행 중에 사용자가 "건물 즉시 업그레이드도 추가 필요"를 청했다. 그 실행에서 길을 찾아(`c_construction.build_instantly()`) 0.8.0 에 넣고, 사용자 승인으로 한 번 더 켜서 모듈의 항목으로 확인했다.
+- 잰 뒤에 굳힌 것(0.8.1): `build_free`와 `instant_upgrade`의 `Verified`를 참으로. 0 으로 쓴 비용이 세이브에 남지 않는 것을 쟀으므로 설명의 "켠 채로 저장하지 말 것"을 지웠다.
 
 ### 검토에서 고친 것 (0.7.1)
 

@@ -750,12 +750,11 @@ int main(int argc, char** argv)
 		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
 		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
 		CHECK(FindCheat("build_free") && FindCheat("build_free")->Kind == CheatKind::Custom && FindCheat("build_free")->Where == Area::Build);
-		// 비용 없음은 플레이에서 봤다(research/09: 돼지 농장을 짓고 올려도 나무가 줄지 않았다). 하지만 켠 것을 다음 실행까지 기억하지는 않는다:
-		// 0 으로 쓴 비용이 세이브에 들어가는지 재지 않았다. 창을 열지도 않았는데 불러온 게임의 비용이 0 이 되지 않게 한다.
-		CHECK(FindCheat("build_free")->Verified && !FindCheat("build_free")->Remember);
-		CHECK(FindCheat("build_any")->Remember && FindCheat("instant_build")->Remember);
-		// 즉시 업그레이드: 업그레이드 중인 건물에 게임의 build_instantly() 를 부른다(모듈의 코드가 한다).
+		// 비용 없음은 플레이에서 봤다(research/09: 돼지 농장을 짓고 올려도 나무가 줄지 않았다. 켠 채 저장한 세이브를 불러와도 비용은 원래 값이었다).
+		CHECK(FindCheat("build_free")->Verified);
+		// 즉시 업그레이드: 업그레이드 중인 건물에 게임의 build_instantly() 를 부른다(모듈의 코드가 한다). 사용자가 누른 주택 세 채가 바로 올랐다.
 		CHECK(FindCheat("instant_upgrade") && FindCheat("instant_upgrade")->Kind == CheatKind::Custom && FindCheat("instant_upgrade")->Where == Area::Build);
+		CHECK(FindCheat("instant_upgrade")->Verified);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
 		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
@@ -800,12 +799,12 @@ int main(int argc, char** argv)
 		// 확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다: 창을 열지도 않았는데 게임의 판정이 바뀌거나(build_marks 는 지식 창도 쓰는 함수다)
 		// 건설비가 0 으로 쓰여 세이브에 굳는 일(build_free. 세이브에 들어가는지 재지 않았다)이 없게.
 		CheatState hooks;
-		hooks.On = { "build_any", "build_free", "build_marks", "rest_decrease", "build_all" };
+		hooks.On = { "build_any", "build_free", "build_marks", "instant_upgrade", "rest_decrease", "build_all" };
 		const CheatState kept_hooks = KeepKnown(hooks);
 		CHECK(FindCheat("build_any")->Verified && !FindCheat("build_marks")->Verified);
-		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_all" }));		// 값을 쓰는 스위치(Toggle)는 확인 전이어도 그대로다
-		// 기억하지 않는 항목(Remember 가 거짓)은 확인한 것이어도 꺼진 채로 시작한다.
-		CHECK(FindCheat("build_free")->Verified && kept_hooks.On.count("build_free") == 0);
+		// 확인한 훅·모듈 항목은 남고(build_any, build_free, instant_upgrade) 확인 전의 것(build_marks)은 빠진다.
+		// 값을 쓰는 스위치(Toggle: build_all)는 확인 전이어도 그대로다.
+		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free", "instant_upgrade", "build_all" }));
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
