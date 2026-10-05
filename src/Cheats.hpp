@@ -43,7 +43,7 @@ namespace NlCheats
 	// 수가 있는 항목을 그 수로 켠다(범위 안으로 당긴다). 수가 없는 항목이거나 없는 Id 면 거짓.
 	bool SetNumber(const std::string& Id, double Value);
 
-	// 켜 둔 항목의 수(게임 속도를 걸었으면 하나 더).
+	// 켜 둔 항목의 수.
 	int ActiveCount();
 	// 모두 끄고 원래 값으로 되돌린다.
 	void ReleaseAll();

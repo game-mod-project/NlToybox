@@ -4,7 +4,7 @@
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
 #include "core/Hooks.hpp"
-#include "core/SpeedControl.hpp"
+#include "core/Rate.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -60,28 +60,28 @@ namespace
 			g_Log(Line);
 	}
 
-	// 게임 속도(core/SpeedControl). 후보의 이름은 덤프의 o_time_controller 에서 봤다. 어느 것이 속도를 정하는지는 모른다:
-	// 처음 누를 때 차례로 써 보고 __game_time 의 흐름으로 고른다(스펙 §9). 읽고 쓰는 일은 틱에서만 일어난다.
-	NlCore::SpeedControl& Speed()
+	// 게임 시간의 흐름을 재서 보여 준다(건 배속이 먹었는지 눈으로 본다. 배속 1 에서 실제 1초에 약 60 이었다. research/08).
+	// 창이 열려 있는 동안만 잰다. 배속은 게임의 함수로 건다(위의 k_SetWarp).
+	constexpr const char* k_GameTime = "inst:o_time_controller.__game_time";
+	constexpr const char* k_TimeWarp = "inst:o_time_controller.time_warp";
+	NlCore::Rate g_Flow(1.0);
+	bool g_TimeFound = false;		// 아래는 GameTick 이 채우는 스냅샷
+	double g_FlowNow = 0, g_WarpNow = 0;
+
+	void MeasureFlow(double Now, bool Visible)
 	{
-		static NlCore::SpeedControl control(
-			NlCore::SpeedPaths{
-				"inst:o_time_controller.__game_time",
-				"inst:o_time_controller.time_warp",
-				{
-					{ "time_warp_new", "inst:o_time_controller.time_warp_new", "", "" },
-					{ "time_warp", "inst:o_time_controller.time_warp", "", "" },
-					{ "__debug_custom_wrap", "inst:o_time_controller.__debug_custom_wrap", "", "" },
-					{ "time_speed_variants[time_speed_index]", "", "inst:o_time_controller.time_speed_variants",
-						"inst:o_time_controller.time_speed_index" },
-				},
-			},
-			NlCore::SpeedIo{
-				[](const std::string& path, double& out) { return NlAccess::ReadNumber(path, out); },
-				[](const std::string& path, double value, std::string& why) { return NlAccess::WriteNumber(path, value, why); },
-				[](const std::string& line) { Log(line); },
-			});
-		return control;
+		double time = 0;
+		g_TimeFound = Visible && NlAccess::ReadNumber(k_GameTime, time);
+		if (!g_TimeFound)
+		{
+			g_Flow.Reset();
+			g_FlowNow = 0;
+			return;
+		}
+		g_Flow.Add(Now, time);
+		g_FlowNow = g_Flow.Ready() ? g_Flow.PerSecond() : 0;
+		if (!NlAccess::ReadNumber(k_TimeWarp, g_WarpNow))
+			g_WarpNow = 0;
 	}
 
 	// ---- 게임 스레드 ----
@@ -341,7 +341,7 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 void NlCheats::GameTick(double Now, bool Visible)
 {
 	std::lock_guard lock(g_Mutex);
-	Speed().Tick(Now, Visible);		// 흐름을 재서 보여 준다. 배속은 아래에서 게임의 함수로 건다
+	MeasureFlow(Now, Visible);		// 흐름을 재서 보여 준다. 배속은 아래에서 게임의 함수로 건다
 
 	if (g_WarpAsked > 0)
 	{
@@ -403,21 +403,20 @@ void NlCheats::DrawArea(Area Where)
 void NlCheats::DrawTime()
 {
 	std::lock_guard lock(g_Mutex);
-	NlCore::SpeedControl& speed = Speed();
 	ImGui::TextWrapped("배속을 누르면 게임의 함수로 게임 속도를 겁니다. 게임 화면에서, 일시정지를 푼 채로 누르세요. "
 		"게임의 속도 단추를 누르면 게임의 배속으로 돌아갑니다.");
 	ImGui::Spacing();
 
-	if (!speed.TimeFound())
+	if (!g_TimeFound)
 		ImGui::TextDisabled("시간 컨트롤러(o_time_controller)가 아직 없습니다.");
 	else
 	{
-		ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", speed.Flow());		// 배속 1 에서 약 60 이었다(research/08)
+		ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", g_FlowNow);		// 배속 1 에서 약 60 이었다(research/08)
 		ImGui::SameLine();
-		ImGui::TextDisabled("time_warp %s", Shortest(speed.Warp()).c_str());
+		ImGui::TextDisabled("time_warp %s", Shortest(g_WarpNow).c_str());
 	}
 
-	ImGui::BeginDisabled(!speed.TimeFound());
+	ImGui::BeginDisabled(!g_TimeFound);
 	for (const double factor : k_Factors)
 	{
 		const std::string label = "x" + Shortest(factor);
@@ -534,7 +533,7 @@ int NlCheats::ActiveCount()
 {
 	std::lock_guard lock(g_Mutex);
 	const auto on = std::count_if(g_Items.begin(), g_Items.end(), [](const Item& item) { return item.On; });
-	return static_cast<int>(on) + (Speed().Wanted() > 0 || Speed().Busy() ? 1 : 0);
+	return static_cast<int>(on);
 }
 
 void NlCheats::ReleaseAll()
@@ -543,6 +542,4 @@ void NlCheats::ReleaseAll()
 	for (Item& item : g_Items)
 		if (item.On)
 			TurnOff(item);
-	if (Speed().Wanted() > 0 || Speed().Busy())
-		Speed().Release();
 }
