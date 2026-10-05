@@ -2,7 +2,8 @@ param(
     [Parameter(Mandatory)][string]$Request,
     [Parameter(Mandatory)][string]$Out,
     [int]$TimeoutSec = 240,
-    [int]$GraceSec = 15
+    [int]$GraceSec = 15,
+    [switch]$Beep      # 메뉴 덤프가 끝났을 때 알림음을 낸다. 기본은 조용하다
 )
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'common.ps1')
@@ -63,7 +64,7 @@ try {
         if ($repeat -and -not $toldMenu -and ($lines -match '^dump menu done')) {
             $toldMenu = $true
             Write-Host "메뉴 덤프가 끝났습니다 ($(Get-Date -Format 'HH:mm:ss')). 이제 새 게임을 시작해 주세요."
-            try { [Console]::Beep(880, 300) } catch { }
+            if ($Beep) { try { [Console]::Beep(880, 300) } catch { } }
         }
         if (-not $repeat -and ($lines -contains 'dump done')) { $done = $true; break }
     }

@@ -3,8 +3,8 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1은 계획을 썼다
-  (`docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거는 `research/03-data-files.md`)
+- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1 완료
+  (계획 `docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거 `research/03-data-files.md`, 실측 결과 `research/04-overlay-verify.md`)
 
 ## 1. 목적
 
@@ -359,7 +359,8 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 ```
 
 - 연산은 `set`(수를 지정)과 `mul`(바닐라 값에 곱함) 둘이다. `mul`에는 `round`(`ceil`, `floor`, `nearest`)를 줄 수 있다.
-  `nearest`는 반을 올린다. 곱한 값은 유효숫자 12자리로 다듬는다(0.1 × 3이 0.30000000000000004가 되지 않게).
+  `nearest`는 반을 올린다. 1을 곱하면 그대로이고 정수끼리의 곱은 정확하다. 그 밖의 곱은 유효숫자 15자리로 다듬는다
+  (0.1 × 3이 0.30000000000000004가 되지 않게).
 - **수만 바꾼다.** 문자열, 불리언, `null`, 객체, 배열에 닿는 변경은 오류다.
 - 경로: 점으로 키를 잇고, `*`는 객체의 모든 키, `[n]`과 `[*]`는 배열 첨자다. 점·공백·대괄호·별표·따옴표가 든 키는
   `paper["messenger_cost "]`처럼 JSON 문자열로 적는다. 점 뒤의 수는 키다(`unit_skill_stage.1`).
@@ -385,7 +386,7 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 
 | `runtime` — 이 레포가 이 빌드에서 잰 것 | |
 |---|---|
-| `VERIFIED` | 파일의 값을 바꿔서 런타임에서 그 값을 봤다 |
+| `VERIFIED` | 파일의 값을 바꿔서 런타임에서 그 값을 봤다. 어디서 봤는지는 `note`에 적는다. 그 파일을 읽은 ds_map에서만 본 것도 여기 든다(값이 메모리에 올라왔다는 뜻이지 게임이 쓴다는 뜻이 아니다) |
 | `SEEN` | 바닐라 값이 같은 이름으로 런타임에 있는 것을 봤다. 코드의 기본값이 같은 경우와 가려지지 않는다 |
 | `UNSEEN` | 런타임에서 본 적이 없다 |
 
@@ -399,7 +400,8 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 - `runtime`이 `UNSEEN`이거나 묶음에 `"experimental": true`가 있으면 **실험 키**다. 프리셋에 `"allow_experimental": true`가 있어야 바꿀 수 있다.
 - `min`, `max`는 허용 범위다. 지금은 잰 것이 없어 아무 묶음에도 적지 않는다. 범위를 재면 적는다.
 - 세이브에 굳는지, 새 게임이 필요한지는 잰 것이 없다. 칸을 두지 않고, 재면 더한다.
-- 지금의 카탈로그는 파일 125개의 수 1,437개 가운데 1,155개를 다룬다: VERIFIED 5, SEEN 234, UNSEEN 916(`research/03`).
+- 지금의 카탈로그는 파일 125개의 수 1,437개 가운데 1,155개를 다룬다: VERIFIED 34, SEEN 219, UNSEEN 902
+  (단계 1의 실측 전에는 5, 234, 916이었다. `research/03`, `research/04`).
   지식 파일의 `tag`, `available_parameters[n].type`, `hint_fields.*`는 올리지 않는다.
 - 카탈로그에는 키의 이름과 등급, 파일의 해시만 둔다. 게임 파일의 값은 두지 않는다(저작물 경계). 값까지 든 표는
   `keys` 명령으로 `refs\registry\`에 뽑는다(추적 안 함).
@@ -408,8 +410,9 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 게임 파일이 바닐라일 때(Steam 설치나 무결성 검사 직후) `pin` 명령으로 만든다.
 
 등급을 올리는 길: 그 키를 흔치 않은 값으로 바꾸는 프리셋을 입히고, `probe-request`로 요청 파일을 만들어 `tools/probe.ps1`로
-메인 메뉴의 덤프를 받고, `verify`로 판정한다. 값이 런타임에 있고 그 경로에 키 이름이 보이면(`anchored`) `VERIFIED`로 올리고
-근거를 `research/`에 적는다.
+메인 메뉴의 덤프를 받고, `verify`로 판정한다. 값이 런타임에 있고 그 경로의 이름 조각 하나가 키 이름과 같으면(`anchored`.
+더 긴 이름의 일부인 것은 치지 않는다) `VERIFIED`로 올리고 근거를 `research/`에 적는다. 값은 게임 JSON 어디에도 없는 수로 고르고,
+이미 `VERIFIED`인 키 하나를 양성 대조로 함께 바꾼다. 양성 대조가 `anchored`가 아니면 그 실행의 `absent`를 믿지 않는다.
 
 ### 4.4 적용과 복원
 
@@ -419,12 +422,15 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
   사용자에게 Steam 무결성 검사나 `tools/data-restore.ps1`을 안내한다.
 - 적용 전에 확인한다: 게임이 꺼져 있다(래퍼), 카탈로그와 프리셋의 `game_version`이 지금 exe 버전과 같다, 프리셋 전체가 오류 없이 계산된다.
   하나라도 어긋나면 아무것도 쓰지 않는다.
-- 스냅샷이 없는 파일은 바닐라일 때만 스냅샷을 뜬다. 스냅샷이 있으면 그 해시가 `files.json`과 같은지 본다(고친 파일에서 뜬 스냅샷을 믿지 않는다).
+- 스냅샷은 프리셋 전체의 계산이 끝난 뒤, 실제로 바뀌는 파일만 뜬다. 바닐라일 때만 뜨고, 읽은 바이트의 해시를 `files.json`과 다시 견준다.
+  스냅샷이 이미 있으면 그 해시가 `files.json`과 같은지 본다(고친 파일에서 뜬 스냅샷을 믿지 않는다). 스냅샷은 원본의 수정 시각을 물려받는다.
 - **적용은 항상 바닐라에서 출발한다.** 차례: (1) 앞서 입힌 파일을 모두 바닐라로 되돌린다, (2) 새 상태를 `state.json`에 적는다,
   (3) 새 내용을 쓴다. 프리셋을 바꿔도 변경이 쌓이지 않는다. 이 차례로 하면 어느 쓰기에서 죽어도 게임 파일은
   바닐라 아니면 `state.json`에 적힌 해시다(모르는 것이 되지 않는다).
 - 파일은 임시 파일에 쓴 뒤 바꿔치기한다(`<이름>.nltoybox-tmp`). 반쯤 쓰인 파일이 남지 않는다.
-- 복원은 입힌 파일을 스냅샷으로 되돌리고, 다시 읽어 대조하고, `state.json`을 지운다.
+- 복원은 입힌 파일을 스냅샷으로 되돌리고(수정 시각도), 다시 읽어 대조하고, `state.json`을 지운다.
+- 쓰는 도중에 실패하면(읽기 전용 파일, 다른 프로그램이 잡은 파일) 무엇을 할지 알린다: 다시 `apply`하거나 `restore`한다.
+  그때 `status`는 "부분 적용"이라고 알리고 종료 코드 1을 낸다. 모르는 파일이 있을 때는 프리셋을 "알 수 없다"고 적는다.
 - 상태는 `backups\overlay\<게임 버전>\state.json`에 둔다. 스냅샷 폴더에 두면 `data-restore.ps1`이 게임 폴더로 복사한다.
 - 게임이 갱신돼 exe 버전이 바뀌면 그 버전의 카탈로그가 없어 래퍼가 거부한다.
 
@@ -449,10 +455,10 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 | `restore` | 바닐라로 되돌린다 | 쓴다 |
 | `status` | 파일마다의 상태와 입혀진 프리셋의 이름 | 아니다 |
 | `keys [-Out <파일>] [-File <패턴>]` | 카탈로그 파일에 든 수를 모두 적는다(경로, 바닐라 값, 등급). 카탈로그에 없는 키도 나온다 | 아니다 |
-| `pin` | `keys.json`의 파일 패턴을 게임 폴더에서 찾아 `files.json`을 만든다 | 아니다 (레포에 쓴다) |
+| `pin` | `keys.json`의 파일 패턴을 게임 폴더에서 찾아 지금의 해시로 `files.json`을 만든다. 프리셋이 입혀져 있으면(이 버전이든 옛 버전이든) 거부한다. 지금의 파일이 바닐라인지는 알 수 없으므로 Steam 무결성 검사 직후에만 돌린다 | 아니다 (레포에 쓴다) |
 | `scan` | 게임 폴더의 모든 `*.json`을 읽어 본다: 읽히는가, 같은 글을 다시 쓰면 바이트가 같은가, 값이 표준 파서와 같은가 | 아니다 |
 | `probe-request -Preset <파일> -Out <파일>` | 프리셋이 쓰는 값을 런타임에서 찾는 요청 파일을 만든다 | 아니다 |
-| `verify -Preset <파일> -Dump <파일>` | 덤프에서 프리셋의 값을 찾아 `anchored` / `value-only` / `absent`로 판정한다 | 아니다 |
+| `verify -Preset <파일> -Dump <파일>` | 덤프에서 프리셋의 값을 찾아 `anchored` / `value-only` / `absent`로 판정한다. 덤프에 찾기 구역이 없거나 끊겼으면 `absent` 대신 `unknown`을 적는다 | 아니다 |
 
 ### 4.7 시험
 
@@ -468,8 +474,9 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 도구를 만든 뒤 게임을 한 번 켠다(예비 한 번). **메인 메뉴까지만 간다.** 값은 게임을 켤 때 읽히므로 새 게임을 시작하지 않아도 되고,
 사용자가 할 일이 없다(게임 창을 누르지 않는다).
 
-- 검증 프리셋(`presets/verify-stage1.json`)이 아직 `VERIFIED`가 아닌 묶음마다 값 하나씩, 모두 29개를 흔치 않은 값으로 바꾼다.
-- `apply` → `probe-request` → `tools/probe.ps1` → `dump_tool.py controls` → `verify` → `restore` → `tools/restore-game.ps1`.
+- 검증 프리셋(`presets/verify-stage1.json`)이 아직 `VERIFIED`가 아닌 묶음마다 값 하나씩 29개와, 양성 대조 하나(이미 `VERIFIED`인
+  `initial_budget`)를 바꾼다. 값 30개는 게임 폴더의 JSON 4,701개 어디에도 없는 수다(2026-10-05에 훑어 확인했다).
+- `apply` → `status` → `probe-request` → `tools/probe.ps1` → `status`(게임이 데이터 파일을 다시 썼는지) → `dump_tool.py controls` → `verify` → `restore` → `tools/restore-game.ps1`.
 - `anchored`인 키는 카탈로그에서 `VERIFIED`로 올린다. `value-only`는 덤프의 이름 히트로 사람이 판단하고 근거를 적는다.
   `absent`는 `UNSEEN`으로 두고 "메뉴에서 값으로 찾았으나 없었다"고 적는다.
 - 게임이 메뉴에 닿기 전에 끝나면 그것이 결과다(어떤 값이 게임을 죽였다). 되돌리고 보고한다. 값을 나눠 다시 재는 것은 따로 승인받는다.
@@ -480,6 +487,11 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 2. `scan`이 실제 게임 폴더에서 실패 0으로 끝난다.
 3. 검증 프리셋의 값마다 판정이 `research/04-overlay-verify.md`에 있고, 카탈로그의 등급이 그 판정과 맞는다.
 4. 끝난 뒤 게임이 바닐라다: `overlay.ps1 status`가 125개 모두 바닐라, exe 해시가 원본, `mods\`와 `aurie.log`가 없다.
+
+**실측 결과 (2026-10-05, `research/04-overlay-verify.md`):** 게임을 한 번 켰다. 값 30개가 모두 메인 메뉴의 런타임에 있었다
+(`anchored` 29, `value-only` 1을 이름 히트로 이어 확인, `absent` 0). 양성 대조가 맞았고 덤프의 점검이 모두 `ok`였다. 29개를 `VERIFIED`로 올렸다.
+`global.__gameplay_vars`에 이름이 없는 키 둘(`bribe.cooldown`, `prestige.for_population`)은 파일을 읽은 ds_map에서만 보여 실험 키로 남겼다.
+게임은 종료할 때 데이터 파일을 다시 쓰지 않았고, 복원 뒤 125개 파일이 해시와 수정 시각까지 바닐라였다.
 
 효과(`effect`)를 재는 것은 이 단계의 일이 아니다. 새 게임을 시작해 화면에서 봐야 하고 키마다 방법이 다르다.
 도구가 선 뒤에 키 묶음별로 따로 잰다.

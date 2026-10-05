@@ -278,6 +278,65 @@ try {
         finally { $env:NORLAND_SAVES_DIR = $null }
     }
 
+    # 데이터 오버레이. 가짜 게임의 버전으로 작은 카탈로그와 프리셋을 만든다.
+    $ovFile = Join-Path $fake 'ov.json'
+    $ovCat = Join-Path $fake 'ov-catalog'
+    $ovPreset = Join-Path $fake 'ov-preset.json'
+    $ovVanilla = "{`r`n`t`"gold`": 2000,`r`n`t`"cost`": {`"wood`": 15, },`r`n}"      # CRLF 와 닫는 괄호 앞의 쉼표
+    $ovApplied = "{`r`n`t`"gold`": 5000,`r`n`t`"cost`": {`"wood`": 8, },`r`n}"
+    [IO.File]::WriteAllText($ovFile, $ovVanilla)
+    New-Item -ItemType Directory -Force -Path $ovCat | Out-Null
+    [IO.File]::WriteAllText((Join-Path $ovCat 'keys.json'), (@{ game_version = $orig.Version; groups = @(
+        @{ file = 'ov.json'; paths = @('gold', 'cost.*'); runtime = 'SEEN'; effect = 'UNKNOWN' }) } | ConvertTo-Json -Depth 5))
+    [IO.File]::WriteAllText((Join-Path $ovCat 'files.json'), (@{ game_version = $orig.Version; files = @{
+        'ov.json' = (Get-FileHash -LiteralPath $ovFile -Algorithm SHA256).Hash } } | ConvertTo-Json))
+    [IO.File]::WriteAllText($ovPreset, (@{ name = '시험'; game_version = $orig.Version; changes = @(
+        @{ file = 'ov.json'; path = 'gold'; set = 5000 }, @{ file = 'ov.json'; path = 'cost.*'; mul = 0.5; round = 'ceil' }) } | ConvertTo-Json -Depth 5))
+    $ovArgs = "-CatalogDir '$ovCat'"
+
+    Test-Case 'overlay check 는 무엇이 바뀌는지 보여 주고 쓰지 않는다' {
+        $r = Invoke-Tool 'overlay.ps1' "check -Preset '$ovPreset' $ovArgs"
+        Assert-Equal $r.Exit 0 "check 종료 코드`n$($r.Out)"
+        Assert-True ($r.Out -match 'gold  2000 -> 5000' -and $r.Out -match '쓰지 않았다') "바뀔 값을 보여 줘야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($ovFile)) $ovVanilla '파일은 그대로여야 한다'
+    }
+
+    Test-Case 'overlay apply 는 게임이 켜져 있으면 쓰지 않는다' {
+        $running = "function Get-Process { [pscustomobject]@{ Id = 4242; Name = 'Norland' } };"
+        $r = Invoke-Tool 'overlay.ps1' "apply -Preset '$ovPreset' $ovArgs" $running
+        Assert-True ($r.Exit -eq 1 -and $r.Out -match '실행 중') "켜져 있으면 거부해야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($ovFile)) $ovVanilla '파일은 그대로여야 한다'
+    }
+
+    Test-Case 'overlay apply 는 값의 자리만 바꾸고, restore 는 바이트까지 되돌린다' {
+        $r = Invoke-Tool 'overlay.ps1' "apply -Preset '$ovPreset' $ovArgs"
+        Assert-Equal $r.Exit 0 "apply 종료 코드`n$($r.Out)"
+        Assert-True ($r.Out -match 'apply ok: 시험') "프리셋 이름의 한글이 깨지지 않아야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($ovFile)) $ovApplied '값의 자리만 바뀌어야 한다'
+        $r = Invoke-Tool 'overlay.ps1' "status $ovArgs"
+        Assert-True ($r.Exit -eq 0 -and $r.Out -match 'applied: 1' -and $r.Out -match '프리셋: 시험') "status 가 입힌 프리셋을 알려야 한다`n$($r.Out)"
+        $r = Invoke-Tool 'overlay.ps1' "restore $ovArgs"
+        Assert-Equal $r.Exit 0 "restore 종료 코드`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($ovFile)) $ovVanilla '바닐라의 바이트로 돌아와야 한다'
+    }
+
+    Test-Case 'overlay 는 밖에서 바뀐 파일이 있으면 아무것도 쓰지 않는다' {
+        $changed = $ovVanilla.Replace('2000', '2001')                   # 게임 갱신이나 손으로 고친 것
+        [IO.File]::WriteAllText($ovFile, $changed)
+        foreach ($cmd in "apply -Preset '$ovPreset'", 'restore') {
+            $r = Invoke-Tool 'overlay.ps1' "$cmd $ovArgs"
+            Assert-True ($r.Exit -eq 1 -and $r.Out -match 'FAIL: 게임 파일이 바닐라도 아니고') "거부해야 한다: $cmd`n$($r.Out)"
+            Assert-Equal ([IO.File]::ReadAllText($ovFile)) $changed '파일은 그대로여야 한다'
+        }
+        [IO.File]::WriteAllText($ovFile, $ovVanilla)
+    }
+
+    Test-Case 'overlay 는 이 게임 버전의 카탈로그가 없으면 거부한다' {
+        $r = Invoke-Tool 'overlay.ps1' "apply -Preset '$ovPreset'"         # -CatalogDir 없이: catalog\<가짜 게임의 버전>
+        Assert-True ($r.Exit -eq 1 -and $r.Out -match '카탈로그가 없습니다') "거부해야 한다`n$($r.Out)"
+        Assert-Equal ([IO.File]::ReadAllText($ovFile)) $ovVanilla '파일은 그대로여야 한다'
+    }
+
     Write-Host "safety tests: $($script:passed) passed"
 }
 finally {
@@ -286,6 +345,8 @@ finally {
     if (Test-Path -LiteralPath $pristine) { Remove-Item -LiteralPath $pristine -Force }
     $fakeData = Join-Path $backupDir "data\$($orig.Version)"   # 가짜 게임의 버전이다. 진짜 게임의 스냅샷은 버전이 달라 걸리지 않는다.
     if (Test-Path -LiteralPath $fakeData) { Remove-Item -LiteralPath $fakeData -Recurse -Force }
+    $fakeOverlay = Join-Path $backupDir "overlay\$($orig.Version)"      # 가짜 게임의 오버레이 상태
+    if (Test-Path -LiteralPath $fakeOverlay) { Remove-Item -LiteralPath $fakeOverlay -Recurse -Force }
     # 가짜 게임의 백업만 지운다. 진짜 게임의 백업은 버전이 달라 이 필터에 걸리지 않는다.
     Get-ChildItem -LiteralPath $backupDir -File -ErrorAction SilentlyContinue |
         Where-Object { $_.Name -like "Norland.exe.$($orig.Version).*" -or $_.Name -like '*.partial' } |

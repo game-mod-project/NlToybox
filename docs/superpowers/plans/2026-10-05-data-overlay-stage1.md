@@ -32,6 +32,8 @@
 
 **이 계획의 코드가 어디서 왔는가:** 아래의 코드 블록은 2026-10-05에 스크래치 폴더에서 먼저 돌려 본 것이다. 단위 시험 82개가 통과했고, 실제 게임 폴더의 JSON 4,701개에 `scan`이 실패 0으로 끝났으며, 카탈로그 파일 125개의 사본에 검증 프리셋을 입혔다 되돌려 바이트가 원본과 같았다(`research/03-data-files.md`). 그래도 Task마다 시험을 먼저 쓰고 실패를 본 뒤 구현한다. 계획의 코드를 옮기다 생기는 실수를 그 순서가 잡는다.
 
+**실행 전 검토에서 고친 것 (2026-10-05):** Task 0~9를 마친 뒤, 게임을 켜기 전에 전체 검토를 받고 고쳤다(커밋 `fix(review): …`). 아래 Task 1~8의 코드 블록은 처음 쓴 그대로이고 **지금의 소스가 정본이다.** 달라진 것: (1) `verify`의 `anchored`는 값이 있고 런타임 경로의 이름 조각 하나가 키 이름과 같을 때다(더 긴 이름의 일부는 치지 않는다). 믿을 수 없는 덤프에서는 `absent` 대신 `unknown`을 적고, `anchored`가 하나도 없으면 알린다. (2) 검증 프리셋의 값을 게임 JSON 어디에도 없는 수로 바꾸고, 이미 `VERIFIED`인 키 하나를 양성 대조로 넣었다(변경 30개). (3) `apply`가 쓰는 도중에 실패하면 무엇을 할지 알리고, `status`는 부분 적용을 알리며 종료 코드 1을 낸다. (4) `pin`은 프리셋이 입혀져 있으면(이 버전이든 옛 버전이든) 거부한다. (5) 스냅샷은 계산이 끝난 뒤, 실제로 바뀌는 파일만 뜬다. 게임 파일에서 읽은 바닐라는 해시를 다시 확인한다. (6) 스냅샷과 복원이 원본의 수정 시각도 옮긴다. (7) `mul`은 1을 곱하면 그대로이고 정수끼리의 곱은 정확하며, 그 밖에는 유효숫자 15자리로 다듬는다. (8) `store.plan`과 `store.vanilla_bytes`의 마지막 인자가 없어졌고 `store.ensure_snapshot`이 생겼다. 시험은 82개에서 98개가 됐다. 이 아래의 `Ran 82 tests`는 `Ran 98 tests`로 읽는다.
+
 ## Review Focus
 
 1. **프리셋의 오타.** 없는 키, 틀린 경로, 모르는 항목이 조용히 무시되면 사용자는 적용됐다고 믿는다. 아무 값에도 닿지 않는 변경과 모르는 항목은 오류여야 하고, 오류가 하나라도 있으면 아무것도 쓰지 않아야 한다. → Task 4(`test_a_mistyped_preset_is_an_error`, `test_what_cannot_be_applied_is_an_error`), Task 5(`test_a_preset_that_cannot_be_applied_writes_nothing`)
@@ -3174,7 +3176,7 @@ Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
 
 사용자에게 알리고 답을 기다린다:
 
-> 게임을 한 번 켭니다(약 2분). 데이터 파일의 값 29개를 흔치 않은 수로 바꾼 채 메인 메뉴까지 가서 런타임 덤프를 받고, 도구가 게임을 끕니다. **게임 창을 누르지 말아 주세요.** 새 게임을 시작하지 않으므로 세이브는 생기지 않습니다. 끝나면 데이터 파일과 exe를 바닐라로 되돌립니다. 값 가운데 하나가 게임을 죽이면 메뉴에 닿지 못할 수 있습니다. 그것도 결과로 기록하고 되돌립니다.
+> 게임을 한 번 켭니다(약 2분). 데이터 파일의 값 30개를 게임 파일 어디에도 없는 수로 바꾼 채 메인 메뉴까지 가서 런타임 덤프를 받고, 도구가 게임을 끕니다. **게임 창을 누르지 말아 주세요.** 새 게임을 시작하지 않으므로 세이브는 생기지 않습니다. 끝나면 데이터 파일과 exe를 바닐라로 되돌립니다. 값 가운데 하나가 게임을 죽이면 메뉴에 닿지 못할 수 있습니다. 그것도 결과로 기록하고 되돌립니다.
 
 승인이 없으면 여기서 멈춘다. Task 0~9의 결과는 그대로 `develop`에 합칠 수 있다(Step 9의 머지 절차만 한다. 스펙의 상태 줄에는 "실측 실행은 하지 않았다"고 적는다).
 
@@ -3199,9 +3201,11 @@ pwsh -File E:\NlToyBox\tools\overlay.ps1 probe-request -Preset E:\NlToyBox\prese
 pwsh -File E:\NlToyBox\tools\test-native.ps1
 ```
 
-Expected: `apply ok: verify-stage1 (쓴 파일 6개). 게임을 다시 켜야 반영된다`. `status`에 `vanilla: 119`, `applied: 6`, `프리셋: verify-stage1`. `probe-request ok: 값 29개 -> …\stage1-verify.txt`. `core tests: 18 passed`(요청 파일이 모듈의 읽기 규칙에 맞는다).
+Expected: `apply ok: verify-stage1 (쓴 파일 6개). 게임을 다시 켜야 반영된다`. `status`에 `vanilla: 119`, `applied: 6`, `프리셋: verify-stage1`, 종료 코드 0(`부분 적용`이라고 나오면 멈추고 원인을 본다). `probe-request ok: 값 30개 -> …\stage1-verify.txt`. `core tests: 18 passed`(요청 파일이 모듈의 읽기 규칙에 맞는다).
 
-요청 파일은 `delay_seconds=60`, `max_hits=5000`, `find=` 29줄, `find_name=woodcutter_lvl_1` 한 줄이다.
+요청 파일은 `delay_seconds=60`, `max_hits=5000`, `find=` 30줄, `find_name=woodcutter_lvl_1` 한 줄이다.
+
+프리셋의 첫 변경(`global_map.ai_economy.initial_budget` → 7450319)은 **양성 대조**다. 이 키는 값을 바꿔 런타임에서 본 적이 두 번 있다(`research/01`, `research/02`). 이것이 `anchored`로 나오지 않으면 이 실행의 `absent`를 믿지 않는다.
 
 - [ ] **Step 4: 게임을 켜서 덤프를 받는다**
 
@@ -3211,7 +3215,15 @@ pwsh -File E:\NlToyBox\tools\probe.ps1 -Request E:\NlToyBox\tools\probes\stage1-
 
 Expected: 마지막 줄 `PASS`, 종료 코드 0, `덤프: E:\NlToyBox\refs\runtime\stage1-verify.menu.json`. 출력의 `--- NlToyBox.log ---` 아래에 `NlToyBox 0.2.0 loaded`, `builtin code_is_compiled = true`, `script … = found`, `probe done`, `dump done`이 있다(`check-load.ps1`을 갈음한다).
 
-`FAIL`이면: 출력의 로그에서 어디까지 갔는지 본다. `dump menu start`가 없으면 게임이 메뉴에 닿기 전에 끝난 것이다. **다시 켜지 않는다.** Step 6으로 가서 되돌리고, `research/04-overlay-verify.md`에 "29개를 함께 바꾸면 게임이 메뉴에 닿지 못했다"와 로그를 적고, 값을 나눠 다시 잴지 사용자에게 묻는다.
+게임이 꺼진 뒤 데이터 파일을 본다(게임이 종료하면서 데이터 파일을 다시 쓰는지는 잰 적이 없다):
+
+```powershell
+pwsh -File E:\NlToyBox\tools\overlay.ps1 status
+```
+
+Expected: `applied: 6`, `unknown: 0`. `unknown`이 있으면 게임이 그 파일을 다시 쓴 것이다. 그 사실을 결과에 적고, Step 6에서 `overlay.ps1 restore` 대신 `tools\data-restore.ps1`로 되돌린 뒤(스냅샷 여섯 개가 모두 있다) `backups\overlay\0.5588.9777.0\state.json`을 지운다.
+
+`FAIL`이면: 출력의 로그에서 어디까지 갔는지 본다. `dump menu start`가 없으면 게임이 메뉴에 닿기 전에 끝난 것이다. **다시 켜지 않는다.** Step 6으로 가서 되돌리고, `research/04-overlay-verify.md`에 "30개를 함께 바꾸면 게임이 메뉴에 닿지 못했다"와 로그를 적고, 값을 나눠 다시 잴지 사용자에게 묻는다.
 
 - [ ] **Step 5: 덤프를 믿어도 되는지 보고, 판정한다**
 
@@ -3224,7 +3236,9 @@ py -3.14 E:\NlToyBox\tools\re\dump_tool.py hits E:\NlToyBox\refs\runtime\stage1-
 Expected:
 
 - `controls`: 모든 줄이 `ok`로 시작한다(`selfcheck`, `ds_range`, `truncated`, `hits_cut`, `enumeration`, `instances`). `FAIL`이 하나라도 있으면 `absent`를 "없다"로 쓰지 않는다. 그 키는 "확인하지 못함"으로 적는다.
-- `verify`: 값마다 한 줄(`anchored` / `value-only` / `absent`와 런타임 경로), 끝에 `anchored A, value-only B, absent C` (A + B + C = 29). **A, B, C가 얼마일지는 모른다.** 그것을 재는 실행이다. `absent`가 하나라도 있으면 종료 코드가 1이다. 실패가 아니라 결과다.
+- `verify`: 값마다 한 줄(`anchored` / `value-only` / `absent`와 런타임 경로), 끝에 `anchored A, value-only B, absent C, unknown D` (A + B + C + D = 30). **얼마일지는 모른다.** 그것을 재는 실행이다. `absent`가 하나라도 있으면 종료 코드가 1이다. 실패가 아니라 결과다.
+  - 먼저 양성 대조를 본다: `gameplay_variables.json  global_map.ai_economy.initial_budget = 7450319` 줄이 `anchored`여야 한다. 아니면 이 실행의 `absent`는 모두 "확인하지 못함"으로 적는다.
+  - `주의:` 줄이 있으면(구역이 없다, `hits_cut` 등) 못 찾은 값은 `unknown`으로 나온다. "없다"로 쓰지 않는다.
 - `hits`: `ds_map[…].woodcutter_lvl_1`의 이름 히트와 그 안의 한 단계. `building_resources.woodcutter_lvl_1[0][1]`이 `value-only`로 나왔으면, 값이 맞은 `ds_list[N][1]`의 `N`이 이 이름 히트가 가리키는 리스트에서 이어지는지 여기서 본다. 이어지면 근거와 함께 `VERIFIED`로 본다. 덤프의 한 단계로 이어짐이 보이지 않으면 `value-only`로 남긴다(추측으로 잇지 않는다).
 
 - [ ] **Step 6: 되돌린다**
@@ -3237,7 +3251,7 @@ pwsh -File E:\NlToyBox\tools\game-status.ps1
 pwsh -File E:\NlToyBox\tools\saves-backup.ps1 -Diff <Step 2가 찍은 사본의 경로>
 ```
 
-Expected: `restore ok (6)`, `restore ok`, `status`에 `vanilla: 125`와 `프리셋: (없음. 바닐라)`, `game-status`에 `패치 여부  : 바닐라`·`mods\      : (없음)`·백업이 `exe 와 일치`. `saves-backup -Diff`가 달라진 파일을 적는다(게임이 메뉴에서 쓰는 설정 파일. 새 세이브가 없어야 한다). 그 목록을 Step 8의 문서와 사용자 보고에 적는다.
+Expected: `restore ok (6)`, `restore ok`, `status`에 `vanilla: 125`와 `프리셋: (없음. 바닐라)`(여섯 파일의 수정 시각도 2026-10-04 16:20으로 돌아온다), `game-status`에 `패치 여부  : 바닐라`·`mods\      : (없음)`·백업이 `exe 와 일치`. `saves-backup -Diff`가 달라진 파일을 적는다(게임이 메뉴에서 쓰는 설정 파일. 새 세이브가 없어야 한다). 그 목록을 Step 8의 문서와 사용자 보고에 적는다.
 
 - [ ] **Step 7: 카탈로그의 등급을 판정에 맞춘다**
 
@@ -3256,7 +3270,7 @@ py -3.14 -m unittest discover -s E:\NlToyBox\tools\overlay\tests
 pwsh -File E:\NlToyBox\tools\overlay.ps1 check -Preset E:\NlToyBox\presets\verify-stage1.json
 ```
 
-Expected: `Ran 82 tests`, `OK`. `check`의 줄에서 `anchored`였던 키가 `[VERIFIED/…]`로 보이고, 끝줄의 `런타임 반영을 확인하지 않은 키`의 수가 29 − (올린 키의 수)다.
+Expected: `Ran 82 tests`, `OK`. `check`의 줄에서 `anchored`였던 키가 `[VERIFIED/…]`로 보이고, 끝줄의 `런타임 반영을 확인하지 않은 키`의 수가 29 − (올린 키의 수)다(양성 대조는 처음부터 `VERIFIED`다).
 
 - [ ] **Step 8: 결과를 적는다**
 
@@ -3264,7 +3278,7 @@ Expected: `Ran 82 tests`, `OK`. `check`의 줄에서 `anchored`였던 키가 `[V
 
 1. 조사일, 게임 버전, 게임을 켠 횟수, 다시 재는 명령(Step 3~5).
 2. `controls`의 출력 그대로.
-3. 판정표: 29줄. 열은 파일, 키, 바닐라 값 → 바꾼 값, 판정, 런타임 경로(`verify`의 출력에서), 카탈로그의 등급(앞 → 뒤).
+3. 판정표: 30줄(첫 줄은 양성 대조). 열은 파일, 키, 바닐라 값 → 바꾼 값, 판정, 런타임 경로(`verify`의 출력에서), 카탈로그의 등급(앞 → 뒤).
 4. `value-only`를 어떻게 판단했는지와 그 근거.
 5. 처음 알게 된 것(예: `__gameplay_vars`에 이름이 없던 키가 ds_map에는 있는가).
 6. 세이브 폴더에서 달라진 파일(Step 6).
