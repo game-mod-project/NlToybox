@@ -63,7 +63,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - **세이브는 직접 불러온다**(`tools/load-save.ps1`. 게임의 `GameLoadOperator.load_save`를 부른다. `research/11`). 사용자에게 넘기는 것은 새 게임을 만드는 일뿐이다.
   게임 창을 눌러야 하면(이야기 창의 "계속하기", 인물의 초상) `shot`으로 자리를 보고, 게임 창이 앞에 있을 때 `SetCursorPos` + `mouse_event`로 누른다.
   시간을 흘리다 게임이 멈추면(`time_warp` 0) 화면부터 뜬다: 이야기 창이 떠 있을 수 있다(아덴 세이브는 4일차 08:00).
-- 게임은 게임 시각 06시와 18시에 자동 저장을 하고 같은 종류의 앞 자동 저장을 갈아 끼운다. **시험 값이 든 채 그 시각을 넘기지 않는다**
+- 게임은 게임 시각 06시와 18시에 자동 저장을 한다. 파일 이름에 실제 시각이 들어가 **새 파일이 하나 더 생긴다**(18시를 넘긴 실행에서 앞의 저녁 자동 저장이 그대로 남았다. `research/16`).
+  **시험 값이 든 채 그 시각을 넘기지 않는다**
   (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
 - 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
   `Using LEA pattern for RI ending`에서 끝난다. 모듈이 적재되기 전이라 모듈과 무관하다. 승인받은 횟수 안에서 다시 켠다.
@@ -162,11 +163,16 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
   - **게임의 디버그 소환기 `inst:o_debug.debug_spawner`**: `__spawn_soldier`·`__spawn_knight`·`__spawn_peasant`·`__spawn_slave`·`__spawn_lord`·`__spawn_bandit`·`__spawn_wolf`()(인자 없음)가
     **마우스가 가리키는 지도의 자리**에 하나를 만든다. 앞의 다섯은 플레이어의 사람이다(`core/PeoplePlan`의 `SpawnKind`. 틱마다 하나씩 부른다).
-    **싸움을 붙이는 길은 아직 없다**: 도적·늑대·깡패를 풀어도 싸우지 않았다(도적은 지도 밖으로 나간다). 게임이 스스로 거는 싸움을 기다려야 한다(아덴 세이브는 4일차 14:20 쯤).
+    **싸움을 붙이는 길은 아직 없다**: 도적·늑대·깡패를 풀어도 싸우지 않았다(도적은 지도 밖으로 나간다). 매복 관리자의 `debug_start_ambush_archers()`와 `start_ambush_wolves()`는
+    인자 없이 부르면 게임이 끝난다(`research/14`, `16`). 게임이 스스로 거는 싸움(아덴 세이브는 4일차 14:20 쯤과 20:00 쯤)은 플레이어의 사람이 아닌 것들끼리다(전투 기술 3 과 5).
   - 상처는 `SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true`가 입힌다. 건너뛰면(`b:0 skip`) 상처가 생기지 않는다. 들어올 때 `Result`는 `undefined`다.
   - **훅을 불린 대상(self)으로 가릴 수 있다**(`NlRecorder::Forced::Who`: `'p'` 플레이어의 영혼일 때만, `'o'` 아닐 때만). 훅 안에서는 진영을 읽을 수 없으므로
     틱이 플레이어의 사람들의 `__soul` 구조체 주소를 모아 `NlRecorder::SetPlayerSelves`에 넣는다(`src/People.cpp`의 `ShieldTick`. 0.5초마다).
     가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"와 표본의 `[self in, other out, …]`으로 본다.
+    **게임이 영혼의 메서드를 부를 때 self 는 그 영혼이다**(통증 한도 함수의 표본 `[self in]`. `research/16`).
+    한 함수에 아군과 적의 배율을 따로 걸 수 있다(`Forced{Kind 'x', Number, Other, Who 'p', Cap}`. `core/Hooks`의 `HookFactor`·`ScaleCapped`, `core/BattlePlan`의 `PlanSides`).
+    **묶음이 빈 동안에는 가리는 배율을 곱하지 않는다**(메뉴에서 막 들어온 때. 비면 모두가 "그 밖"으로 읽힌다). 게임 화면이 아니면 배율의 바꾸기를 끄고, 주소부터 넣은 뒤에 건다.
+    "적"은 플레이어의 사람이 아닌 모두다(손님, 상인, 다른 세력, 짐승). 새로 온 사람은 0.5초까지 "그 밖"이다(모듈이 만든 사람은 다음 틱에 넣는다).
     싸움이 없을 때는 그 함수를 `method`로 직접 불러 잰다: `take_damage`는 `s:<상처의 이름> p:<영혼의 주소> b:0`으로 플레이어의 병사와 다른 진영의 사람에게 한 번씩(앞은 건너뛰어지고 뒤는 멍이 생겼다).
   - 소지품에 넣은 장비는 바로 착용되지만 남지 않는다(게임이 `give_possible_equipment(구조체)`로 되돌린다). 장비는 그 길로 주지 않는다.
 - 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다

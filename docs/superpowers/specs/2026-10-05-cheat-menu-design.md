@@ -256,7 +256,7 @@ lock inst:o_character:0.starving_hours=0
 | 군대·전투 | 부상 없는 전투, 회피 끔, 장비 파손 끔, 항복 끔 | A `is_combat_without_injuries`, `is_disable_dodge`, `is_disable_equipment_destroy`, `is_surrender_disable` | 2 |
 | | 병사 추가·제거·수, 모집 비용 0·즉시 | 추가: C `gml_Script_rebellion_debug_spawn_player_soldier()`(지도 가장자리에서 걸어온다), 디버그 소환기 `inst:o_debug.debug_spawner.__spawn_soldier`·`__spawn_knight`()(마우스 자리). 비용: D `SoulBasic.get_soldier_cost()`에 배율(0.01 까지. 0 은 아니다). 제거(`fire`의 꼴)와 모집 시간(`get_hiring_time`이 `undefined`)은 아직(`research/13`) | 5(추가·비용 됨) |
 | | 장비 지급 | 소지품에 넣은 장비는 바로 착용되지만 게임이 `give_possible_equipment(구조체)`로 되돌린다. 그 구조체를 찾아야 한다 | 아직 |
-| | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 배율(`get_combat_level_in_battle`, `get_mortal_pain_threshold`에 self 로 가린 배율)과 사기는 아직 | 5(아군 무적) |
+| | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 아군·적의 전투력과 맷집: D `get_combat_level_in_battle`·`get_mortal_pain_threshold`가 돌려주는 수에 self 로 가린 배율(`ally_power`·`enemy_power`·`ally_toughness`·`enemy_toughness`. 게임이 받는 수가 바뀌는 것까지 봤다. `research/16`). 사기와 분대의 전투는 아직 | 5(아군 무적 됨, 배율은 확인 전) |
 | | 전투 즉시 승리, 적 사기 0 | B 전투 중인 분대의 사기를 찾는다. 안 되면 C | 5 |
 | 외교 | 관계·호감 설정, 동맹·전쟁·평화 강제 | 적대 없음: D `Faction.is_enemy_with(세력) -> 불리언`을 거짓으로(모든 세력. 효과는 확인 전). 관계의 수(`__other_faction_relation_cache`의 −7, `get_relation_with`), 동맹·속국·중립(`add_to_alliance_with_leader`, `vassalise_by_faction`, `force_neutrality`)은 꼴을 재지 못했다(`research/14`) | 6(훅만) |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
