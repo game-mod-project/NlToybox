@@ -3,7 +3,7 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 단계 0 완료(`research/01-data-overlay.md`). 단계 0b(§3.7)는 검토 대기
+- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1은 계획 대기
 
 ## 1. 목적
 
@@ -166,12 +166,15 @@
 | 게임은 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 `Menu Opened`, `Save game: <이름>`, `Load game: <이름>`을 시각과 함께 적는다. 자동 저장의 이름은 `…_Autosave_Morning_…`, `…_Autosave_Evening_…`다 | 그 파일의 2026-09-24 기록 |
 | 세이브 폴더는 67개 784KB이고 `saves\`에는 `steam_autocloud.vdf`뿐이다 | 2026-10-04에 읽음 |
 
-모른다 (이번 실행에서 잰다):
+계획을 쓸 때는 몰랐고 실행에서 잰 것 (2026-10-05, `research/02-new-game-state.md`):
 
-- 메인 메뉴와 게임 안에서 어떤 오브젝트의 인스턴스가 있는가. 룸이 바뀌는가.
-- 값이 든 자리. 수 하나로 된 전역(19, 18 등)이 ds_map 번호인가.
-- `CCode`의 배치가 이 러너와 맞는가(이름을 읽을 수 있는가).
-- 덤프 한 번에 걸리는 시간.
+- 룸은 바뀌지 않는다. 처음부터 끝까지 `rm_game`이다. 게임 화면은 `o_main_menu`가 없고 `o_character`가 있는 것으로 알아본다
+  (새 게임에서 잰 것이다. 세이브를 불러올 때는 재지 않았다). `o_time_controller`와 `o_camera_controller`는 메뉴에서 이미 있다.
+- 데이터 파일의 값은 게임을 켤 때 ds_map으로 읽히고, 게임을 시작하면 일부가 `o_debug`와 `o_province_controller`의 변수로 옮겨진다.
+- ds 형 상수 1(map)과 2(list)는 이 러너에서 맞다. ds 번호는 0부터 빈틈없이 배정돼 있었다.
+- `CCode`의 배치가 이 러너와 맞는다. 코드 이름 121개를 읽었고 못 읽은 것은 없다.
+- 덤프 한 번에 메뉴에서 1.6초, 게임 안에서 2.0~2.1초가 걸린다.
+- 런타임의 오브젝트는 65개다(`data.win`에서 센 것은 64개). 하나가 어디서 오는지는 모른다.
 
 커뮤니티에서 본 것 (확인하지 않았다. 이 단계에서는 쓰지 않는다):
 
@@ -284,10 +287,13 @@ max_hits=2000            # 찾기의 한도. 요청으로 바꿀 수 있다: max
 
 ## 4. 단계 1 — 오버레이 도구
 
-단계 0의 결과: `research/01-data-overlay.md`. 요약하면 `gameplay_variables.json`은 반영이 확인됐고
-(런타임에 이름이 있는 키 94개), `debug_params.json`과 `battle_params.json`은 메인 메뉴에서는 확인하지 못했으며,
-파일에 없는 키를 넣는 것은 시험한 한 경로(`game.speed_slower_div`)에서 통하지 않았다. 그래서 단계 1의 첫 범위는 `gameplay_variables.json`의 94개 키다.
-다른 파일은 새 게임을 시작한 상태에서 반영을 잰 뒤에 카탈로그에 올린다.
+단계 0과 0b의 결과: `research/01-data-overlay.md`, `research/02-new-game-state.md`. 요약하면 값을 바꿔 본 다섯 파일
+(`debug_params.json`, `gameplay_variables.json`, `battle_params.json`, `director_params.json`, 지식 파일 하나) 모두
+바꾼 값이 런타임에 올라왔다. 값은 게임을 켤 때 ds_map으로 읽힌다(단계 0에서 못 찾은 것은 ds_map 안을 보지 않아서였다).
+파일에 없는 키를 넣는 것은 시험한 한 경로(`game.speed_slower_div`)에서 통하지 않았다.
+그래서 다섯 파일 모두 단계 1의 대상이 되고, 프리셋을 입힌 뒤에는 게임을 다시 켜야 한다.
+다만 "런타임에 올라온다"와 "게임이 달라진다"는 다르다. 효과까지 본 것은 `initial_budget` 하나이고,
+`budget_money`는 `default_budget_money`로 옮겨지지만 화면의 시작 금화는 3000이었다. 카탈로그는 이 둘을 따로 적는다(§4.3).
 
 단계 0에서 스펙 §3과 달라진 점: 실행 1은 요청의 스크립트 호출(인자 형 오류)로 게임이 끝나 실패했고 다시 뜨지 않았다.
 실행 3에서 추가한 키는 §3.4의 규칙 대신 사용자 승인을 받아 `game.speed_slower_div`로 했다. 찾기의 한도는
@@ -327,7 +333,8 @@ tools/apply-preset.ps1    게임 상태를 검사하고 cli.py 를 부른다
 
 ### 4.3 카탈로그
 
-키마다 파일, 경로, 형, 허용 범위, 실측 여부(단계 0에서 반영이 확인됐는가), 세이브에 굳는지를 적는다.
+키마다 파일, 경로, 형, 허용 범위, 실측 여부, 세이브에 굳는지를 적는다. 실측 여부는 두 칸이다:
+런타임에 올라오는 것을 확인했는가, 게임이 달라지는 것을 확인했는가.
 프리셋은 카탈로그에 있고 실측된 키만 바꿀 수 있다.
 
 ### 4.4 적용과 복원

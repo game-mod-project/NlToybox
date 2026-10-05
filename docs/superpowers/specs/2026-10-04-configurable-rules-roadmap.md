@@ -136,7 +136,7 @@ exe에는 `gameplay_variables.json`의 키와 같은 꼴의 이름이 파일보�
 
 | # | 항목 | 하위 프로젝트 | 근거 |
 |---|---|---|---|
-| 1 | Gold | 1 | `budget_money` |
+| 1 | Gold | 1 (미정) | `budget_money`. 실측: 런타임의 `default_budget_money`가 되지만 화면의 시작 금화는 그 값이 아니었다(`research/02-new-game-state.md`). 시작 금화의 출처를 찾은 뒤에 정한다 |
 | 2 | Resources | 1 (시작량·거래가) | `product_count`, `fair_trade` |
 | 3 | Production | 1 (생산 비용, 작물 시간) / 2 (레시피) | `production_cost`, `farm.*` |
 | 4 | Building Cost | 1 | `building_resources`, `building_duration_factor` |
