@@ -88,6 +88,16 @@ git -C E:\NlToyBox commit -m "feat(remote): statics·treecall·override — 정�
 
 게임을 켠다. **사용자의 승인이 있어야 한다**(실행 묶음 1회, 모듈 적재 전에 멈추면 한 번 더). 사용자가 할 일: 세이브를 불러와 일시정지 → 알리는 차례대로 건설 창을 다룬다.
 
+안전장치(코드 검토의 지적):
+
+- 버려도 되는 세이브로 한다(앞 실행들의 자동 저장에서 이어진 시험용 게임). 자동 저장은 바꾼 상태를 담는다(`research/08`). 켜기 전의 사본은 `tools/saves-backup.ps1`이 뜬다.
+- 반환값을 바꾸는 동안은 **일시정지**해 둔다(사용자가 건설 창을 다루는 것은 멈춘 채로 된다). 한 번에 하나씩 걸고, 본 뒤에는 `unoverride all`로 끈다.
+- "바꿨는데 풀리지 않았다 → 그 함수가 원인이 아니다"는 그 동작 동안 `records`에 `=>` 표본이 남았을 때만 말한다. 본문이 호출부에 들어간 함수는 훅에 오지 않는다(`research/07`).
+- 훅 자리는 64개이고 다시 쓰지 못한다. 기록에 40개까지만 쓰고 나머지는 바꾸기의 몫으로 남긴다.
+- `skip`은 그 함수의 표본에서 들어올 때의 `Result`가 `undefined`(또는 `unset`)인 것을 본 뒤에만 쓴다.
+- 끄기 전에 `unoverride all`을 보내고 써 넣은 값을 되돌린다. 끈 뒤 사용자에게 자동 저장에 시험의 흔적이 들어 있을 수 있다고 알린다.
+- 조건은 훅보다 값을 먼저 본다(`__is_forbidden_construction`, `__limit`, `__max_level`을 `poke`·`write`).
+
 - [ ] **Step 1: 배포하고 세이브의 사본을 뜬 뒤 켠다. 적재 판정을 받는다**
 
 ```powershell
@@ -98,6 +108,18 @@ pwsh -NoProfile -File tools/session.ps1 -Action status
 ```
 
 - [ ] **Step 2: (게임 화면) 새 도구가 되는지 본다**
+
+먼저 이미 아는 함수로 반환값 바꾸기 자체를 잰다(`gml_Script_budget_money_get`: 인자 없이 금화를 돌려준다. `research/07`). 건설의 판정에 닿기 전이다:
+
+```powershell
+& tools\ask.ps1 -Lines 'record gml_Script_budget_money_get', 'call gml_Script_budget_money_get'
+& tools\ask.ps1 -Lines 'override gml_Script_budget_money_get n:1'
+& tools\ask.ps1 -Lines 'call gml_Script_budget_money_get', 'records gml_Script_budget_money_get'
+& tools\ask.ps1 -Lines 'unoverride gml_Script_budget_money_get', 'call gml_Script_budget_money_get', 'unoverride gml_Script_budget_money_get', 'statics inst:o_time_controller.time_warp', 'treecall no_such_script_here'
+```
+
+Expected: 바꾼 동안 `-> number 1`, 표본에 `() -> <금화> => 1`(`[returned another value, not Result]`가 붙는지 본다). 끈 뒤에는 금화 그대로. 두 번째 `unoverride`는 `nothing is overridden`.
+`statics`를 수에 → `not a struct`. 없는 스크립트의 `treecall` → `no such script`(부르지 않는다).
 
 ```powershell
 & tools\ask.ps1 -Lines 'about inst:o_building.generic', 'statics inst:o_building.generic max=200'

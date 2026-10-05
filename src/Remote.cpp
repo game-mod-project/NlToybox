@@ -11,6 +11,7 @@
 #include "core/RemoteCommand.hpp"
 #include "core/Text.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <vector>
@@ -319,8 +320,9 @@ namespace
 			return;
 		}
 		SayResult(result);
-		size_t budget = static_cast<size_t>(NlCore::OptionNumber(C, "max", 300));
-		TreeValue(result, 0, static_cast<int>(NlCore::OptionNumber(C, "depth", 2)), budget, "    ");
+		// 자기를 가리키는 구조체가 있어도 깊이와 수로 멈춘다(되부름이 스택을 넘기지 않게 깊이에 상한을 둔다).
+		size_t budget = static_cast<size_t>(std::clamp(NlCore::OptionNumber(C, "max", 300), 1.0, 5000.0));
+		TreeValue(result, 0, static_cast<int>(std::clamp(NlCore::OptionNumber(C, "depth", 2), 1.0, 8.0)), budget, "    ");
 		if (budget == 0)
 			Say("    (max reached)");
 	}
@@ -336,11 +338,17 @@ namespace
 			Say("  : " + why);
 			return;
 		}
+		// static_get 과 instanceof 는 구조체(메서드 포함)에만 부른다. 그 밖의 값에 대한 동작은 매뉴얼에 없다.
+		if (!node.IsStruct())
+		{
+			Say("  : not a struct");
+			return;
+		}
 		RValue made_by;
 		if (NlGame::Call("instanceof", { node }, made_by) && made_by.IsString())
 			Say("  instanceof " + made_by.ToString());
 
-		size_t budget = static_cast<size_t>(NlCore::OptionNumber(C, "max", 400));
+		size_t budget = static_cast<size_t>(std::clamp(NlCore::OptionNumber(C, "max", 400), 1.0, 5000.0));
 		for (int level = 0; level < 8; level++)
 		{
 			RValue next;
@@ -450,7 +458,10 @@ namespace
 		else if (C.Verb == "override")
 			DoOverride(C);
 		else if (C.Verb == "unoverride")
-			Say("  stopped " + std::to_string(NlRecorder::Unoverride(C.Target)));
+		{
+			const int stopped = NlRecorder::Unoverride(C.Target);
+			Say(stopped > 0 ? "  stopped " + std::to_string(stopped) : "  : nothing is overridden under that name");
+		}
 		else if (C.Verb == "unrecord")
 			Say("  stopped " + std::to_string(NlRecorder::Unwatch(C.Target)));
 		else if (C.Verb == "records")

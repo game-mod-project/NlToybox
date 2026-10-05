@@ -7,6 +7,7 @@
 #include "core/Text.hpp"
 
 #include <array>
+#include <cstring>
 #include <mutex>
 #include <utility>
 
@@ -75,6 +76,8 @@ namespace
 			return "struct";
 		if (kind == VALUE_REF)
 			return "ref";
+		if (kind == VALUE_BOOL)
+			return Value.ToDouble() != 0 ? "true" : "false";
 		if (Value.IsNumberConvertible())
 			return NlCore::Shortest(Value.ToDouble());
 		return KindName(kind);
@@ -125,45 +128,54 @@ namespace
 			}
 		}
 
-		// 돌려줄 값을 바꾼다. 수, 불리언, undefined 뿐이다(RValue 의 대입은 러너의 해제·복사를 거친다. 빌트인을 부르지 않는다).
+		// 돌려줄 값을 바꾼다. 수, 불리언, undefined 뿐이다. 바꾼 값은 언제나 결과 자리(Result)에 두고 Result 를 돌려준다:
+		// 게임이 반환 참조를 읽든 Result 를 읽든(YYToolkit 의 CallGameScriptEx 는 Result 만 읽는다) 같은 값을 본다.
 		const bool forced = slot.Override;
 		const NlRecorder::Forced value = slot.Value;
-		const auto force = [&value](RValue& Target) {
-			if (value.Kind == 'n')
-				Target = RValue(value.Number);
-			else if (value.Kind == 'b')
-				Target = RValue(value.Number != 0);
-			else
-				Target = RValue();
+		const auto make = [&value]() {
+			return value.Kind == 'n' ? RValue(value.Number) : value.Kind == 'b' ? RValue(value.Number != 0) : RValue();
+		};
+		// 해제하지 않고 덮어쓴다. 원래 함수가 채우지 않은 Result 는 부른 쪽이 초기화했는지 알 수 없어서 해제하면 안 된다.
+		// 수·불리언·undefined 는 가진 것이 없으므로 그대로 옮겨 적어도 된다.
+		const auto write_raw = [&make](RValue& Target) {
+			const RValue made = make();
+			std::memcpy(static_cast<void*>(&Target), static_cast<const void*>(&made), sizeof(RValue));
 		};
 
 		if (forced && value.Skip)
 		{
-			// 원래 함수를 부르지 않는다. YYC 의 함수는 결과 자리(Result)를 채우고 그것을 돌려준다.
-			force(Result);
+			// 원래 함수를 부르지 않는다. 들어올 때 Result 에 무엇이 있었는지 표본에 남긴다(부른 쪽이 초기화하는지 잰다).
+			const int came = static_cast<int>(Result.m_Kind) & k_KindMask;
+			write_raw(Result);
 			if (sample)
 			{
 				std::lock_guard lock(g_Mutex);
-				slot.Log.Sample(sample, key, std::move(shape), std::move(args), "(skipped) => " + Brief(Result));
+				slot.Log.Sample(sample, key, std::move(shape), std::move(args),
+					std::string("(skipped, Result came as ") + (came == k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
 			}
 			return Result;
 		}
 
 		RValue& out = original(Self, Other, Result, Count, Args);
 
-		std::string result = sample ? Brief(out) : std::string();
+		// 원래 함수가 결과 자리가 아닌 다른 값을 돌려주는 일이 있는지 표본에 남긴다(이 러너에서 재지 않은 것이다).
+		const bool same = &out == &Result;
+		std::string result = sample ? Brief(out) + (same ? "" : " [returned another value, not Result]") : std::string();
 		if (forced)
 		{
-			force(out);
+			if (same)
+				Result = make();		// 원래 함수가 채운 값이다. 해제하고 바꾼다(러너의 해제·복사. 빌트인이 아니다)
+			else
+				write_raw(Result);		// 원래 함수가 Result 를 채웠는지 모른다. 해제하지 않는다
 			if (sample)
-				result += " => " + Brief(out);
+				result += " => " + Brief(Result);
 		}
 		if (sample)
 		{
 			std::lock_guard lock(g_Mutex);
 			slot.Log.Sample(sample, key, std::move(shape), std::move(args), std::move(result));
 		}
-		return out;
+		return forced ? Result : out;
 	}
 
 	// 훅마다 제 자리의 번호를 아는 함수가 있어야 한다(같은 함수를 여러 훅에 쓰면 어느 스크립트인지 모른다).
@@ -281,6 +293,19 @@ namespace
 		return &slot;
 	}
 
+	// 대상이 주소이면 그 자리의 메서드가 묶인 스크립트의 이름, 아니면 정식 스크립트 이름. 못 얻으면 빈 글.
+	std::string ScriptOf(const std::string& Target)
+	{
+		const NlCore::AskPath path = NlCore::ParseAskPath(Target);
+		if (path.Error.empty() && !path.Steps.empty())
+		{
+			NlAccess::MethodInfo info;
+			std::string why;
+			return NlAccess::AboutMethod(path, info, why) ? info.Script : std::string();
+		}
+		return NlCore::ScriptRoutineName(Target);
+	}
+
 	std::string ForcedText(const NlRecorder::Forced& Value)
 	{
 		const std::string text = Value.Kind == 'n' ? NlCore::Shortest(Value.Number) : Value.Kind == 'b' ? (Value.Number != 0 ? "true" : "false") : "undefined";
@@ -319,7 +344,7 @@ bool NlRecorder::Override(const std::string& Target, const Forced& Value, std::s
 
 int NlRecorder::Unoverride(const std::string& Name)
 {
-	const std::string name = NlCore::ScriptRoutineName(Name);
+	const std::string name = Name == "all" ? std::string() : ScriptOf(Name);
 	int stopped = 0;
 	for (Slot& slot : g_Slots)
 		if (slot.Used && slot.Override && (Name == "all" || slot.Name == name))
@@ -333,7 +358,7 @@ int NlRecorder::Unoverride(const std::string& Name)
 
 int NlRecorder::Unwatch(const std::string& Name)
 {
-	const std::string name = NlCore::ScriptRoutineName(Name);
+	const std::string name = Name == "all" ? std::string() : ScriptOf(Name);
 	std::lock_guard lock(g_Mutex);
 	int stopped = 0;
 	for (Slot& slot : g_Slots)
@@ -347,7 +372,7 @@ int NlRecorder::Unwatch(const std::string& Name)
 
 std::string NlRecorder::Report(const std::string& Name)
 {
-	const std::string name = NlCore::ScriptRoutineName(Name);
+	const std::string name = Name.empty() ? std::string() : ScriptOf(Name);
 	std::lock_guard lock(g_Mutex);
 	std::string text;
 	for (const Slot& slot : g_Slots)

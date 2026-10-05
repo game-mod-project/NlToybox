@@ -229,8 +229,9 @@ namespace NlCore
 		{
 			// override <스크립트 이름|메서드의 주소> <n:수|b:0|1|u> [skip]
 			RemoteArg value;
-			if (count < 3 || count > 4 || !ParseArg(tokens[2], value) || (value.Kind != 'n' && value.Kind != 'b' && value.Kind != 'u'))
-				return fail("override needs a target and a value (n:<number>, b:0|1 or u)");
+			if (count < 3 || count > 4 || !ParseArg(tokens[2], value) || (value.Kind != 'n' && value.Kind != 'b' && value.Kind != 'u')
+				|| (value.Kind == 'n' && !std::isfinite(value.Number)))
+				return fail("override needs a target and a value (n:<finite number>, b:0|1 or u)");
 			if (count == 4 && tokens[3] != "skip")
 				return fail("override takes only 'skip' after the value");
 			command.Target = tokens[1];
