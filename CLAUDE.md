@@ -86,8 +86,16 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `Verified`는 플레이에서 효과를 본 뒤에만 참으로 바꾸고 `research/`에 적는다. **이름에서 읽은 뜻은 추정이다.**
   - 켠 치트와 즐겨찾기·잠금은 `mods\Aurie\NlToyBox.cheats.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
     파일에서 불러온 잠금은 꺼진 채로 시작한다(`inst:<오브젝트>:<n>`의 n 이 실행마다 다른 인스턴스일 수 있다).
-  - 게임 속도는 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(`src/core/SpeedControl`, `SpeedTrial`).
-    메뉴에서는 시간이 흐르지 않아 게임으로는 미리 잴 수 없다. 논리는 `tests/native`의 가짜 세계로 시험한다.
+  - 게임 속도는 게임의 함수로 건다: `inst:o_time_controller.__set_warp(배속)`(`research/08`. 24 로 불러 흐름이 약 24배가 되는 것을 쟀다).
+    `set_time_speed(번호)`는 게임의 단추가 쓰는 길이고 일시정지를 푼다. `src/core/SpeedControl`은 흐름을 재서 보여 주는 데만 쓴다
+    (후보 값을 써 보던 시험 부분은 창에서 뺐다. 정리는 3나-2).
+  - 표의 항목이 없어도 제 패널이 있는 영역은 `AreaInfo::Panel`을 참으로 둔다. 아니면 왼쪽 목록에서 꺼진다(경제가 그랬다. `research/08`).
+- 경제 패널(`src/Economy.cpp`)은 금화와 영지 창고의 자원을 게임의 함수로 바꾼다(`research/07`, `08`. 화면까지 확인했다).
+  - 금화: `gml_Script_budget_money_change(변화량)`. 자원: `…__province.__warehouse.change(자원 번호, 변화량)`(정적 메서드. `NlAccess::CallMethod`가 창고에 묶어 부른다).
+  - 넘기는 변화량은 언제나 유한한 정수다(`NlCore::PlanEconomy`). 갈래에 없는 자원(0번)은 건드리지 않는다. 부르기 전에 호출마다 로그를 남긴다.
+  - 게임의 화면이 보이는 자원의 수는 예약되지 않은 수(`__no_reserve__` = `__total__` − 예약)다. 패널도 그 수를 보이고 그 수를 기준으로 맞춘다.
+    청한 만큼 바뀌었는지는 `__total__`의 앞뒤로 본다(함수의 반환값에 기대지 않는다). `change`는 용량을 보지 않는다.
+  - 원격 명령 `economy`와 `page`가 같은 길을 창 없이 태운다. 패널을 고치면 실행 묶음에서 `economy …`와 화면으로 확인한다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:

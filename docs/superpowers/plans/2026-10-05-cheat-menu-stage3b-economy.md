@@ -507,13 +507,14 @@ using NlCore::Thousands;
 
 namespace
 {
-	// 자리와 함수는 research/07 에서 잰 것이다(새 게임, 0.5588.9777.0). 불러온 세이브에서 같은 자리인지는 재지 않았다.
+	// 자리와 함수는 research/07, 08 에서 잰 것이다(0.5588.9777.0. 새 게임과 불러온 세이브 둘 다).
 	constexpr const char* k_Gold = "inst:o_game_map_controller.__province.__budget.__budget.__no_reserve__";
-	constexpr const char* k_GoldChange = "gml_Script_budget_money_change";		// (변화량). +100 으로 화면까지 확인했다
+	constexpr const char* k_GoldChange = "gml_Script_budget_money_change";		// (변화량). 더하기와 줄이기 모두 화면까지 확인했다
 	constexpr const char* k_Counts = "inst:o_game_map_controller.__province.__warehouse.__warehouse.__total__";
-	constexpr const char* k_Free = "inst:o_game_map_controller.__province.__warehouse.__warehouse.__no_reserve__";	// 예약되지 않은 수
-	// (자원 번호, 변화량). 건물 창고에서 같은 함수가 (1, 5) -> 5, (1, -10) -> -10 이었다. 영지 창고에서는 아직 부르지 않았다.
-	// 묶인 곳이 없으면 CallMethod 가 창고(주소의 부모)에 묶어 부른다.
+	// 예약되지 않은 수(= __total__ - 예약). 게임의 화면이 보여 주는 수가 이것이다(당근: total 120, 화면 112).
+	constexpr const char* k_Free = "inst:o_game_map_controller.__province.__warehouse.__warehouse.__no_reserve__";
+	// (자원 번호, 변화량). 정적 메서드라 CallMethod 가 창고(주소의 부모)에 묶어 부른다. (28, 5) -> 5, (28, -5) -> -5 로 화면까지 확인했다.
+	// 용량을 넘겨도 들어간다(나무 400/300).
 	constexpr const char* k_Change = "inst:o_game_map_controller.__province.__warehouse.change";
 	constexpr const char* k_Captions = "global.__resource_caption";
 	constexpr const char* k_Categories = "inst:o_data.__resource_categories_data.__categories";
@@ -532,8 +533,8 @@ namespace
 		bool Ready = false;
 		std::string Why;					// Ready 가 아닌 까닭
 		double Gold = 0;
-		std::vector<double> Counts;			// 자원 번호 → 영지 창고의 수
-		std::vector<double> Free;			// 자원 번호 → 예약되지 않은 수
+		std::vector<double> Counts;			// 자원 번호 → 영지 창고의 수(예약된 몫 포함). 청한 만큼 바뀌었는지 보는 데 쓴다
+		std::vector<double> Free;			// 자원 번호 → 예약되지 않은 수. 창에 보이고, 맞추기와 줄이기의 기준이다(게임의 화면과 같은 수)
 		std::vector<std::string> Labels;	// 자원 번호 → 창에 보일 이름
 		std::vector<Group> Groups;
 		std::vector<int> Stocked;			// 갈래에 든 자원 번호들
@@ -656,7 +657,8 @@ namespace
 	// 다시 읽지 못하면 g_Now.Ready 가 거짓이 된다(부른 쪽이 본다).
 	std::string Execute(const EconomyCommand& Command)
 	{
-		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanEconomy(Command, g_Now.Gold, g_Now.Counts, g_Now.Free, g_Now.Stocked);
+		// 기준은 예약되지 않은 수다: "120 으로 맞추기"는 게임의 화면이 120 을 보이게 한다.
+		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanEconomy(Command, g_Now.Gold, g_Now.Free, g_Now.Free, g_Now.Stocked);
 		if (changes.empty())
 			return "바꿀 것이 없습니다";
 
@@ -692,13 +694,13 @@ namespace
 		if (!Refresh())
 			return text + "; 다시 읽지 못했습니다";
 
-		// 청한 만큼 바뀌었는지는 앞뒤의 수로 본다(함수의 반환값이 적용된 양인지는 모른다).
+		// 청한 만큼 바뀌었는지는 앞뒤의 수(__total__)로 본다. 함수의 반환값에 기대지 않는다. 예약되지 않은 수는 예약이 함께 바뀔 수 있어 쓰지 않는다.
 		const std::vector<NlCore::EconomyShort> shorts = NlCore::EconomyShortfall(done, gold, counts, g_Now.Gold, g_Now.Counts);
 		for (const NlCore::EconomyShort& one : shorts)
 			Log("economy: " + (one.Resource < 0 ? std::string("gold") : "resource " + std::to_string(one.Resource)) + " asked "
 				+ Signed(one.Asked) + ", changed " + Signed(one.Applied));
 		if (!shorts.empty())
-			text += "; " + std::to_string(shorts.size()) + " 개는 청한 만큼 바뀌지 않았습니다(용량을 넘겼을 수 있습니다)";
+			text += "; " + std::to_string(shorts.size()) + " 개는 청한 만큼 바뀌지 않았습니다";
 		return text;
 	}
 
@@ -722,15 +724,16 @@ std::string NlEconomy::Do(const EconomyCommand& Command)
 	if (!Refresh())
 		return g_Now.Why;
 
-	const bool one = NlCore::NeedsResource(Command.Act) && Command.Resource >= 0 && static_cast<size_t>(Command.Resource) < g_Now.Counts.size();
-	const double gold = g_Now.Gold, count = one ? g_Now.Counts[Command.Resource] : 0;
+	const bool one = NlCore::NeedsResource(Command.Act) && Command.Resource >= 0 && static_cast<size_t>(Command.Resource) < g_Now.Free.size();
+	const double gold = g_Now.Gold, count = one ? g_Now.Free[Command.Resource] : 0;
 	g_Now.Last = Execute(Command);
 	if (!g_Now.Ready)
 		return g_Now.Last;
 
 	std::string line = g_Now.Last + "; gold " + Fixed(gold, 0) + " -> " + Fixed(g_Now.Gold, 0);
-	if (one && static_cast<size_t>(Command.Resource) < g_Now.Counts.size())
-		line += "; resource " + std::to_string(Command.Resource) + " " + Fixed(count, 0) + " -> " + Fixed(g_Now.Counts[Command.Resource], 0);
+	if (one && static_cast<size_t>(Command.Resource) < g_Now.Free.size())
+		line += "; resource " + std::to_string(Command.Resource) + " " + Fixed(count, 0) + " -> " + Fixed(g_Now.Free[Command.Resource], 0)
+			+ " (total " + Fixed(g_Now.Counts[Command.Resource], 0) + ")";
 	return line;
 }
 
@@ -807,7 +810,7 @@ void NlEconomy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 자원 +1,000"))
 		Push(EconomyAct::AllAdd, -1, 1000);
-	ImGui::TextDisabled("게임의 함수로 더합니다. 용량을 넘기면 청한 만큼 바뀌지 않을 수 있습니다.");
+	ImGui::TextDisabled("게임의 함수로 바꿉니다. 수는 게임의 화면과 같습니다(예약된 몫은 뺀 수). 용량을 넘겨도 들어갑니다.");
 	if (!g_Now.Last.empty())
 		ImGui::TextDisabled("%s", g_Now.Last.c_str());
 
@@ -829,7 +832,11 @@ void NlEconomy::Draw()
 				ImGui::TableNextColumn();
 				ImGui::Text("  %s", g_Now.Labels[resource].c_str());
 				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(Thousands(g_Now.Counts[resource]).c_str());
+				const double reserved = g_Now.Counts[resource] - g_Now.Free[resource];
+				if (reserved > 0)
+					ImGui::Text("%s (예약 %s)", Thousands(g_Now.Free[resource]).c_str(), Thousands(reserved).c_str());
+				else
+					ImGui::TextUnformatted(Thousands(g_Now.Free[resource]).c_str());
 				ImGui::TableNextColumn();
 				ImGui::PushID(resource);
 				if (ImGui::SmallButton("+10"))
@@ -932,6 +939,10 @@ git -C E:\NlToyBox commit -m "feat(module): 경제 패널 0.6.0 — 금화와 �
 ---
 
 ### Task 4: 실행 묶음 하나로 확인하고, 다음 것의 자리를 재고, 적고, 넣는다
+
+> **한 것(2026-10-05, `stage3b-session1`)**: Step 1~5 와 Step 6 의 일부(거래·건물 목록·생산의 자리, 용량 쓰기, 게임 속도의 함수). 답은 `research/08-economy.md`.
+> 사용자가 저장된 게임을 불러와서 "저장하고 불러오기"는 따로 하지 않았다(실행 전체가 불러온 게임이었다). 속도 단추와 "즉시 건설만 켜고 보기"는 사용자가 누르지 않아 하지 못했다.
+> 실행에서 결함 둘(목록의 "경제"가 꺼짐, 패널의 수가 화면과 다름)을 찾아 고쳤고 시간 패널을 함수로 바꿨다(0.6.1). **0.6.1 은 켜 보지 않았다. 머지 전에 다시 켜야 한다.**
 
 **Files:**
 - Create: `research/08-economy.md`
