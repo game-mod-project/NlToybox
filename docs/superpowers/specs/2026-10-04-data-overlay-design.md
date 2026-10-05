@@ -3,8 +3,8 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1은 계획을 썼다
-  (`docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거는 `research/03-data-files.md`)
+- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1 완료
+  (계획 `docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`, 근거 `research/03-data-files.md`, 실측 결과 `research/04-overlay-verify.md`)
 
 ## 1. 목적
 
@@ -386,7 +386,7 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 
 | `runtime` — 이 레포가 이 빌드에서 잰 것 | |
 |---|---|
-| `VERIFIED` | 파일의 값을 바꿔서 런타임에서 그 값을 봤다 |
+| `VERIFIED` | 파일의 값을 바꿔서 런타임에서 그 값을 봤다. 어디서 봤는지는 `note`에 적는다. 그 파일을 읽은 ds_map에서만 본 것도 여기 든다(값이 메모리에 올라왔다는 뜻이지 게임이 쓴다는 뜻이 아니다) |
 | `SEEN` | 바닐라 값이 같은 이름으로 런타임에 있는 것을 봤다. 코드의 기본값이 같은 경우와 가려지지 않는다 |
 | `UNSEEN` | 런타임에서 본 적이 없다 |
 
@@ -400,7 +400,8 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 - `runtime`이 `UNSEEN`이거나 묶음에 `"experimental": true`가 있으면 **실험 키**다. 프리셋에 `"allow_experimental": true`가 있어야 바꿀 수 있다.
 - `min`, `max`는 허용 범위다. 지금은 잰 것이 없어 아무 묶음에도 적지 않는다. 범위를 재면 적는다.
 - 세이브에 굳는지, 새 게임이 필요한지는 잰 것이 없다. 칸을 두지 않고, 재면 더한다.
-- 지금의 카탈로그는 파일 125개의 수 1,437개 가운데 1,155개를 다룬다: VERIFIED 5, SEEN 234, UNSEEN 916(`research/03`).
+- 지금의 카탈로그는 파일 125개의 수 1,437개 가운데 1,155개를 다룬다: VERIFIED 34, SEEN 219, UNSEEN 902
+  (단계 1의 실측 전에는 5, 234, 916이었다. `research/03`, `research/04`).
   지식 파일의 `tag`, `available_parameters[n].type`, `hint_fields.*`는 올리지 않는다.
 - 카탈로그에는 키의 이름과 등급, 파일의 해시만 둔다. 게임 파일의 값은 두지 않는다(저작물 경계). 값까지 든 표는
   `keys` 명령으로 `refs\registry\`에 뽑는다(추적 안 함).
@@ -486,6 +487,11 @@ backups/overlay/<게임 버전>/state.json   마지막에 입힌 프리셋과 �
 2. `scan`이 실제 게임 폴더에서 실패 0으로 끝난다.
 3. 검증 프리셋의 값마다 판정이 `research/04-overlay-verify.md`에 있고, 카탈로그의 등급이 그 판정과 맞는다.
 4. 끝난 뒤 게임이 바닐라다: `overlay.ps1 status`가 125개 모두 바닐라, exe 해시가 원본, `mods\`와 `aurie.log`가 없다.
+
+**실측 결과 (2026-10-05, `research/04-overlay-verify.md`):** 게임을 한 번 켰다. 값 30개가 모두 메인 메뉴의 런타임에 있었다
+(`anchored` 29, `value-only` 1을 이름 히트로 이어 확인, `absent` 0). 양성 대조가 맞았고 덤프의 점검이 모두 `ok`였다. 29개를 `VERIFIED`로 올렸다.
+`global.__gameplay_vars`에 이름이 없는 키 둘(`bribe.cooldown`, `prestige.for_population`)은 파일을 읽은 ds_map에서만 보여 실험 키로 남겼다.
+게임은 종료할 때 데이터 파일을 다시 쓰지 않았고, 복원 뒤 125개 파일이 해시와 수정 시각까지 바닐라였다.
 
 효과(`effect`)를 재는 것은 이 단계의 일이 아니다. 새 게임을 시작해 화면에서 봐야 하고 키마다 방법이 다르다.
 도구가 선 뒤에 키 묶음별로 따로 잰다.

@@ -3,6 +3,25 @@
   "groups": [
     {
       "file": "debug_params.json",
+      "paths": [
+        "production_cost.ale", "fair_trade.fair_trade_purchase.ale", "fair_trade.fair_trade_sale.ale",
+        "fair_trade.migrants_limit_dummy", "building_duration_factor", "bet.dummy",
+        "building_resources.woodcutter_lvl_1[0][1]"
+      ],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 이 파일을 읽은 ds_map 의 같은 키에서 그 값을 봤다. building_resources 의 값은 woodcutter_lvl_1 이 가리키는 리스트를 따라가 확인했다. 게임을 시작한 뒤 어디로 가는지는 이 값으로 재지 않았다 (research/04)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": ["product_count.wood"],
+      "runtime": "VERIFIED",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 이 파일을 읽은 ds_map 의 product_count 에서 그 값을 봤다 (research/04). 효과는 이 빌드에서 재지 않았다. 커뮤니티의 보고는 아래 product_count.* 묶음의 메모에 있다"
+    },
+    {
+      "file": "debug_params.json",
       "paths": ["budget_money"],
       "runtime": "VERIFIED",
       "effect": "UNKNOWN",
@@ -53,6 +72,13 @@
     },
     {
       "file": "battle_params.json",
+      "paths": ["battle_dodge_shift_better", "limit.cut", "attack.sword.cut", "pain.cut", "defence.shield.bruise"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 이 파일을 읽은 ds_map 의 같은 키에서 그 값을 봤다. limit.cut 과 pain.cut 은 다른 구조에서도 보였다(pain.cut 은 어떤 ds_map 의 cut.__moral_modify). 게임을 시작한 뒤 어디로 가는지는 이 값으로 재지 않았다 (research/04)"
+    },
+    {
+      "file": "battle_params.json",
       "paths": ["battle_dodge_base"],
       "runtime": "VERIFIED",
       "effect": "UNKNOWN",
@@ -80,6 +106,16 @@
     },
     {
       "file": "director_params.json",
+      "paths": [
+        "group_cooldown_days.RAID", "group_min_spawn_days.RAID", "group_super_priority_days.RAID",
+        "events.vassal_player_demand.tickets", "events.vassal_player_demand.cooldown_days.max"
+      ],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 RAID 의 세 값은 ds_map 의 RAID.__cooldown_days, __min_spawn_day, __super_priority_days 와 o_data.__game_director_events_data.__params 의 같은 자리에서, events.vassal_player_demand 의 두 값은 그 __params.events 아래에서 봤다 (research/04)"
+    },
+    {
+      "file": "director_params.json",
       "paths": ["group_cooldown_days.EPIDEMY"],
       "runtime": "VERIFIED",
       "effect": "UNKNOWN",
@@ -103,6 +139,21 @@
       "note": "찾아보지 않았다"
     },
     {
+      "file": "knowledge/technology/textbooks/skill_combat_1.json",
+      "paths": ["upgrade_skill[0].value"],
+      "runtime": "VERIFIED",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 지식을 담은 ds_map 의 skill_combat_1.__upgrade_skill[0].value 에서 그 값을 봤다 (research/04). 효과는 이 빌드에서 재지 않았다. 커뮤니티의 보고는 아래 textbooks 묶음의 메모에 있다"
+    },
+    {
+      "file": "knowledge/technology/economic/07!building_internal_trade.json",
+      "paths": ["available_parameters[0].population"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 지식을 담은 ds_map 의 internal_trade.__available_parameters[0].__population 에서 그 값을 봤다 (research/04)"
+    },
+    {
       "file": "knowledge/technology/cultural_knowledge/addiction_resist.json",
       "paths": ["available_parameters[0].population"],
       "runtime": "VERIFIED",
@@ -123,6 +174,32 @@
       "runtime": "UNSEEN",
       "effect": "UNKNOWN",
       "note": "population 은 addiction_resist 한 파일에서만 확인했다. 나머지 파일과 나머지 키는 보지 않았다"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": ["bribe.give_rings", "church.max_capacity", "tavern.max_capacity"],
+      "runtime": "VERIFIED",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 global.__gameplay_vars 의 이름(키 경로를 _ 로 이은 것)과 이 파일을 읽은 ds_map 에서 그 값을 봤다 (research/04). 효과는 이 빌드에서 재지 않았다. 커뮤니티의 보고는 아래 묶음의 메모에 있다"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": [
+        "free_lord.stay_duration", "paper[\"messenger_cost \"]", "soldier.cost_for_combat_level",
+        "skill.increase_in_use.command"
+      ],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 global.__gameplay_vars 의 이름(키 경로를 _ 로 이은 것)과 이 파일을 읽은 ds_map 에서 그 값을 봤다 (research/04)"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": ["bribe.cooldown", "prestige.for_population"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "experimental": true,
+      "note": "게임 JSON 어디에도 없는 수로 바꾸자 메인 메뉴에서 이 파일을 읽은 ds_map 에서만 그 값을 봤다. global.__gameplay_vars 에는 이 이름이 없다(이 파일의 키 94개는 거기 있다). 파일은 읽히지만 게임이 이 값을 가져다 쓰는지는 의심스러워 실험 키로 둔다 (research/04)"
     },
     {
       "file": "gameplay_variables.json",

@@ -122,6 +122,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `overlay.ps1 probe-request` → `tools/probe.ps1` → `overlay.ps1 verify`. 값은 게임 JSON 어디에도 없는 수로 고르고, 이미 `VERIFIED`인
   키 하나를 양성 대조로 함께 바꾼다(`presets/verify-stage1.json`이 본이다). `verify`의 `anchored`만 올린다. **`SEEN`은 "반영된다"가 아니다**(같은 이름·값이 런타임에
   있었을 뿐이고 코드의 기본값과 가려지지 않는다). 커뮤니티의 보고는 `effect_by: community`와 출처로 따로 적는다.
+- `VERIFIED`도 "값이 메모리에 올라온다"까지다. 게임이 그 값을 쓰는지는 `effect`이고, 이 빌드에서 본 것은 `initial_budget` 하나다.
+  `gameplay_variables.json`의 키 가운데 `global.__gameplay_vars`에 이름이 없는 56개는 파일을 읽은 ds_map에만 올라온다(`research/04-overlay-verify.md`).
 - 카탈로그와 프리셋에는 게임 파일의 값을 옮겨 적지 않는다(키 이름, 등급, 해시만). 값이 든 표는
   `overlay.ps1 keys -Out refs\registry\<버전>.tsv`로 뽑는다(추적 안 함).
 - 수정기(`tools/overlay/jsonedit.py`)는 값의 글자만 바꾼다. 게임 파일에 한 번도 없던 문법(주석, 작은따옴표, `NaN`, 같은 키의 중복)은

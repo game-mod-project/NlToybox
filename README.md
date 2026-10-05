@@ -52,4 +52,5 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 - `docs/superpowers/specs/` — 설계
 - `research/00-game-structure.md` — 게임 구조와 실측 기록
 - `research/03-data-files.md` — 데이터 파일의 모양과 키별 근거
+- `research/04-overlay-verify.md` — 프리셋의 값이 런타임에 올라오는지 잰 결과
 - `CLAUDE.md` — 레포 규칙
