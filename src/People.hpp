@@ -24,9 +24,12 @@ namespace NlPeople
 	void DrawPeople();		// 인구·욕구: 플레이어의 사람 전원에게 한꺼번에
 	void DrawKnowledge();	// 지식: 영주에게 지식을 준다(research/12)
 	void DrawItems();		// 아이템: 한 사람의 소지금과 소지품
+	void DrawArmy();		// 군대: 병사를 만든다(research/13)
 
 	// 원격 명령(창 없이 같은 길을 태운다). 게임 스레드에서 부른다. 돌려주는 것: 답의 줄들.
 	std::vector<std::string> Do(const NlCore::PersonCommand& Command);
+	// 플레이어의 병사를 Count 명 만든다(몇 명이 되는지는 core/PeoplePlan 의 SoldierBatch 가 정한다: 1~20).
+	std::vector<std::string> SpawnSoldiers(double Count);
 	std::vector<std::string> List(bool All);
 	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);

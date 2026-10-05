@@ -32,6 +32,9 @@ namespace
 	// 지식의 종류 121개(research/12). 한 칸은 구조체: __name, __caption_replaced(화면의 이름), __category.
 	constexpr const char* k_KnowledgeList = "inst:o_data.__knowledge_data.__knowledge_list";
 	constexpr const char* k_ResourceCaptions = "global.__resource_caption";	// 자원 번호 → "resource.wood"(research/07)
+	// 플레이어의 병사 하나를 만드는 게임의 디버그 함수(research/13). 인자를 하나까지 받고 생략할 수 있다(기계어). 인자 없이 불러 병사가 생기고
+	// 병영의 목록과 게임의 군대 창에 올라오는 것을 봤다. 지도 가장자리의 자리에 나타나 마을로 걸어온다.
+	constexpr const char* k_SpawnSoldier = "gml_Script_rebellion_debug_spawn_player_soldier";
 	constexpr double k_Unknown = -1e9;										// 읽지 못한 수
 
 	struct Detail			// 고른 사람의 값. RValue 를 담지 않는다
@@ -79,6 +82,7 @@ namespace
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
 	char g_KnowledgeFilter[48] = "";
+	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	bool g_BulkKnowledgeArmed = false;	// "영주 전원에게 모든 지식"은 이것을 켠 뒤에만 눌린다(되돌릴 수 없다)
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
@@ -750,6 +754,29 @@ namespace
 		return text;
 	}
 
+	// 병사를 만든다. 돌려주는 글: 한 일.
+	std::string SpawnSoldiersNow(double Asked)
+	{
+		int count = 0;
+		if (!NlCore::SoldierBatch(Asked, count))
+			return "만들 병사의 수가 없습니다";
+		if (!NlAccess::InGame())
+			return "게임 화면이 아닙니다";
+		const int before = NlAccess::InstanceCount("o_dummy");
+		int made = 0;
+		for (int i = 0; i < count; i++)
+		{
+			RValue result;		// 이 함수 안에서만 든다
+			Log("people call rebellion_debug_spawn_player_soldier() " + std::to_string(i + 1) + "/" + std::to_string(count));		// 부르기 전에 남긴다
+			if (!NlGame::CallScript(k_SpawnSoldier, {}, result))
+				break;
+			made++;
+		}
+		const int after = NlAccess::InstanceCount("o_dummy");
+		Log("people: spawned " + std::to_string(made) + "/" + std::to_string(count) + " soldier(s), o_dummy " + std::to_string(before) + " -> " + std::to_string(after));
+		return "병사 " + std::to_string(made) + "명을 만들었습니다 (주민과 병사 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
+	}
+
 	void RefreshDetail()
 	{
 		const PersonRow* row = g_Selected.empty() ? nullptr : FindRow(g_Selected);
@@ -1108,6 +1135,14 @@ void NlPeople::GameTick(double Now, bool Active)
 
 	HoldTick(Now);
 
+	if (g_SpawnQueued > 0)
+	{
+		const int count = g_SpawnQueued;
+		g_SpawnQueued = 0;
+		g_Now.Last = SpawnSoldiersNow(count);
+		g_NextScan = 0;
+	}
+
 	if (!g_Queue.empty())
 	{
 		while (!g_Queue.empty())
@@ -1248,6 +1283,38 @@ void NlPeople::DrawKnowledge()
 	ImGui::EndDisabled();
 	DrawLast();
 	ImGui::EndChild();
+}
+
+void NlPeople::DrawArmy()
+{
+	std::lock_guard lock(g_Mutex);
+	if (NotReady())
+		return;
+	int soldiers = 0;
+	for (const PersonRow& row : g_Now.People)
+		soldiers += NlCore::IsPlayers(row) && !row.Character && !row.Dead && row.Strata == 2;		// 병사의 갈래는 2 다(research/13)
+	ImGui::Text("플레이어의 병사 %d명", soldiers);
+	for (const int amount : { 1, 5, 10 })
+	{
+		ImGui::SameLine();
+		ImGui::PushID(amount);
+		if (ImGui::Button(("+" + std::to_string(amount)).c_str()))
+			g_SpawnQueued = (std::min)(g_SpawnQueued + amount, NlCore::k_SoldierBatchMax);		// windows.h 의 min 매크로를 피한다
+		ImGui::PopID();
+	}
+	Hint("게임의 디버그 함수로 병사를 만듭니다. 지도 가장자리에 나타나 마을로 걸어오고, 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
+		"되돌릴 수 없고 세이브에 남습니다. 전투의 피해와 사기는 아직 없습니다.");
+	DrawLast();
+}
+
+std::vector<std::string> NlPeople::SpawnSoldiers(double Count)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
+	g_Now.Last = SpawnSoldiersNow(Count);
+	return { g_Now.Last };
 }
 
 void NlPeople::DrawItems()

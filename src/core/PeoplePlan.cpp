@@ -126,6 +126,17 @@ namespace NlCore
 		return std::find(Equipped.begin(), Equipped.end(), static_cast<double>(Index)) != Equipped.end();
 	}
 
+	bool SoldierBatch(double Asked, int& Count)
+	{
+		if (!std::isfinite(Asked))
+			return false;
+		const double whole = std::round(Asked);
+		if (whole < 1)
+			return false;
+		Count = static_cast<int>(std::min(whole, static_cast<double>(k_SoldierBatchMax)));
+		return true;
+	}
+
 	bool GiftDelta(double Current, double Asked, double& Delta)
 	{
 		if (!std::isfinite(Current) || !std::isfinite(Asked))

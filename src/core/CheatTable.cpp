@@ -17,7 +17,7 @@ namespace NlCore
 			// 지식·아이템도 제 패널(src/People.cpp)이 있다.
 			{ Area::Knowledge, "knowledge", "지식", 5, true },
 			{ Area::Items, "items", "아이템", 5, true },
-			{ Area::Army, "army", "군대·전투", 5 },
+			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/People.cpp)
 			{ Area::Diplomacy, "diplomacy", "외교", 6 },
 			{ Area::Religion, "religion", "종교", 6 },
 			{ Area::Time, "time", "시간", 2, true },
@@ -186,6 +186,13 @@ namespace NlCore
 			// 배율을 건 뒤로는 그 함수가 불리지 않아 효과를 보지 못했다(연구를 새로 시작할 때 불리는 것으로 보인다).
 			{ "research_time", Area::Knowledge, "연구 시간 배율", "inst:o_game_map_controller.__library_manager.get_learn_time", HS, 0.1, 0, 0.01, 1, false,
 				"영주가 지식을 익히는 데 드는 시간에 곱한다(0.1 이면 열 배 빨리). 새로 시작하는 연구부터 먹을 것으로 보인다" },
+
+			// 병사의 고용 값(research/13). 고용 창의 값은 SoulBasic.get_soldier_cost()(인자 없음)가 돌려주는 수다(100~160, 풀려난 수감자 42~52).
+			// 생성자의 정적 메서드라 사람이 없어도 이름으로 건다(이름의 번호는 이 게임 버전의 것이다).
+			// 플레이에서 봤다(2026-10-06, 0.11.1): 0.1 을 걸자 고용 창의 값이 16·14·12·10 이 됐고, 160짜리를 고용하자 금화가 1,901 → 1,885 가 됐다.
+			{ "hire_cost", Area::Army, "병사 고용 값 배율",
+				"gml_Script_anon_SoulBasic_gml_GlobalScript_SoulBasic_11987516072_SoulBasic_gml_GlobalScript_SoulBasic",
+				HS, 0.1, 1, 0.01, 1, true, "병사를 고용할 때 내는 금화에 곱한다(0.1 이면 10분의 1). 고용 창을 다시 열면 보인다" },
 
 			{ "combat_no_injuries", Area::Army, "부상 없는 전투", "inst:o_debug.is_combat_without_injuries", T, 1, 0, 0, 0, false,
 				"전투에서 부상이 생기지 않게 하는 개발자 스위치로 보인다" },
