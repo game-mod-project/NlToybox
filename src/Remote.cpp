@@ -1,7 +1,9 @@
 #include "Remote.hpp"
 
 #include "Access.hpp"
+#include "Economy.hpp"
 #include "Game.hpp"
+#include "Menu.hpp"
 #include "Recorder.hpp"
 #include "Search.hpp"
 #include "Ui.hpp"
@@ -282,6 +284,21 @@ namespace
 		}
 	}
 
+	// 경제 패널과 같은 길로 금화·자원을 바꾼다(NlEconomy::Do).
+	void DoEconomy(const RemoteCommand& C)
+	{
+		NlCore::EconomyCommand command;
+		if (!NlCore::ParseEconomyAct(C.Target, command.Act))
+		{
+			Say("  : unknown economy command");
+			return;
+		}
+		command.Amount = C.Number;
+		command.Resource = static_cast<int>(NlCore::OptionNumber(C, "resource", -1));
+		Say("  running economy " + C.Target + " " + Shortest(C.Number));		// 죽으면 여기까지 남는다
+		Say("  " + NlEconomy::Do(command));
+	}
+
 	void DoState()
 	{
 		double game_time = 0, warp = 0;
@@ -305,6 +322,10 @@ namespace
 			DoAsk(C);
 		else if (C.Verb == "about")
 			DoAbout(C);
+		else if (C.Verb == "economy")
+			DoEconomy(C);
+		else if (C.Verb == "page")
+			Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
 		else if (C.Verb == "list")
 			DoList(C);
 		else if (C.Verb == "tree")

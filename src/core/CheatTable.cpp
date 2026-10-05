@@ -7,8 +7,8 @@ namespace NlCore
 	const std::vector<AreaInfo>& Areas()
 	{
 		static const std::vector<AreaInfo> areas = {
-			{ Area::Explorer, "explorer", "탐색기", 2 },
-			{ Area::Economy, "economy", "경제", 3 },
+			{ Area::Explorer, "explorer", "탐색기", 2, true },
+			{ Area::Economy, "economy", "경제", 3, true },
 			{ Area::Build, "build", "건설·생산", 3 },
 			{ Area::Person, "person", "인물", 4 },
 			{ Area::Lord, "lord", "영주", 4 },
@@ -18,12 +18,12 @@ namespace NlCore
 			{ Area::Army, "army", "군대·전투", 5 },
 			{ Area::Diplomacy, "diplomacy", "외교", 6 },
 			{ Area::Religion, "religion", "종교", 6 },
-			{ Area::Time, "time", "시간", 2 },
+			{ Area::Time, "time", "시간", 2, true },
 			{ Area::World, "world", "월드", 6 },
 			{ Area::Events, "events", "이벤트", 6 },
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7 },
-			{ Area::Tweaks, "tweaks", "배율", 2 },
+			{ Area::Tweaks, "tweaks", "배율", 2, true },
 		};
 		return areas;
 	}
@@ -49,13 +49,18 @@ namespace NlCore
 		// Off 는 그 덤프의 값이다. 뜻은 변수 이름에서 읽은 것이고 효과는 아직 재지 않았다(Verified = false).
 		// 차례: Id, 영역, 이름, 주소, 종류, On, Off, Min, Max, Verified, 설명
 		static const std::vector<Cheat> cheats = {
-			{ "resources_edit_mode", Area::Economy, "자원 수량 편집 모드", "inst:o_debug.is_resources_edit_mode", T, 1, 0, 0, 0, false,
-				"게임의 창고 화면에서 자원의 수량을 고치게 하는 개발자 스위치로 보인다" },
+			// o_debug.is_resources_edit_mode 는 넣지 않는다: 켜도 자원의 목록이 나오지 않아 쓸 수 없었다(사용자가 플레이에서 봤다. research/07).
+			// 금화와 자원은 경제 패널(src/Economy.cpp)이 게임의 함수로 바꾼다.
 
-			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, false,
-				"건물을 놓으면 바로 다 지어지게 하는 개발자 스위치로 보인다" },
-			{ "build_all", Area::Build, "모든 건물 건설 가능", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, false,
-				"지식이나 조건 없이 모든 건물을 지을 수 있게 하는 개발자 스위치로 보인다" },
+			// 창고 용량(…__warehouse.__cached_total_capacity_for_storage_type.<갈래>)은 아직 넣지 않는다: 게임이 다시 채우는 캐시라
+			// "원래대로"가 낡은 값을 써 넣게 된다. 게임이 그 값을 언제 다시 만드는지 잰 뒤(3나-2)에 넣는다.
+
+			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
+			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
+				"건물을 놓으면 바로 다 지어진다" },
+			// 사용자가 플레이에서 봤다: 건설 목록은 풀리지만 조건에 걸리는 건물은 여전히 지을 수 없다. 조건까지 푸는 것은 아직 없다.
+			{ "build_all", Area::Build, "건설 목록 모두 열기 (조건은 그대로)", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, false,
+				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
 

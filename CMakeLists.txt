@@ -15,6 +15,7 @@ add_library(nlcore STATIC
   src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
+  src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
   src/core/Rate.cpp
   src/core/RemoteCommand.cpp
@@ -44,6 +45,7 @@ add_library(nltoybox SHARED
   src/Access.cpp
   src/Cheats.cpp
   src/Dump.cpp
+  src/Economy.cpp
   src/Explorer.cpp
   src/Finder.cpp
   src/Game.cpp

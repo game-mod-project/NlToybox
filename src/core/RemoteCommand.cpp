@@ -1,8 +1,11 @@
 #include "RemoteCommand.hpp"
 
 #include "AskPath.hpp"
+#include "CheatTable.hpp"
+#include "EconomyPlan.hpp"
 #include "Text.hpp"
 
+#include <cmath>
 #include <fstream>
 
 namespace NlCore
@@ -211,6 +214,31 @@ namespace NlCore
 		{
 			if (count != 2 || (tokens[1] != "open" && tokens[1] != "close"))
 				return fail("window needs open or close");
+			command.Target = tokens[1];
+		}
+		else if (verb == "economy")
+		{
+			EconomyAct act = EconomyAct::GoldAdd;
+			if (count < 2 || !ParseEconomyAct(tokens[1], act))
+				return fail("economy needs gold_add, gold_set, add, set or all");
+			command.Target = tokens[1];
+			if (!options(2))
+				return command;
+			const auto amount = command.Options.find("amount");
+			if (amount == command.Options.end() || !ParseNumber(amount->second, command.Number))
+				return fail("economy needs amount=<number>");
+			double resource = 0;
+			const auto given = command.Options.find("resource");
+			if (NeedsResource(act) && (given == command.Options.end() || !ParseNumber(given->second, resource)
+				|| !(resource >= 0 && resource < 1000) || resource != std::floor(resource)))
+				return fail("economy " + tokens[1] + " needs resource=<index>");
+			if (!NeedsResource(act) && given != command.Options.end())
+				return fail("economy " + tokens[1] + " takes no resource");
+		}
+		else if (verb == "page")
+		{
+			if (count != 2 || !FindArea(tokens[1]))
+				return fail("page needs the key of an area (explorer, economy, build, ...)");
 			command.Target = tokens[1];
 		}
 		else if (verb == "call" || verb == "method")

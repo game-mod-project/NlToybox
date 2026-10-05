@@ -21,6 +21,7 @@ namespace NlCore
 		const char* Key;		// 시험 설정의 page= 에 쓰는 이름
 		const char* Label;		// 왼쪽 목록에 보이는 이름
 		int Stage;				// 스펙 §10 의 몇 단계에서 채우는가
+		bool Panel = false;		// 표의 항목과 따로 제 패널이 있는가(탐색기, 경제, 시간, 배율). 있으면 표가 비어도 목록에서 켜져 있다
 	};
 
 	// 왼쪽 목록의 차례대로. 차례는 Area 의 열거 차례와 같다.

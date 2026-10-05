@@ -6,6 +6,7 @@
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
+#include "core/EconomyPlan.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
@@ -486,6 +487,19 @@ int main(int argc, char** argv)
 		}
 	});
 
+	Test("Thousands 는 정수로 맞춰 세 자리마다 쉼표를 넣는다", [] {
+		// Shortest 는 큰 수를 지수로 쓴다(100000 → "1e+05"). 창에 보이는 금화와 자원의 수는 이것으로 쓴다.
+		CHECK_STR(Thousands(0), "0");
+		CHECK_STR(Thousands(999), "999");
+		CHECK_STR(Thousands(1000), "1,000");
+		CHECK_STR(Thousands(3600.4), "3,600");
+		CHECK_STR(Thousands(100000), "100,000");
+		CHECK_STR(Thousands(1e6), "1,000,000");
+		CHECK_STR(Thousands(-1250000), "-1,250,000");
+		CHECK_STR(Thousands(-0.2), "0");
+		CHECK_STR(Thousands(std::numeric_limits<double>::infinity()), "inf");
+	});
+
 	Test("ScriptRoutineName 은 접두 없는 이름에 gml_Script_ 를 붙인다", [] {
 		// 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(research/07). 부르거나 훅을 걸 이름은 하나뿐이어야 한다.
 		CHECK_STR(ScriptRoutineName("budget_money_get"), "gml_Script_budget_money_get");
@@ -495,6 +509,93 @@ int main(int argc, char** argv)
 		CHECK_STR(ScriptRoutineName(""), "");
 		CHECK_STR(ScriptRoutineName("a b"), "");
 	});
+
+	Test("경제: 자원의 이름과 갈래의 이름", [] {
+		CHECK_STR(ResourceKey("resource.wood"), "wood");
+		CHECK_STR(ResourceKey("wood"), "wood");
+		CHECK_STR(ResourceKey(""), "");
+		CHECK_STR(ResourceLabel("wood"), "나무 (wood)");
+		CHECK_STR(ResourceLabel("something_new"), "something_new");
+		CHECK_STR(CategoryLabel("food"), "음식");
+		CHECK_STR(CategoryLabel("resources"), "자원");		// 게임의 화면이 쓰는 말(research/08 의 화면)
+		CHECK_STR(CategoryLabel("herbs"), "식물");
+		CHECK_STR(CategoryLabel("unknown"), "unknown");
+	});
+
+	Test("경제: 명령을 변화량으로 푼다", [] {
+		const std::vector<double> counts = { 0, 300, 0, 5 };
+		const std::vector<int> stocked = { 1, 2, 3 };
+		const auto one = [&](EconomyAct act, int resource, double amount, double gold = 3000) {
+			return PlanEconomy({ act, resource, amount }, gold, counts, counts, stocked);
+		};
+		// 금화: 더하기는 그대로, 맞추기는 차이만큼
+		const auto add = one(EconomyAct::GoldAdd, -1, 1000);
+		CHECK(add.size() == 1 && add[0].Resource == -1 && add[0].Delta == 1000);
+		CHECK(one(EconomyAct::GoldSet, -1, 5000)[0].Delta == 2000 && one(EconomyAct::GoldSet, -1, 100)[0].Delta == -2900);
+		CHECK(one(EconomyAct::GoldSet, -1, 3000).empty());					// 이미 그 수다
+		CHECK(one(EconomyAct::GoldSet, -1, -50)[0].Delta == -3000);			// 음수로 맞추지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -5000)[0].Delta == -3000);		// 0 아래로 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -1000, 0).empty());				// 0 에서 더 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -10, -50).empty());				// 이미 음수면 더 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, 100, -50)[0].Delta == 100);
+		CHECK(one(EconomyAct::GoldAdd, -1, 0.4).empty() && one(EconomyAct::GoldAdd, -1, 1.6)[0].Delta == 2);	// 정수로
+		// 자원
+		const auto wood = one(EconomyAct::ResourceAdd, 1, 50);
+		CHECK(wood.size() == 1 && wood[0].Resource == 1 && wood[0].Delta == 50);
+		CHECK(one(EconomyAct::ResourceAdd, 3, -100)[0].Delta == -5);
+		CHECK(one(EconomyAct::ResourceSet, 1, 120)[0].Delta == -180 && one(EconomyAct::ResourceSet, 2, 7)[0].Delta == 7);
+		CHECK(one(EconomyAct::ResourceAdd, 4, 10).empty() && one(EconomyAct::ResourceAdd, -1, 10).empty() && one(EconomyAct::ResourceSet, 99, 10).empty());
+		// 모든 자원: 갈래에 든 것만(0번은 들지 않았다), 변화가 있는 것만
+		const auto all = one(EconomyAct::AllAdd, -1, 100);
+		CHECK(all.size() == 3 && all[0].Resource == 1 && all[1].Resource == 2 && all[1].Delta == 100 && all[2].Resource == 3);
+		const auto less = one(EconomyAct::AllAdd, -1, -5);
+		CHECK(less.size() == 2 && less[0].Resource == 1 && less[0].Delta == -5 && less[1].Resource == 3 && less[1].Delta == -5);
+		// 수가 아니거나 터무니없으면 아무것도 하지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::quiet_NaN()).empty());
+		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::infinity()).empty() && one(EconomyAct::AllAdd, -1, 1e12).empty());
+
+		// 지금 수가 정수가 아니어도 넘기는 변화량은 정수다. 줄여도 0 아래로 가지 않는다.
+		CHECK(one(EconomyAct::GoldSet, -1, 5000, 3000.5)[0].Delta == 2000);
+		const std::vector<double> half = { 0, 5.5 };
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, -10 }, 0, half, half, { 1 })[0].Delta == -5);
+		CHECK(PlanEconomy({ EconomyAct::ResourceSet, 1, 0 }, 0, half, half, { 1 })[0].Delta == -5);
+		// 읽은 수가 수가 아니면 부르지 않는다(NaN 을 게임의 함수에 넘기지 않는다).
+		const double nan = std::numeric_limits<double>::quiet_NaN();
+		CHECK(one(EconomyAct::GoldAdd, -1, 100, nan).empty() && one(EconomyAct::GoldSet, -1, 100, nan).empty());
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, 10 }, 0, { 0, nan }, { 0, nan }, { 1 }).empty());
+		// 맞추기의 차이가 터무니없이 크면 하지 않는다.
+		CHECK(one(EconomyAct::GoldSet, -1, 0, 3e9).empty());
+		// 갈래에 없는 자원(0번 rune)은 하나씩도 건드리지 않는다: 창고의 change 가 그런 자원에 무엇을 하는지 잰 적이 없다.
+		CHECK(one(EconomyAct::ResourceAdd, 0, 5).empty() && one(EconomyAct::ResourceSet, 0, 5).empty());
+		// 예약된 몫은 줄이지 않는다: 줄일 수 있는 양은 예약되지 않은 수까지다. 더하는 것은 그대로다.
+		const std::vector<double> total = { 0, 300 }, unreserved = { 0, 250 };
+		CHECK(PlanEconomy({ EconomyAct::ResourceSet, 1, 0 }, 0, total, unreserved, { 1 })[0].Delta == -250);
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, -1000 }, 0, total, unreserved, { 1 })[0].Delta == -250);
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, 10 }, 0, total, unreserved, { 1 })[0].Delta == 10);
+		// 같은 번호가 두 번 들어 있어도 한 번만 한다. 범위 밖 번호는 건너뛴다.
+		CHECK(PlanEconomy({ EconomyAct::AllAdd, -1, 5 }, 0, total, total, { 1, 1, 7 }).size() == 1);
+	});
+
+	Test("경제: 앞뒤의 수로 다 들어가지 않은 것을 가린다", [] {
+		// 함수의 반환값이 "적용된 양"인지는 모른다(본 반환은 둘 다 청한 수와 같았다). 앞뒤의 수를 견준다.
+		const std::vector<EconomyChange> done = { { -1, 1000 }, { 1, 50 }, { 2, 10 }, { 9, 5 } };
+		const auto shorts = EconomyShortfall(done, 3000, { 0, 300, 0 }, 4000, { 0, 300, 10 });
+		CHECK(shorts.size() == 2 && shorts[0].Resource == 1 && shorts[0].Asked == 50 && shorts[0].Applied == 0);
+		CHECK(shorts[1].Resource == 9);		// 뒤의 수를 읽지 못한 것을 다 들어갔다고 하지 않는다
+		const auto gold = EconomyShortfall({ { -1, 1000 } }, 3000, {}, 3600, {});
+		CHECK(gold.size() == 1 && gold[0].Resource == -1 && gold[0].Applied == 600);
+		CHECK(EconomyShortfall({ { -1, -500 }, { 1, -20 } }, 3000, { 0, 300 }, 2500, { 0, 280 }).empty());
+	});
+
+	Test("경제: 원격 명령의 낱말", [] {
+		EconomyAct act = EconomyAct::GoldAdd;
+		CHECK(ParseEconomyAct("gold_set", act) && act == EconomyAct::GoldSet && !NeedsResource(act));
+		CHECK(ParseEconomyAct("add", act) && act == EconomyAct::ResourceAdd && NeedsResource(act));
+		CHECK(ParseEconomyAct("set", act) && act == EconomyAct::ResourceSet && NeedsResource(act));
+		CHECK(ParseEconomyAct("all", act) && act == EconomyAct::AllAdd && !NeedsResource(act));
+		CHECK(ParseEconomyAct("gold_add", act) && act == EconomyAct::GoldAdd && !ParseEconomyAct("gold", act) && !ParseEconomyAct("", act));
+	});
+
 
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
@@ -558,7 +659,12 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.Min < cheat.Max);
 		}
-		CHECK(Cheats().size() == 31);
+		CHECK(Cheats().size() == 30);
+		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
+		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
+		CHECK(FindCheat("resources_edit_mode") == nullptr);
+		// 창고 용량은 넣지 않는다: 게임이 다시 채우는 캐시라 "원래대로"가 낡은 값을 써 넣는다. 자리를 잰 뒤(3나-2)에 넣는다.
+		CHECK(FindCheat("cap_food") == nullptr);
 	});
 
 	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {
@@ -571,6 +677,12 @@ int main(int argc, char** argv)
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
 		CHECK(Areas().size() == 17);
+		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
+		for (const AreaInfo& area : Areas())
+		{
+			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time || area.Id == Area::Tweaks;
+			CHECK(area.Panel == panel);
+		}
 		CHECK(FindArea("nope") == nullptr);
 		CHECK_STR(GetArea(Area::Time).Key, "time");
 		for (const Cheat& cheat : Cheats())
@@ -893,6 +1005,13 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("shot hud-1").Target == "hud-1" && ParseRemoteLine("window close").Target == "close");
 		const RemoteCommand about = ParseRemoteLine("about inst:o_game_map_controller.__province.__warehouse.change");
 		CHECK(about.Error.empty() && about.Verb == "about" && about.Target == "inst:o_game_map_controller.__province.__warehouse.change");
+		const RemoteCommand gold = ParseRemoteLine("economy gold_add amount=1000");
+		CHECK(gold.Error.empty() && gold.Verb == "economy" && gold.Target == "gold_add" && gold.Number == 1000);
+		const RemoteCommand wood = ParseRemoteLine("economy add resource=1 amount=-5");
+		CHECK(wood.Error.empty() && wood.Target == "add" && wood.Number == -5 && OptionNumber(wood, "resource", -1) == 1);
+		CHECK(ParseRemoteLine("economy all amount=100").Error.empty());
+		const RemoteCommand page = ParseRemoteLine("page economy");
+		CHECK(page.Error.empty() && page.Verb == "page" && page.Target == "economy");
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {
@@ -909,7 +1028,10 @@ int main(int argc, char** argv)
 		for (const char* line : { "dance", "ask", "ask o_debug.x", "ask global.a global.b", "list", "list global.a max", "find", "find value=abc",
 			"refine", "refine value=x", "write inst:o_debug.x", "write inst:o_debug=3", "write inst:o_debug.x=abc", "poke global=1",
 			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
-			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y" })
+			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y",
+			"economy", "economy gold", "economy gold_add", "economy gold_add amount=x", "economy add amount=5", "economy add resource=1.5 amount=5",
+			"economy set resource=-1 amount=5", "economy add resource=1e300 amount=5", "economy all resource=3 amount=100",
+			"economy gold_add resource=1e300 amount=5", "page", "page nowhere", "page economy now" })
 		{
 			if (ParseRemoteLine(line).Error.empty())
 			{

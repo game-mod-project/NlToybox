@@ -19,6 +19,10 @@ namespace NlCore
 	// 다시 읽으면 같은 수가 되는 가장 짧은 글("0.83", "3", "-4"). 유한하지 않으면 "nan" / "inf" / "-inf".
 	std::string Shortest(double Value);
 
+	// 정수로 맞춰 세 자리마다 쉼표를 넣는다("3,600", "-1,250,000"). 창에 보이는 수에 쓴다(Shortest 는 큰 수를 지수로 쓴다).
+	// 유한하지 않으면 Shortest 와 같다.
+	std::string Thousands(double Value);
+
 	// 글 전체가 수일 때만 참.
 	bool ParseNumber(const std::string& Text, double& Out);
 
