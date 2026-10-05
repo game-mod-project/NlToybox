@@ -1,6 +1,7 @@
 #include "Cheats.hpp"
 
 #include "Access.hpp"
+#include "core/AskPath.hpp"
 #include "core/SpeedControl.hpp"
 #include "core/Text.hpp"
 
@@ -32,7 +33,10 @@ namespace
 		std::string Note, Logged;
 	};
 
-	constexpr double k_Factors[] = { 0.25, 0.5, 1, 2, 5, 10, 50 };		// time_warp_max 는 100 이다(덤프)
+	// 게임 속도는 게임의 함수로 건다(research/08): o_time_controller.__set_warp(배속). 게임이 스스로 (3) 으로 부르는 것을 기록했고,
+	// 24 로 불러 흐름이 배속 1 의 약 24배가 되는 것을 쟀다. 1·3·6·12 는 게임의 단추가 쓰는 값(time_speed_variants)이다. time_warp_max 는 100 이다.
+	constexpr const char* k_SetWarp = "inst:o_time_controller.__set_warp";
+	constexpr double k_Factors[] = { 1, 3, 6, 12, 24, 50 };
 
 	std::recursive_mutex g_Mutex;	// 아래 전부를 지킨다
 	NlCheats::LogFn g_Log;
@@ -40,6 +44,8 @@ namespace
 	bool g_Changed = false;			// 상태 파일에 적을 것이 바뀌었다
 	bool g_Dirty = true;			// 다음 틱에 바로 적용한다
 	double g_NextApply = 0;
+	double g_WarpAsked = 0;			// 창이 누른 배속. 0 이면 없다. 다음 틱이 게임의 함수로 건다
+	std::string g_WarpNote;			// 마지막으로 건 결과
 
 	void Log(const std::string& Line)
 	{
@@ -225,7 +231,19 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 void NlCheats::GameTick(double Now, bool Visible)
 {
 	std::lock_guard lock(g_Mutex);
-	Speed().Tick(Now, Visible);
+	Speed().Tick(Now, Visible);		// 흐름을 재서 보여 준다. 배속은 아래에서 게임의 함수로 건다
+
+	if (g_WarpAsked > 0)
+	{
+		const double factor = g_WarpAsked;
+		g_WarpAsked = 0;
+		YYTK::RValue result;		// 이 함수 안에서만 든다
+		std::string why;
+		Log("speed call __set_warp(" + Shortest(factor) + ")");		// 부르기 전에 남긴다
+		const bool ok = NlAccess::CallMethod(NlCore::ParseAskPath(k_SetWarp), { YYTK::RValue(factor) }, result, why);
+		g_WarpNote = ok ? "배속 " + Shortest(factor) + " 을 걸었습니다" : "걸지 못했습니다: " + why;
+		Log(std::string("speed: ") + (ok ? "ok" : why));
+	}
 
 	if (!g_Dirty && Now < g_NextApply)
 		return;
@@ -274,40 +292,32 @@ void NlCheats::DrawTime()
 {
 	std::lock_guard lock(g_Mutex);
 	NlCore::SpeedControl& speed = Speed();
-	ImGui::TextWrapped("배율을 누르면 게임 속도를 바꿉니다. 처음 누를 때는 어느 값이 속도를 정하는지 시험으로 찾습니다"
-		"(게임 화면에서, 일시정지를 푼 채로 누르세요).");
+	ImGui::TextWrapped("배속을 누르면 게임의 함수로 게임 속도를 겁니다. 게임 화면에서, 일시정지를 푼 채로 누르세요. "
+		"게임의 속도 단추를 누르면 게임의 배속으로 돌아갑니다.");
 	ImGui::Spacing();
 
 	if (!speed.TimeFound())
 		ImGui::TextDisabled("시간 컨트롤러(o_time_controller)가 아직 없습니다.");
 	else
 	{
-		const double unit = speed.UnitRate();
-		if (unit > 0)
-			ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f  (기준의 %.2f배)", speed.Flow(), speed.Flow() / unit);
-		else
-			ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", speed.Flow());
+		ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", speed.Flow());		// 배속 1 에서 약 60 이었다(research/08)
 		ImGui::SameLine();
 		ImGui::TextDisabled("time_warp %s", Shortest(speed.Warp()).c_str());
 	}
 
-	ImGui::BeginDisabled(speed.Busy() || !speed.TimeFound());
+	ImGui::BeginDisabled(!speed.TimeFound());
 	for (const double factor : k_Factors)
 	{
 		const std::string label = "x" + Shortest(factor);
 		if (ImGui::Button(label.c_str(), ImVec2(64, 0)))
-			speed.Press(factor);
+			g_WarpAsked = factor;
 		ImGui::SameLine();
 	}
 	ImGui::EndDisabled();
-	// 시험 중에도 누를 수 있다: 시험을 그만두고 써 둔 값을 되돌린다.
-	if (ImGui::Button(speed.Busy() ? "시험 그만두기##release" : "게임에 맡김##release"))
-		speed.Release();
+	ImGui::NewLine();
 
-	if (!speed.Note().empty())
-		ImGui::TextWrapped("%s", speed.Note().c_str());
-	if (speed.Chosen())
-		ImGui::TextDisabled("손잡이: %s (%s)", speed.ChosenLabel().c_str(), speed.Sticky() ? "한 번 쓰기" : "계속 쓰기");
+	if (!g_WarpNote.empty())
+		ImGui::TextDisabled("%s", g_WarpNote.c_str());
 }
 
 bool NlCheats::HasItems(Area Where)

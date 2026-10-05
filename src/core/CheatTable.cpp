@@ -7,8 +7,8 @@ namespace NlCore
 	const std::vector<AreaInfo>& Areas()
 	{
 		static const std::vector<AreaInfo> areas = {
-			{ Area::Explorer, "explorer", "탐색기", 2 },
-			{ Area::Economy, "economy", "경제", 3 },
+			{ Area::Explorer, "explorer", "탐색기", 2, true },
+			{ Area::Economy, "economy", "경제", 3, true },
 			{ Area::Build, "build", "건설·생산", 3 },
 			{ Area::Person, "person", "인물", 4 },
 			{ Area::Lord, "lord", "영주", 4 },
@@ -18,12 +18,12 @@ namespace NlCore
 			{ Area::Army, "army", "군대·전투", 5 },
 			{ Area::Diplomacy, "diplomacy", "외교", 6 },
 			{ Area::Religion, "religion", "종교", 6 },
-			{ Area::Time, "time", "시간", 2 },
+			{ Area::Time, "time", "시간", 2, true },
 			{ Area::World, "world", "월드", 6 },
 			{ Area::Events, "events", "이벤트", 6 },
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7 },
-			{ Area::Tweaks, "tweaks", "배율", 2 },
+			{ Area::Tweaks, "tweaks", "배율", 2, true },
 		};
 		return areas;
 	}

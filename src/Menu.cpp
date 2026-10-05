@@ -119,7 +119,7 @@ namespace
 	// 그 영역에 보여 줄 것이 있는가. 없는 영역은 목록에서 흐리게 보인다.
 	bool HasContent(Area Where)
 	{
-		return Where == Area::Explorer || Where == Area::Time || Where == Area::Tweaks || NlCheats::HasItems(Where);
+		return NlCore::GetArea(Where).Panel || NlCheats::HasItems(Where);
 	}
 }
 
@@ -220,8 +220,11 @@ void NlMenu::Draw()
 	case Area::Tweaks: NlTweaks::Draw(); break;
 	case Area::Economy:
 		NlEconomy::Draw();
-		ImGui::Separator();
-		NlCheats::DrawArea(page);
+		if (NlCheats::HasItems(page))		// 표의 경제 항목은 지금 없다(잰 뒤에 넣는다)
+		{
+			ImGui::Separator();
+			NlCheats::DrawArea(page);
+		}
 		break;
 	default: NlCheats::DrawArea(page); break;
 	}

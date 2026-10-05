@@ -25,9 +25,9 @@ namespace NlCore
 			{ "clay_roof_tile", "점토 기와" }, { "stone_tile", "석재 타일" },
 		};
 
-		// 키는 o_data.__resource_categories_data.__categories 에서 봤다(research/07).
+		// 키는 o_data.__resource_categories_data.__categories 에서 봤다(research/07). 이름은 게임의 화면이 쓰는 말에 맞췄다(research/08 의 화면).
 		constexpr Named k_Categories[] = {
-			{ "food", "음식" }, { "liquid", "액체" }, { "resources", "물자" }, { "armory", "전쟁 물자" }, { "herbs", "약초·작물" }, { "raw", "원자재" },
+			{ "food", "음식" }, { "liquid", "액체" }, { "resources", "자원" }, { "armory", "전쟁 물자" }, { "herbs", "식물" }, { "raw", "원자재" },
 		};
 
 		constexpr double k_MaxAmount = 1e9;		// 이보다 큰 수는 잘못 친 것으로 본다

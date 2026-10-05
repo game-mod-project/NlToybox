@@ -517,6 +517,8 @@ int main(int argc, char** argv)
 		CHECK_STR(ResourceLabel("wood"), "나무 (wood)");
 		CHECK_STR(ResourceLabel("something_new"), "something_new");
 		CHECK_STR(CategoryLabel("food"), "음식");
+		CHECK_STR(CategoryLabel("resources"), "자원");		// 게임의 화면이 쓰는 말(research/08 의 화면)
+		CHECK_STR(CategoryLabel("herbs"), "식물");
 		CHECK_STR(CategoryLabel("unknown"), "unknown");
 	});
 
@@ -675,6 +677,12 @@ int main(int argc, char** argv)
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
 		CHECK(Areas().size() == 17);
+		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
+		for (const AreaInfo& area : Areas())
+		{
+			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time || area.Id == Area::Tweaks;
+			CHECK(area.Panel == panel);
+		}
 		CHECK(FindArea("nope") == nullptr);
 		CHECK_STR(GetArea(Area::Time).Key, "time");
 		for (const Cheat& cheat : Cheats())
