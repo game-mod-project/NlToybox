@@ -17,9 +17,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 원격 저장소가 없다. PR 대신 로컬 merge commit(`git merge --no-ff`)을 쓴다.
   원격을 만들면 2단계 PR로 바꾸고 이 절을 고친다.
 - CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/test-native.ps1`·
-  `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests` 통과,
+  `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests`와 `py -3.14 -m unittest discover -s tools/overlay/tests` 통과,
   `tools/check-load.ps1` 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
-  앞의 셋은 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
+  앞의 넷은 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
 - 머지한 브랜치는 지운다(`git branch -d`).
 
 ## 경로
@@ -87,11 +87,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `mods\Native\AurieCore.dll`, `mods\Aurie\YYToolkit.dll`.
 - `tools/restore-game.ps1`: 같은 버전의 백업으로 exe를 덮어쓰고, `mods\`에서 이 레포가 놓은
   파일과 게임 폴더 최상위의 `aurie.log`를 지운다. 백업의 내용이 이름의 해시와 다르면 거부한다.
+- 프리셋은 `tools/overlay.ps1`로 입히고 되돌린다(아래 "데이터 오버레이"). `data-edit.ps1`은 실측용으로 남겨 둔다.
+  둘을 섞어 쓰지 않는다: `data-edit.ps1`로 고친 파일은 `overlay.ps1`이 "모르는 것"으로 보고 거부한다(`data-restore.ps1`로 먼저 되돌린다).
 - 데이터 파일은 `tools/data-snapshot.ps1`으로 바닐라 사본을 뜬 뒤에만 고친다. 되돌릴 때는
   `tools/data-restore.ps1`. 스냅샷은 `backups\data\<게임 버전>\`에 있다(추적 안 함).
 - `tools/probe.ps1`은 요청 파일(`tools/probes/*.txt`)을 놓고 게임을 켜서 런타임 덤프를 받아 온다.
   요청에 `repeat_seconds`가 있으면 메인 메뉴에서 한 번, 그 뒤로 일정 간격으로 덤프하고, 사용자가 새 게임을
-  시작해 잠시 둔 뒤 직접 게임을 끈다. 덤프는 `refs\runtime\`에 둔다(추적 안 함). 분석은
+  시작해 잠시 둔 뒤 직접 게임을 끈다(메뉴 덤프가 끝났을 때의 알림음은 `-Beep`을 줄 때만 낸다). 덤프는 `refs\runtime\`에 둔다(추적 안 함). 분석은
   `py -3.14 tools/re/dump_tool.py`, "없다"를 믿어도 되는지는 `dump_tool.py controls`로 본다.
   요청 파일을 고치면 `tools/test-native.ps1`로 읽어 본다. 찾으려는 값은 요청에 미리 넣어야 한다
   (덤프는 요청한 값과 이름만 깊이 찾는다).
@@ -99,6 +101,29 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   지우는 것은 사용자가 정한다.
 - 게임 갱신이나 Steam 무결성 검사 뒤에는 `tools/game-status.ps1`로 패치가 남았는지 보고
   `tools/setup-aurie.ps1`을 다시 돌린다. 그 뒤 `tools/check-load.ps1`로 다시 확인한다.
+
+## 데이터 오버레이
+
+    pwsh -File tools/overlay.ps1 check -Preset presets\example.json   # 무엇이 바뀌는지 본다. 쓰지 않는다
+    pwsh -File tools/overlay.ps1 apply -Preset presets\example.json   # 바닐라로 되돌린 뒤 입힌다
+    pwsh -File tools/overlay.ps1 restore                              # 바닐라로 되돌린다
+    pwsh -File tools/overlay.ps1 status
+
+- 프리셋(`presets/*.json`)은 카탈로그(`catalog/<게임 버전>/keys.json`)에 있는 키의 **수**만 바꾼다. 형식은 스펙
+  (`docs/superpowers/specs/2026-10-04-data-overlay-design.md`) §4.2, 등급의 뜻은 §4.3.
+- 입힌 뒤에는 게임을 다시 켜야 반영된다(값은 게임을 켤 때 읽힌다). 게임이 켜져 있으면 `apply`와 `restore`는 거부한다.
+- 게임의 데이터 파일을 쓰는 코드는 `tools/overlay/store.py` 하나다. 바닐라인지는 `catalog/<게임 버전>/files.json`의 SHA256으로
+  판정한다. 바닐라도 아니고 이 도구가 마지막에 쓴 것도 아닌 파일이 하나라도 있으면 아무것도 쓰지 않는다.
+- 상태는 `backups\overlay\<게임 버전>\state.json`, 스냅샷은 `backups\data\<게임 버전>\`에 있다(추적 안 함).
+- 카탈로그의 `runtime` 등급은 이 레포가 이 빌드에서 잰 것만 올린다: 흔치 않은 값을 쓰는 프리셋을 입히고
+  `overlay.ps1 probe-request` → `tools/probe.ps1` → `overlay.ps1 verify`. **`SEEN`은 "반영된다"가 아니다**(같은 이름·값이 런타임에
+  있었을 뿐이고 코드의 기본값과 가려지지 않는다). 커뮤니티의 보고는 `effect_by: community`와 출처로 따로 적는다.
+- 카탈로그와 프리셋에는 게임 파일의 값을 옮겨 적지 않는다(키 이름, 등급, 해시만). 값이 든 표는
+  `overlay.ps1 keys -Out refs\registry\<버전>.tsv`로 뽑는다(추적 안 함).
+- 수정기(`tools/overlay/jsonedit.py`)는 값의 글자만 바꾼다. 게임 파일에 한 번도 없던 문법(주석, 작은따옴표, `NaN`, 같은 키의 중복)은
+  추측해서 읽지 않고 오류를 낸다. 문법의 근거는 `research/03-data-files.md`.
+- 게임이 갱신되면 그 버전의 카탈로그가 없어 `overlay.ps1`이 거부한다. Steam이 파일을 쓴 직후에 `catalog/<새 버전>/keys.json`을 놓고
+  `overlay.ps1 pin`으로 `files.json`을 만든 뒤 `overlay.ps1 scan`과 `check`로 키가 그대로인지 본다. 등급은 새 빌드에서 다시 잰다.
 
 ## 의존
 
@@ -112,6 +137,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 도구
 
 - Python은 `py -3.14`. `WindowsApps\python.exe`는 스토어 스텁이라 멈춘다.
+- 오버레이 도구는 표준 라이브러리만 쓴다. 시험은 `py -3.14 -m unittest discover -s tools/overlay/tests`(게임을 켜지 않는다. 임시 폴더로 돈다).
 - cmake·ninja는 PATH에 없다. `tools/build.ps1`이 Build Tools 동봉본을 찾아 쓴다.
   빌드 출력의 `'vswhere.exe' is not recognized` 한 줄은 `vcvars64.bat` 안에서 나오는 것으로 무해하다.
 
