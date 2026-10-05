@@ -41,3 +41,22 @@ def files_data(files=None):
 
 def make_catalog(groups=None, files=None):
     return catalog.build(keys_data(groups), files_data(files))
+
+
+# --- 가짜 게임 폴더 (store.py 의 시험부터 쓴다) ---
+import store
+
+
+def make_game(root, files=None):
+    """root 아래에 가짜 게임 폴더를 만들고 store.Dirs 를 돌려준다. 스냅샷·상태 폴더는 만들지 않는다."""
+    root = pathlib.Path(root)
+    dirs = store.Dirs(root / "game", root / "backups" / "data" / VERSION, root / "backups" / "overlay" / VERSION)
+    for rel, text in (FILES if files is None else files).items():
+        path = store.at(dirs.game, rel)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(text.encode("utf-8"))
+    return dirs
+
+
+def game_bytes(dirs):
+    return {path.relative_to(dirs.game).as_posix(): path.read_bytes() for path in sorted(dirs.game.rglob("*")) if path.is_file()}
