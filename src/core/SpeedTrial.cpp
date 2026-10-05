@@ -4,25 +4,32 @@
 
 namespace NlCore
 {
-	SpeedTrial::SpeedTrial(int Candidates, double HoldSeconds, double SettleSeconds)
-		: m_Count(Candidates), m_Hold(HoldSeconds), m_Settle(SettleSeconds)
+	SpeedTrial::SpeedTrial(int Candidates, double HoldSeconds, double SettleSeconds, double BaselineSeconds)
+		: m_Count(Candidates), m_Hold(HoldSeconds), m_Settle(SettleSeconds), m_Baseline(BaselineSeconds)
 	{
 	}
 
-	bool SpeedTrial::Start(double BaseRate, double BaseWarp)
+	bool SpeedTrial::Start(double BaseWarp)
 	{
-		if (Running() || BaseRate <= 0 || BaseWarp <= 0 || m_Count <= 0)
+		if (Running() || BaseWarp <= 0 || m_Count <= 0)
 			return false;
 
-		m_Phase = Phase::Holding;
+		m_Phase = Phase::Baseline;
 		m_Candidate = 0;
 		m_Began = false;
 		m_Sticky = false;
-		m_BaseRate = BaseRate;
+		m_BaseRate = 0;
 		m_BaseWarp = BaseWarp;
 		m_Probe = BaseWarp * 2;
 		m_Attempts.clear();
 		return true;
+	}
+
+	void SpeedTrial::Cancel()
+	{
+		m_Phase = Phase::Idle;
+		m_Candidate = -1;
+		m_Began = false;
 	}
 
 	void SpeedTrial::Next()
@@ -37,6 +44,27 @@ namespace NlCore
 
 	SpeedStep SpeedTrial::Tick(double Now, bool Readable, double Current, double Rate)
 	{
+		if (m_Phase == Phase::Baseline)
+		{
+			if (!m_Began)
+			{
+				m_Began = true;
+				m_Until = Now + m_Baseline;
+				return {};
+			}
+			if (Now < m_Until)
+				return {};
+			if (Rate <= 0)			// 멈춰 있다. 아무것도 쓰지 않았다
+			{
+				m_Phase = Phase::Aborted;
+				return {};
+			}
+			m_BaseRate = Rate;
+			m_Began = false;
+			m_Phase = Phase::Holding;
+			return {};
+		}
+
 		if (m_Phase == Phase::Holding)
 		{
 			if (!m_Began)

@@ -19,6 +19,7 @@ add_library(nlcore STATIC
   src/core/Text.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
+  src/core/SpeedControl.cpp
   src/core/SpeedTrial.cpp
 )
 set_target_properties(nlcore PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
