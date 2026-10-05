@@ -1,5 +1,7 @@
 #include "CostBook.hpp"
 
+#include "Knobs.hpp"
+
 #include <cmath>
 
 namespace NlCore
@@ -40,5 +42,19 @@ namespace NlCore
 			if (!Done[i])
 				kept.push_back(std::move(m_Entries[i]));
 		m_Entries = std::move(kept);
+	}
+
+	bool PlanValue(CostBook& Book, const std::string& Key, int Level, int Slot, double Current, double Target, bool Zero, double& Wanted, size_t& Index)
+	{
+		const bool restoring = Target == 1;
+		double base = Current;
+		if (!Book.Find(Key, Level, Slot, base, &Index))
+		{
+			if (restoring || !Book.Remember(Key, Level, Slot, Current))
+				return false;
+			Index = Book.Size() - 1;
+		}
+		Wanted = restoring ? base : Zero ? 0 : Scale(base, Target);
+		return true;
 	}
 }

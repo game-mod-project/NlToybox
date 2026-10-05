@@ -94,7 +94,7 @@ namespace
 		// HookScale: 돌려주는 수에 창에서 정한 배율을 곱한다. 배율이 바뀌면 같은 훅에 새 배율을 다시 건다.
 		const bool scale = It.Def->Kind == CheatKind::HookScale;
 		const bool live = It.Applied && NlRecorder::Overriding(It.HookName);
-		const bool current = It.Applied && (!It.On || !scale || It.AppliedNumber == It.Number);
+		const bool current = NlCore::HookCurrent(It.On, It.Applied, scale, It.AppliedNumber, It.Number);
 		switch (NlCore::ChooseHookStep(It.On, current, live))
 		{
 		case NlCore::HookStep::Apply:
@@ -117,7 +117,8 @@ namespace
 			}
 			else
 			{
-				It.Applied = false;
+				// 배율을 바꿔 다시 걸다 실패했으면 앞 배율의 바꾸기가 살아 있다. 걸었다는 표시를 남겨 다음 틱에 다시 걸고, 끄면 끌 수 있게 한다.
+				It.Applied = NlCore::AppliedAfterFailure(live);
 				const bool in_game = NlAccess::InGame();
 				It.Note = in_game ? "걸지 못했습니다: " + why : "게임을 시작하면 적용";
 				const std::string line = std::string("cheat ") + It.Def->Id + ": cannot override: " + why;

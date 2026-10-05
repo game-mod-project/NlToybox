@@ -433,7 +433,9 @@ namespace
 		else if (C.Verb == "cheat")
 		{
 			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
-			Say(ok ? "  cheat " + C.Target + (C.Args.empty() ? (C.Number != 0 ? " on" : " off") : " = " + Shortest(C.Args[0].Number))
+			double set = 0;		// 범위 안으로 당겨진 값(청한 값과 다를 수 있다)
+			const bool numbered = ok && C.Number != 0 && NlCheats::Factor(C.Target, set);
+			Say(ok ? "  cheat " + C.Target + (numbered ? " = " + Shortest(set) : C.Number != 0 ? " on" : " off")
 				: "  : cannot set " + C.Target + (C.Args.empty() ? " (it needs a number)" : " (it takes no number)"));
 		}
 		else if (C.Verb == "page")

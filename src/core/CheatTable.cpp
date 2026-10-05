@@ -96,7 +96,9 @@ namespace NlCore
 				"값이 떨어지기 전까지 팔 수 있는 양에 곱한다" },
 			// 창고 용량(research/10). 창고 종류(hall, storage, granary, armory)마다 갈래별 용량이 있다. 그 값에 배율을 쓴다(src/Production.cpp).
 			// 용량을 돌려주는 함수(get_total_capacity_for_category)만 바꾸면 HUD 만 바뀌고 자정의 부패 처리는 원래 용량으로 깎는다.
-			{ "storage_capacity", Area::Economy, "창고 용량 배율", "inst:o_data.__building_warehouse_data.__generic_warehouses", CS, 10, 0, 1, 1000, false,
+			// 플레이에서 봤다(2026-10-05, 0.9.0): 10 으로 켜자 15칸이 10배가 되고 HUD 가 원자재 4500/30000 이 됐다. 그 채로 부패 처리를 불러도
+			// 나무 4,500(원래 용량 3,000)이 그대로였고, 끄자 15칸이 원래 값으로 돌아왔다. 세이브에는 남지 않는다(세이브 파일에 그 열쇠가 없다).
+			{ "storage_capacity", Area::Economy, "창고 용량 배율", "inst:o_data.__building_warehouse_data.__generic_warehouses", CS, 10, 0, 1, 1000, true,
 				"창고 종류마다의 갈래별 용량에 곱한다. 용량을 넘겨 썩던 자원이 썩지 않는다. 끄면 원래 용량으로 되돌린다" },
 
 			// 생산(research/10). 물건 하나를 만드는 데 드는 생산 점수는 resource_production_points_cost_get(자원)이 돌려준다

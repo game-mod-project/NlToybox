@@ -69,7 +69,8 @@ namespace
 
 	// 건물 종류마다의 조리법을 넘긴다. Inputs 면 재료의 칸들을(Slot 은 자원 번호), 아니면 만들어지는 수를(Slot 은 -1).
 	// 조리법은 ds_map(만드는 자원의 번호 → 구조체)에 있다. 건물 종류 여럿이 한 ds_map 을 함께 쓸 수 있으므로(등급별 건물 종류)
-	// Key 는 건물의 이름이 아니라 ds_map 의 번호로 삼고, 한 번 본 ds_map 은 다시 보지 않는다: 같은 자리에 배율을 두 번 곱하지 않게.
+	// 한 번 본 ds_map 은 다시 보지 않는다. Key 는 그 ds_map 을 처음 내놓은 건물 종류의 이름이다(이름의 차례는 게임이 주는 배열의 차례라 늘 같다.
+	// ds_map 의 번호는 게임이 자료를 다시 만들면 다른 것에 다시 쓰일 수 있어 열쇠로 삼지 않는다).
 	bool WalkRecipes(const Visit& V, bool Inputs, std::string& Why)
 	{
 		RValue names;
@@ -93,7 +94,7 @@ namespace
 				return true;
 			seen.push_back(id);
 
-			const std::string key = "map" + Shortest(id);
+			const std::string key = name.ToString();
 			NlAccess::ForEachChild(map, Holder::Map, [&](const PathStep& produced, const RValue& recipe) {
 				double resource = 0;
 				if (!recipe.IsStruct() || !NlCore::ParseNumber(produced.Name, resource))
@@ -149,6 +150,7 @@ namespace
 		NlCore::CostBook Book;		// 처음 본 값. 비어 있지 않으면 되돌릴 것이 남아 있다
 		NlCore::Retry Retry{ 2, 60 };
 		double Target = 1;			// 바라는 배율. 1 은 원래 값, 0 은 "0 으로 쓴다"
+		int Misses = 0;				// 되돌릴 자리를 잇달아 찾지 못한 횟수
 		double NextPass = 0;
 		bool Settled = false;		// 바라는 배율이 다 써졌다
 		bool Announced = false;
@@ -179,10 +181,14 @@ namespace
 	void Pass(Job& J, double Now)
 	{
 		const bool restoring = J.Target == 1;
+		const bool again = J.Settled;		// 다 써 둔 뒤의 훑기다. 여기서 또 쓰게 되면 게임이 값을 되돌린 것이다
 		const size_t before = J.Book.Size();
 		std::vector<char> restored(before, 0);
 		size_t written = 0, failed = 0, held = 0;
 		std::string first_failure, why;
+		// 이번 훑기에서 다룬 자리(담는 것의 포인터, 단계). 게임이 한 구조체를 두 이름 아래에서 함께 쓰면 같은 자리를 두 번 만난다.
+		// 두 번째는 건너뛴다: 써 둔 값을 다른 열쇠의 바탕으로 적어 배율을 두 번 곱하지 않게.
+		std::vector<std::pair<const void*, std::string>> touched;
 
 		if (!J.Announced)
 		{
@@ -192,17 +198,16 @@ namespace
 		const bool walked = J.Walk([&](const RValue& in, const PathStep& step, const std::string& key, int level, int slot, const RValue& value) {
 			if (!NlGame::IsNumber(value))
 				return;
+			const std::pair<const void*, std::string> place(in.m_Pointer, step.Kind + step.Name + Shortest(step.Index));
+			if (std::find(touched.begin(), touched.end(), place) != touched.end())
+				return;
+			touched.push_back(place);
+
 			const double current = value.ToDouble();
-			double base = current;
+			double wanted = current;
 			size_t index = 0;
-			if (!J.Book.Find(key, level, slot, base, &index))
-			{
-				// 처음 보는 자리. 되돌리는 중이면 건드린 적이 없는 자리다. 0 이거나 유한하지 않은 값은 장부가 받지 않는다: 쓰지 않는다.
-				if (restoring || !J.Book.Remember(key, level, slot, current))
-					return;
-				index = J.Book.Size();		// 방금 더한 자리. restored 의 범위 밖이다
-			}
-			const double wanted = restoring ? base : J.Zero ? 0 : NlCore::Scale(base, J.Target);
+			if (!NlCore::PlanValue(J.Book, key, level, slot, current, J.Target, J.Zero, wanted, index))
+				return;
 			std::string write_why;
 			if (current == wanted || NlAccess::SetNumber(in, step, wanted, write_why))
 			{
@@ -236,11 +241,13 @@ namespace
 		{
 			// 써지지 않았거나, 되돌릴 자리를 다시 찾지 못했다(게임이 그 자료를 다시 만들었으면 그 자리는 이미 원래 값이다).
 			J.Retry.Failed(Now);
-			if (restoring && !failed && J.Retry.Failures() >= 5)
+			J.Misses = restoring && !failed ? J.Misses + 1 : 0;		// 쓰기 실패와 따로 센다
+			if (J.Misses >= 5)
 			{
 				Log(std::string(J.What) + ": giving up on " + std::to_string(J.Book.Size()) + " value(s): their place is gone");
 				J.Book.Clear();
 				J.Retry.Succeeded();
+				J.Misses = 0;
 				J.Settled = true;
 				J.Note.clear();
 				return;
@@ -250,7 +257,11 @@ namespace
 			return;
 		}
 
-		J.Retry.Succeeded();
+		J.Misses = 0;
+		if (again && written)
+			J.Retry.Failed(Now);		// 게임이 값을 되돌려 다시 썼다. 잇달아 그러면 주기마다 쓰지 않게 간격을 늘린다(src/Build.cpp 와 같다)
+		else
+			J.Retry.Succeeded();
 		J.Settled = true;
 		J.Note = restoring ? std::string() : std::to_string(held) + (J.Zero ? "칸을 0 으로 썼습니다" : "칸에 배율 " + Shortest(J.Target) + " 을 썼습니다");
 	}

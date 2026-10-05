@@ -222,13 +222,12 @@ void NlMenu::Draw()
 	case Area::Explorer: NlExplorer::Draw(); break;
 	case Area::Time: NlCheats::DrawTime(); break;
 	case Area::Economy:
-		NlEconomy::Draw();
+		// 표의 항목(거래, 창고 용량)과 배율을 먼저 그린다. 자원의 표가 길어 그 아래에 두면 보이지 않는다.
 		if (NlCheats::HasItems(page))
-		{
-			ImGui::Separator();
 			NlCheats::DrawArea(page);
-		}
 		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlEconomy::Draw();
 		break;
 	default:
 		// 표의 항목이 없고 배율만 있는 영역(지식, 영주)에서는 "N단계에서 채웁니다"를 적지 않는다.

@@ -171,7 +171,10 @@ namespace
 			const bool number = kind == VALUE_REAL || kind == VALUE_INT32 || kind == VALUE_INT64;
 			if (number)
 			{
-				const RValue scaled(NlCore::ScaleResult(out.ToDouble(), value.Number, value.Whole));
+				// 정수형으로 돌아온 수는 곱한 값이 정수이면 정수형으로 돌려준다(부르는 쪽이 형을 볼 수 있다. Access 의 NumberLike 와 같은 뜻).
+				const double product = NlCore::ScaleResult(out.ToDouble(), value.Number, value.Whole);
+				const bool integral = kind != VALUE_REAL && product == static_cast<double>(static_cast<int64_t>(product));
+				const RValue scaled = integral ? RValue(static_cast<int64_t>(product)) : RValue(product);
 				if (same)
 					Result = scaled;		// 원래 함수가 채운 수다. 가진 것이 없다
 				else

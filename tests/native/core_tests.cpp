@@ -514,6 +514,33 @@ int main(int argc, char** argv)
 		CHECK(book.Empty());
 	});
 
+	Test("자료의 배율: 처음 본 값에 곱하고, 다시 훑어도 두 번 곱하지 않는다", [] {
+		CostBook book;
+		double wanted = -1;
+		size_t index = 99;
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 300, 10, false, wanted, index) && wanted == 3000 && index == 0);
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 3000, 10, false, wanted, index) && wanted == 3000);		// 써 둔 값을 다시 봤다. 쓸 것이 없다
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 3000, 2, false, wanted, index) && wanted == 600);			// 켠 채 배율을 바꿨다: 바탕에 곱한다
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 300, 2, false, wanted, index) && wanted == 600);			// 게임이 자료를 다시 만들었다(같은 열쇠, 원래 값)
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 600, 1, false, wanted, index) && wanted == 300 && index == 0);	// 끄면 바탕으로 되돌린다
+		CHECK(book.Size() == 1);
+
+		// 되돌리는 중에 처음 보는 자리는 건드린 적이 없다. 0 이거나 유한하지 않은 값은 장부가 받지 않는다(쓰지 않는다).
+		CHECK(!PlanValue(book, "hall.raw", 0, -1, 300, 1, false, wanted, index));
+		CHECK(!PlanValue(book, "default.raw", 0, -1, 0, 10, false, wanted, index));
+		CHECK(!PlanValue(book, "x.y", 0, -1, std::numeric_limits<double>::infinity(), 10, false, wanted, index));
+		CHECK(book.Size() == 1);
+
+		// 0 으로 쓰는 항목(생산 재료 없음). 0 이 된 자리도 장부로 알아보고, 끄면 되살린다.
+		CHECK(PlanValue(book, "workshop", 14, 4, 1, 0, true, wanted, index) && wanted == 0 && index == 1);
+		CHECK(PlanValue(book, "workshop", 14, 4, 0, 0, true, wanted, index) && wanted == 0 && index == 1);
+		CHECK(PlanValue(book, "workshop", 14, 4, 0, 1, true, wanted, index) && wanted == 1 && index == 1);
+
+		// 정수는 정수로 남는다(만들어지는 수 1 에 2.5 를 곱하면 3. 0 이 되지 않는다).
+		CHECK(PlanValue(book, "mine", 4, -1, 1, 2.5, false, wanted, index) && wanted == 3);
+		CHECK(PlanValue(book, "mine", 4, -1, 3, 0.1, false, wanted, index) && wanted == 1);
+	});
+
 	Test("다시 해 보기: 실패가 이어지면 간격을 두 배씩 늘리고 성공하면 처음으로 돌아간다", [] {
 		Retry retry(2, 60);
 		CHECK(retry.Due(0) && retry.Failures() == 0);
@@ -541,12 +568,30 @@ int main(int argc, char** argv)
 		CHECK(ChooseHookStep(false, false, true) == HookStep::None);		// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
 	});
 
+	Test("훅 항목: 배율이 바뀌면 다시 걸고, 다시 걸다 실패해도 앞서 건 것을 끌 수 있다", [] {
+		CHECK(HookCurrent(true, true, false, 0, 0));					// 고정값 훅: 걸었으면 그대로다
+		CHECK(HookCurrent(true, true, true, 0.5, 0.5));
+		CHECK(!HookCurrent(true, true, true, 0.5, 0.3));				// 배율이 바뀌었다. 다시 건다
+		CHECK(!HookCurrent(true, false, true, 0.5, 0.5));
+		CHECK(HookCurrent(false, true, true, 0.5, 0.3));				// 끄는 중에는 배율을 견주지 않는다(걸어 둔 것을 끈다)
+
+		// 0.5 로 걸어 둔 채 0.3 으로 바꿨는데 다시 걸기에 실패했다(메뉴로 나가 주소가 풀리지 않는다). 앞서 건 바꾸기는 살아 있다.
+		bool applied = true;
+		const bool live = true;
+		CHECK(ChooseHookStep(true, HookCurrent(true, applied, true, 0.5, 0.3), live) == HookStep::Apply);
+		applied = AppliedAfterFailure(live);
+		CHECK(applied);		// "걸었다"로 남는다. 그래야 끌 때 그 바꾸기를 이름으로 끈다(주인 없는 바꾸기가 남지 않는다)
+		CHECK(ChooseHookStep(false, HookCurrent(false, applied, true, 0.5, 0.3), live) == HookStep::Remove);
+		CHECK(!AppliedAfterFailure(false));								// 살아 있는 것이 없으면 걸지 않은 것이다
+	});
+
 	Test("훅의 배율: 원래 값에 곱하고, 정수로 남길지 고른다", [] {
 		CHECK(ScaleResult(8, 0.1, true) == 1);					// 가격: 정수는 정수로 남고 0 이 되지 않는다
 		CHECK(ScaleResult(100, 0.1, true) == 10 && ScaleResult(3600, 0.1, true) == 360 && ScaleResult(250, 100, true) == 25000);
 		CHECK(ScaleResult(1, 5, false) == 5 && ScaleResult(1.2, 5, false) == 6);
 		CHECK(ScaleResult(1, 0.5, false) == 0.5 && ScaleResult(1, 0.5, true) == 1);		// 계수는 그대로 곱한다. 정수로 남기면 1 아래로 내려가지 않는다
-		CHECK(ScaleResult(0, 10, true) == 0 && ScaleResult(-4, 2, true) == -8);
+		// 0 이하의 값은 곱하지 않는다: "없음"을 0 이나 음수로 돌려주는 함수의 표식을 깨지 않는다.
+		CHECK(ScaleResult(0, 10, true) == 0 && ScaleResult(-4, 2, true) == -4 && ScaleResult(-1, 0.5, false) == -1);
 		const double nan = std::numeric_limits<double>::quiet_NaN();
 		CHECK(ScaleResult(5, nan, true) == 5 && ScaleResult(5, 0, true) == 5 && ScaleResult(5, -1, false) == 5);		// 쓸 수 없는 배율이면 원래 값 그대로
 		CHECK(ScaleResult(5, std::numeric_limits<double>::infinity(), false) == 5);
@@ -729,10 +774,13 @@ int main(int argc, char** argv)
 		// 수가 있는 훅·모듈 항목(배율)은 Numbers 에 든다. 수는 범위 안으로 당기고, 확인 전의 것은 버린다(꺼진 채로 시작한다).
 		CheatState scales;
 		scales.On = { "production_time", "storage_capacity" };				// 수가 있는 항목은 On 에 들지 않는다
-		scales.Numbers = { { "production_time", 0.0000001 }, { "storage_capacity", 5 }, { "rest_decrease", 3 }, { "build_any", 1 } };
+		scales.Numbers = { { "production_time", 0.0000001 }, { "storage_capacity", 5000000 }, { "rest_decrease", 3 }, { "build_any", 1 } };
 		const CheatState kept_scales = KeepKnown(scales);
 		CHECK(kept_scales.On.empty());
 		CHECK(kept_scales.Numbers.count("rest_decrease") == 1 && kept_scales.Numbers.count("build_any") == 0);
+		// 창고 용량 배율은 플레이에서 확인했다(research/10): 남고, 범위의 끝(Max)으로 당겨진다.
+		CHECK(FindCheat("storage_capacity")->Verified && kept_scales.Numbers.count("storage_capacity") == 1
+			&& kept_scales.Numbers.at("storage_capacity") == FindCheat("storage_capacity")->Max);
 		for (const char* id : { "production_time", "storage_capacity" })
 		{
 			const Cheat* cheat = FindCheat(id);
