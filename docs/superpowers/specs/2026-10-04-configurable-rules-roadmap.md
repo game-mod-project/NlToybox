@@ -105,6 +105,8 @@ exe에는 `gameplay_variables.json`의 키와 같은 꼴의 이름이 파일보�
 - 내용: 프리셋을 바닐라 파일 위에 입히고 되돌린다. 카탈로그로 지원 키를 관리한다.
 - 먼저 할 실측(단계 0): 파일 값이 게임에 반영되는가, 런타임 전역 변수는 어떻게 생겼는가, 파일에 없는 키를 넣으면 읽히는가.
 - 스펙: `docs/superpowers/specs/2026-10-04-data-overlay-design.md`
+- 단계 1(오버레이 도구)의 계획: `docs/superpowers/plans/2026-10-05-data-overlay-stage1.md`. 설계가 기대는 실측과,
+  2026-10-05에 받은 참조 문서(`Norland_Modding_Reference.md`)를 설치본과 맞춰 본 결과는 `research/03-data-files.md`.
 - 닿는 것: Level 1 가운데 파일에 있는 수치, 이벤트 빈도.
 
 ### 2. 런타임 접근
@@ -149,6 +151,11 @@ exe에는 `gameplay_variables.json`의 키와 같은 꼴의 이름이 파일보�
 
 원본의 MVP 성공 기준(모드 로딩 → 설정 읽기 → 값 적용 → 새 게임에서 확인 → 세이브·로드에 문제 없음)은
 하위 프로젝트 1의 완료 기준으로 옮긴다.
+
+참조 문서(2026-10-05)는 MVP를 파일 단위로 다시 묶는다: `gameplay_variables.json` → `debug_params.json` →
+`knowledge\technology\` → 전투 → 맵. 단계 1의 카탈로그는 앞의 넷을 다룬다. 실측으로 바로잡은 것: 전투 수치는 문서가 적은
+`battle_settings\`가 아니라 `battle_params.json`에 있고, 문서의 `maps\map_N.json`은 이 빌드에 없다(`.map_template`은 범위 밖이다).
+문서가 첫 순위로 든 `bribe`는 다섯 값 가운데 `give_rings`만 런타임(`global.__gameplay_vars`)에 이름이 있다(`research/03-data-files.md`).
 
 ## 8. 위험
 
