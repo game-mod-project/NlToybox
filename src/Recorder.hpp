@@ -1,7 +1,8 @@
 #pragma once
-// 호출 기록기. 게임 스크립트의 함수에 훅을 걸어, 게임이 스스로 부를 때의 인자와 반환값을 적는다. 스펙: 치트 메뉴 §14.
+// 게임 스크립트의 함수에 거는 훅. 게임이 스스로 부를 때의 인자와 반환값을 적고(호출 기록기. 스펙: 치트 메뉴 §14),
+// 돌려주는 값을 바꾼다(스펙 §3 의 수단 D).
 // 인자의 수와 형을 모르는 스크립트를 부르면 게임이 끝난다(CLAUDE.md). 부르기 전에 이것으로 꼴을 확인한다.
-// Watch, Unwatch, Report 는 게임 스레드의 틱에서 부른다.
+// 모든 함수는 게임 스레드의 틱에서 부른다.
 
 #include <YYTK_Shared.hpp>
 
@@ -23,6 +24,21 @@ namespace NlRecorder
 	// 돌려주는 값: 멈춘 수.
 	int Unwatch(const std::string& Name);
 
-	// 기록을 글로. Name 이 비어 있으면 전부.
+	// 기록을 글로. Name 이 비어 있으면 전부. 값을 바꾸고 있는 함수는 그것도 적는다.
 	std::string Report(const std::string& Name);
+
+	// 바꿔서 돌려줄 값. 수, 불리언, undefined 뿐이다(훅 안에서 만들 수 있는 것).
+	struct Forced
+	{
+		char Kind = 'u';		// 'n' 수, 'b' 불리언, 'u' undefined
+		double Number = 0;
+		bool Skip = false;		// 원래 함수를 부르지 않는다(값을 치르는 함수처럼 한 일 자체를 없애야 할 때)
+	};
+
+	// 그 함수가 돌려주는 값을 바꾼다. 훅이 없으면 건다. 바꾼 호출이 보이게 기록도 한다. Target 은 Watch 와 같다.
+	// 게임의 판정을 바꾸는 일이다: 그 함수가 무엇을 돌려주는지 기록으로 본 뒤에만 쓴다.
+	bool Override(const std::string& Target, const Forced& Value, std::string& Name, std::string& Why);
+
+	// 바꾸기를 그만둔다(훅은 남고 원래대로 지나간다). Name: 스크립트의 이름 또는 "all". 돌려주는 값: 그만둔 수.
+	int Unoverride(const std::string& Name);
 }

@@ -156,7 +156,7 @@ namespace NlCore
 			if (count != 1)
 				return fail("state takes nothing");
 		}
-		else if (verb == "ask" || verb == "about" || verb == "list" || verb == "tree")
+		else if (verb == "ask" || verb == "about" || verb == "list" || verb == "tree" || verb == "statics")
 		{
 			if (count < 2 || !GoodPath(tokens[1], false))
 				return fail(verb + " needs a path");
@@ -214,6 +214,34 @@ namespace NlCore
 		{
 			if (count != 2 || (tokens[1] != "open" && tokens[1] != "close"))
 				return fail("window needs open or close");
+			command.Target = tokens[1];
+		}
+		else if (verb == "treecall")
+		{
+			// treecall <인자 없는 스크립트의 이름> [depth=N] [max=N]
+			if (count < 2 || tokens[1].find('=') != std::string::npos)
+				return fail("treecall needs a script name");
+			command.Target = tokens[1];
+			if (!options(2))
+				return command;
+		}
+		else if (verb == "override")
+		{
+			// override <스크립트 이름|메서드의 주소> <n:수|b:0|1|u> [skip]
+			RemoteArg value;
+			if (count < 3 || count > 4 || !ParseArg(tokens[2], value) || (value.Kind != 'n' && value.Kind != 'b' && value.Kind != 'u'))
+				return fail("override needs a target and a value (n:<number>, b:0|1 or u)");
+			if (count == 4 && tokens[3] != "skip")
+				return fail("override takes only 'skip' after the value");
+			command.Target = tokens[1];
+			command.Args.push_back(value);
+			if (count == 4)
+				command.Options["skip"] = "1";
+		}
+		else if (verb == "unoverride")
+		{
+			if (count != 2)
+				return fail("unoverride needs one name or 'all'");
 			command.Target = tokens[1];
 		}
 		else if (verb == "economy")

@@ -1012,6 +1012,34 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("economy all amount=100").Error.empty());
 		const RemoteCommand page = ParseRemoteLine("page economy");
 		CHECK(page.Error.empty() && page.Verb == "page" && page.Target == "economy");
+		const RemoteCommand statics = ParseRemoteLine("statics inst:o_building.generic max=200");
+		CHECK(statics.Error.empty() && statics.Verb == "statics" && statics.Target == "inst:o_building.generic" && OptionNumber(statics, "max", 400) == 200);
+	});
+
+	Test("원격 명령: 반환값을 바꾸는 훅의 줄을 읽는다", [] {
+		const RemoteCommand yes = ParseRemoteLine("override inst:o_building.is_building_locked b:0");
+		CHECK(yes.Error.empty() && yes.Verb == "override" && yes.Target == "inst:o_building.is_building_locked");
+		CHECK(yes.Args.size() == 1 && yes.Args[0].Kind == 'b' && yes.Args[0].Number == 0 && !yes.Options.count("skip"));
+		const RemoteCommand skip = ParseRemoteLine("override gml_Script_x n:-1.5 skip");
+		CHECK(skip.Error.empty() && skip.Args[0].Kind == 'n' && skip.Args[0].Number == -1.5 && skip.Options.count("skip") == 1);
+		const RemoteCommand treecall = ParseRemoteLine("treecall building_generic_get_array_of_all_buildings depth=3 max=50");
+		CHECK(treecall.Error.empty() && treecall.Verb == "treecall" && treecall.Target == "building_generic_get_array_of_all_buildings");
+		CHECK(OptionNumber(treecall, "depth", 2) == 3 && OptionNumber(treecall, "max", 300) == 50);
+		CHECK(!ParseRemoteLine("treecall").Error.empty() && !ParseRemoteLine("treecall a b").Error.empty());
+		const RemoteCommand undefined = ParseRemoteLine("override gml_Script_x u");
+		CHECK(undefined.Args.size() == 1 && undefined.Args[0].Kind == 'u');
+		CHECK(ParseRemoteLine("unoverride all").Target == "all" && ParseRemoteLine("unoverride gml_Script_x").Error.empty());
+		// 바꿀 값은 수, 불리언, undefined 뿐이다. 글이나 주소의 값으로 바꾸지 않는다(훅 안에서 만들 수 없다).
+		for (const char* line : { "override", "override gml_Script_x", "override gml_Script_x s:yes", "override gml_Script_x p:global.a",
+			"override gml_Script_x n:1 always", "override gml_Script_x n:1 skip extra", "override gml_Script_x n:abc", "unoverride", "unoverride a b",
+			"statics", "statics o_x.y" })
+		{
+			if (ParseRemoteLine(line).Error.empty())
+			{
+				std::printf("  FAIL accepted: %s\n", line);
+				g_Failed++;
+			}
+		}
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {

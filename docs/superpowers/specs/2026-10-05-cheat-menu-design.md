@@ -299,7 +299,8 @@ lock inst:o_character:0.starving_hours=0
 | 2 | 탐색기, 내장 스위치(§8의 "2"), 게임 속도 | 플레이에서 탐색기로 값을 고치고, 스위치와 속도의 효과를 본다 |
 | 3가 | 원격 질의(§14)와 호출 기록기. 켜져 있는 게임에 파일로 묻고, 쓰고, 스크립트의 호출을 기록한다 | 메뉴에서 묻기·쓰기·기록·화면 뜨기가 된다. 계획: `plans/2026-10-05-cheat-menu-stage3a-remote.md` |
 | 3나-1 | 경제 패널: 금화와 영지 창고의 자원을 게임의 함수로 바꾼다. 게임 속도를 게임의 함수로 건다. 계획: `plans/2026-10-05-cheat-menu-stage3b-economy.md` | 금화·자원·게임 속도의 효과를 화면에서 봤다(`research/08`. 0.6.1 까지 확인) |
-| 3나-2 | 거래, 임금, 창고 용량, 건설비·건설 조건, 생산. 기존 배율 7개를 표로 옮긴다. 속도 시험(`SpeedTrial`)의 정리 | 그 항목들의 효과를 본다 |
+| 3나-2 | 건설비 무료, 건설 조건 제거, 업그레이드 조건 제거. 계획: `plans/2026-10-05-cheat-menu-stage3c-build.md` | 사용자가 플레이에서 본다 |
+| 3나-3 | 거래, 임금, 창고 용량, 생산. 기존 배율 7개를 표로 옮긴다. 속도 시험(`SpeedTrial`)의 정리 | 그 항목들의 효과를 본다 |
 | 4 | 인물, 영주, 인구·욕구 | 고른 인물의 편집과 일괄 버튼의 효과를 본다 |
 | 5 | 지식, 아이템, 군대·전투 | 해금, 아이템 지급, 병사·전투 항목의 효과를 본다 |
 | 6 | 외교, 종교, 이벤트, 월드 | 관계 설정, 종교 값, 이벤트 강제 실행, 지도 공개의 효과를 본다 |
@@ -328,7 +329,11 @@ lock inst:o_character:0.starving_hours=0
 - **통로**: 모듈이 0.25초마다 `mods\Aurie\NlToyBox.ask.txt`를 본다. 있으면 줄들을 읽고 지운 뒤 게임 스레드에서 차례로 실행하고,
   답을 `NlToyBox.answer.txt`에 이어 쓴다(`# <id>` … `# done <id>`). 도구(`tools/ask.ps1`)는 임시 파일에 쓴 뒤 이름을 바꿔 놓는다.
 - **명령**: `ask`, `list`, `tree`(깊이 N 까지), `find`·`refine`(이름·값으로 찾기), `write`(남긴다)·`poke`(되돌린다), `state`,
-  `shot <이름>`(게임이 그린 프레임을 파일로), `window open|close`, `record`·`unrecord`·`records`, `call`·`method`.
+  `shot <이름>`(게임이 그린 프레임을 파일로), `window open|close`, `record`·`unrecord`·`records`, `call`·`method`,
+  `about`(메서드가 묶인 스크립트, 구조체를 만든 생성자), `statics`(정적 메서드의 이름), `treecall`(인자 없는 스크립트가 돌려준 값), `economy`·`page`,
+  `override`·`unoverride`(함수가 돌려주는 값을 바꾼다).
+- **반환값 바꾸기(수단 D)**: 기록기의 훅이 원래 함수를 부른 뒤 결과를 수·불리언·`undefined`로 바꿔 돌려준다(`NlRecorder::Override`). `skip`이면 원래 함수를 부르지 않는다.
+  그 함수가 무엇을 돌려주는지 기록으로 본 뒤에만 건다. 켜져 있는 게임에서 `override`로 먼저 풀어 보고, 풀린 것을 치트 표의 훅 항목으로 굳힌다.
 - **호출 기록기(수단 C 의 준비)**: 스크립트의 함수에 `MmCreateHook`으로 훅을 걸고, 게임이 스스로 부를 때의 인자(수와 형, 값)와 반환값을 적는다.
   전역 스크립트는 이름으로(`gml_Script_budget_money_get`), 메서드는 주소로(`inst:o_building.set_level`) 가리킨다.
   메서드가 묶인 스크립트는 `script_get_name`으로 묻는다. 함수는 YYToolkit 의 `GetScriptData` → `CScript::m_Functions->m_ScriptFunction`에서 얻는다
