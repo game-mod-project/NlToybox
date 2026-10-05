@@ -1,10 +1,16 @@
 // 러너에 기대지 않는 코어(src/core)의 시험. 게임을 켜지 않는다.
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
+#include "core/AskPath.hpp"
+#include "core/CheatState.hpp"
+#include "core/CheatTable.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
+#include "core/Rate.hpp"
 #include "core/Request.hpp"
 #include "core/Schedule.hpp"
+#include "core/SpeedControl.hpp"
+#include "core/SpeedTrial.hpp"
 #include "core/Text.hpp"
 
 #include <cmath>
@@ -13,8 +19,10 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace NlCore;
 
@@ -56,6 +64,138 @@ namespace
 	{
 		std::istringstream in(Text);
 		return ParseRequest(in);
+	}
+
+	// 가짜 게임: 손잡이 넷 가운데 Live 번이 속도를 정한다(값이 0 보다 클 때. 아니면 배율 1). 흐름 = 57.4 × 배율.
+	struct FakeGame
+	{
+		double Values[4] = { 1, 1, -4, 1 };
+		int Live = 0;					// -1 이면 아무 손잡이도 듣지 않는다
+		bool Overwrites = false;		// 쓰지 않는 틱마다 게임이 Live 손잡이를 Reset 으로 되돌린다
+		double Reset = 1;
+		bool Unreadable[4] = {};
+		int PauseAtTick = -1;			// 이 틱부터 흐름이 0 이다
+
+		double Flow(int Tick) const
+		{
+			if (PauseAtTick >= 0 && Tick >= PauseAtTick)
+				return 0;
+			return 57.4 * (Live >= 0 && Values[Live] > 0 ? Values[Live] : 1);
+		}
+	};
+
+	// 시험을 끝까지 돌린다(0.1초 간격). 바깥이 할 일을 가짜 게임에 그대로 한다.
+	void RunTrial(SpeedTrial& Trial, FakeGame& Game, double Warp = 1)
+	{
+		if (!Trial.Start(Warp))
+			return;
+		double now = 10;
+		for (int tick = 1; tick <= 400 && Trial.Running(); tick++)
+		{
+			now += 0.1;
+			const int candidate = Trial.Candidate();
+			const SpeedStep step = Trial.Tick(now, !Game.Unreadable[candidate], Game.Values[candidate], Game.Flow(tick));
+			if (step.What != SpeedStep::Kind::None)
+				Game.Values[step.Candidate] = step.Value;
+			else if (Game.Overwrites && Game.Live >= 0)
+				Game.Values[Game.Live] = Game.Reset;
+		}
+	}
+
+	// 가짜 세계: 주소 → 값. 게임 시간 "t" 는 Advance 가 흘린다. 속도는 Live 주소의 값이 정한다(0 보다 클 때. 아니면 1).
+	struct FakeWorld
+	{
+		std::map<std::string, double> Values;
+		std::string Live = "new";			// "variants" 면 variants[index]. "none" 이면 아무 값도 듣지 않는다
+		bool Paused = false;
+		double OverwriteEvery = 0;			// 0 보다 크면 게임이 이 간격으로 Live 의 값을 1 로 되돌린다
+		double SinceOverwrite = 0;
+		int Writes = 0;
+		std::vector<std::string> Lines;
+
+		FakeWorld() { Create(); }
+
+		// 시간 컨트롤러가 (다시) 만들어졌다.
+		void Create()
+		{
+			Values = { { "t", 1000 }, { "warp", 1 }, { "new", 1 }, { "custom", -4 }, { "index", 0 },
+				{ "variants[0]", 1 }, { "variants[1]", 3 }, { "variants[2]", 6 }, { "variants[3]", 12 } };
+		}
+
+		std::string LiveKey() const
+		{
+			if (Live != "variants")
+				return Live;
+			const auto index = Values.find("index");
+			return index == Values.end() ? "none" : "variants[" + Shortest(index->second) + "]";
+		}
+
+		void Advance(double Seconds)
+		{
+			const auto live = Values.find(LiveKey());
+			const double factor = live != Values.end() && live->second > 0 ? live->second : 1;
+			if (!Paused && Values.count("t"))
+				Values["t"] += 57.4 * factor * Seconds;
+			SinceOverwrite += Seconds;
+			if (OverwriteEvery > 0 && SinceOverwrite >= OverwriteEvery && live != Values.end())
+			{
+				SinceOverwrite = 0;
+				live->second = 1;
+			}
+		}
+
+		SpeedIo Io()
+		{
+			return {
+				[this](const std::string& path, double& out) {
+					const auto it = Values.find(path);
+					if (it == Values.end())
+						return false;
+					out = it->second;
+					return true;
+				},
+				[this](const std::string& path, double value, std::string& why) {
+					const auto it = Values.find(path);
+					if (it == Values.end())
+					{
+						why = "no such value";
+						return false;
+					}
+					it->second = value;
+					Writes++;
+					return true;
+				},
+				[this](const std::string& line) { Lines.push_back(line); },
+			};
+		}
+	};
+
+	SpeedPaths FakePaths()
+	{
+		return { "t", "warp", { { "new", "new", "", "" }, { "warp", "warp", "", "" }, { "custom", "custom", "", "" },
+			{ "variants", "", "variants", "index" } } };
+	}
+
+	// 세계를 Seconds 초 흘린다(5ms 간격). 그 사이 속도 조절의 틱을 돌린다.
+	void RunWorld(FakeWorld& World, SpeedControl& Control, double& Now, double Seconds, bool Watching = true)
+	{
+		const int steps = static_cast<int>(Seconds / 0.005 + 0.5);
+		for (int i = 0; i < steps; i++)
+		{
+			Now += 0.005;
+			World.Advance(0.005);
+			Control.Tick(Now, Watching);
+		}
+	}
+
+	// 가짜 세계의 손잡이들이 처음 값 그대로인가.
+	bool Untouched(const FakeWorld& World)
+	{
+		FakeWorld fresh;
+		for (const char* key : { "warp", "new", "custom", "variants[0]", "variants[1]", "variants[2]", "variants[3]" })
+			if (World.Values.at(key) != fresh.Values.at(key))
+				return false;
+		return true;
 	}
 }
 
@@ -270,6 +410,454 @@ int main(int argc, char** argv)
 
 		std::istringstream again(FormatSettings(values));
 		CHECK(ParseSettings(again) == values);
+	});
+
+	Test("묻는 경로: 뿌리와 단계를 읽는다", [] {
+		const AskPath g = ParseAskPath("global.a.b[3].c");
+		CHECK(g.Error.empty() && g.Root == "global" && g.Steps.size() == 4);
+		CHECK(g.Steps[0].Kind == '.' && g.Steps[0].Name == "a" && g.Steps[2].Kind == '[' && g.Steps[2].Index == 3 && g.Steps[3].Name == "c");
+
+		const AskPath i = ParseAskPath("inst:o_building:1.generic");
+		CHECK(i.Error.empty() && i.Root == "inst" && i.Object == "o_building" && i.Number == 1 && i.Steps.size() == 1);
+		CHECK(ParseAskPath("inst:o_debug").Number == 0 && ParseAskPath("inst:o_debug").Steps.empty());
+
+		const AskPath m = ParseAskPath("map:150@building_resources@woodcutter_lvl_1#0#1");
+		CHECK(m.Error.empty() && m.Root == "map" && m.Number == 150 && m.Steps.size() == 4);
+		CHECK(m.Steps[0].Kind == '@' && m.Steps[0].Name == "building_resources" && m.Steps[3].Kind == '#' && m.Steps[3].Index == 1);
+
+		const AskPath k = ParseAskPath("map:44@{building.menu.x}.y");
+		CHECK(k.Error.empty() && k.Steps.size() == 2 && k.Steps[0].Name == "building.menu.x" && k.Steps[1].Name == "y");
+		CHECK(ParseAskPath("list:281#0").Root == "list");
+	});
+
+	Test("묻는 경로: 읽을 수 없으면 오류를 낸다", [] {
+		CHECK(!ParseAskPath("").Error.empty());
+		CHECK(!ParseAskPath("o_debug.x").Error.empty());			// 뿌리를 모른다
+		CHECK(!ParseAskPath("inst:").Error.empty());
+		CHECK(!ParseAskPath("inst:o_x:abc").Error.empty());
+		CHECK(!ParseAskPath("map:abc").Error.empty());
+		CHECK(!ParseAskPath("global.").Error.empty());				// 빈 이름
+		CHECK(!ParseAskPath("global.a[x]").Error.empty());
+		CHECK(!ParseAskPath("global.a[3").Error.empty());
+		CHECK(!ParseAskPath("map:1@{open").Error.empty());
+		CHECK(!ParseAskPath("global.a#-1").Error.empty());
+	});
+
+	Test("묻는 경로: 단계를 글로 쓰면 다시 읽힌다", [] {
+		CHECK_STR(FormatStep({ '.', "a", 0 }), ".a");
+		CHECK_STR(FormatStep({ '[', "", 12 }), "[12]");
+		CHECK_STR(FormatStep({ '#', "", 3 }), "#3");
+		CHECK_STR(FormatStep({ '@', "wood", 0 }), "@wood");
+		CHECK_STR(FormatStep({ '@', "a.b[c]", 0 }), "@{a.b[c]}");
+		const AskPath again = ParseAskPath("map:1" + FormatStep({ '@', "a.b[c]", 0 }) + FormatStep({ '#', "", 3 }));
+		CHECK(again.Error.empty() && again.Steps.size() == 2 && again.Steps[0].Name == "a.b[c]" && again.Steps[1].Index == 3);
+	});
+
+	Test("묻는 경로: 전체를 글로 쓰면 다시 읽힌다", [] {
+		for (const char* text : { "global", "global.a.b[3].c", "inst:o_debug.is_x", "inst:o_building:1.generic",
+			"map:150@building_resources@woodcutter_lvl_1#0#1", "map:44@{building.menu.x}.y", "list:281#0" })
+			CHECK_STR(FormatAskPath(ParseAskPath(text)), text);
+		CHECK_STR(FormatAskPath(ParseAskPath("inst:o_debug:0.x")), "inst:o_debug.x");		// 첫 인스턴스는 번호를 적지 않는다
+		CHECK_STR(FormatAskPath(ParseAskPath("o_debug.x")), "");							// 읽지 못한 경로
+	});
+
+	Test("묻는 경로: 부모와 자식", [] {
+		const AskPath path = ParseAskPath("inst:o_debug.a[2]");
+		CHECK_STR(FormatAskPath(ParentPath(path)), "inst:o_debug.a");
+		CHECK_STR(FormatAskPath(ParentPath(ParentPath(ParentPath(path)))), "inst:o_debug");	// 단계가 없으면 그대로다
+		CHECK_STR(FormatAskPath(ChildPath(ParentPath(path), { '@', "k.x", 0 })), "inst:o_debug.a@{k.x}");
+		CHECK_STR(FormatAskPath(ChildPath(ParseAskPath("global"), { '.', "v", 0 })), "global.v");
+	});
+
+	Test("Shortest 는 다시 읽으면 같은 수가 되는 가장 짧은 글을 쓴다", [] {
+		CHECK_STR(Shortest(0.83), "0.83");
+		CHECK_STR(Shortest(3), "3");
+		CHECK_STR(Shortest(-4), "-4");
+		CHECK_STR(Shortest(0.1 + 0.2), "0.30000000000000004");
+		CHECK_STR(Shortest(std::numeric_limits<double>::quiet_NaN()), "nan");
+		CHECK_STR(Shortest(-std::numeric_limits<double>::infinity()), "-inf");
+		for (const double value : { 36550.20449999981, 1e20, -0.000123, 57.4 })
+		{
+			double again = 0;
+			CHECK(ParseNumber(Shortest(value), again) && again == value);
+		}
+	});
+
+	Test("치트 상태: 읽고 쓰면 같다", [] {
+		CheatState state;
+		state.On = { "instant_build", "no_dodge" };
+		state.Numbers = { { "rest_decrease", 0 }, { "piety_decrease", 0.83 } };
+		state.Pins = { "inst:o_time_controller.time_warp", "map:128@{messenger_cost }" };
+		state.Locks = { { "inst:o_character:2.starving_hours", 0 }, { "global.a.b[3]", -4.5 } };
+
+		const std::string text = FormatCheatState(state);
+		std::istringstream in(text);
+		const CheatState again = ParseCheatState(in);
+		CHECK(again.On == state.On && again.Numbers == state.Numbers && again.Pins == state.Pins);
+		CHECK(again.Locks.size() == 2 && again.Locks[0].Path == "inst:o_character:2.starving_hours" && again.Locks[0].Value == 0
+			&& again.Locks[1].Path == "global.a.b[3]" && again.Locks[1].Value == -4.5);
+		CHECK_STR(FormatCheatState(again), text);
+	});
+
+	Test("치트 상태: 읽을 수 없는 줄은 버린다", [] {
+		std::istringstream in(
+			"# 주석\n"
+			"\n"
+			"on\n"								// 이름이 없다
+			"on a b\n"							// 이름에 공백
+			"num x=abc\n"						// 수가 아니다
+			"num x=nan\n"						// 유한하지 않다
+			"num =3\n"							// 이름이 없다
+			"pin o_debug.x\n"					// 뿌리를 모른다
+			"pin global\n"						// 단계가 없다
+			"lock inst:o_debug.x\n"				// 값이 없다
+			"lock inst:o_debug.x=1e999\n"		// 유한하지 않다
+			"what inst:o_debug.x=1\n"			// 모르는 낱말
+			"  on  good  \n"
+			"num n = 2.5\n"
+			"pin inst:o_debug.x\n"
+			"pin inst:o_debug.x\n"				// 같은 주소는 한 번만
+			"lock map:1@{a=b}=7\n"				// 마지막 '=' 에서 가른다
+			"lock map:1@{a=b}=8\n");			// 같은 주소는 뒤의 것이 이긴다
+		const CheatState state = ParseCheatState(in);
+		CHECK(state.On == std::set<std::string>{ "good" });
+		CHECK(state.Numbers.size() == 1 && state.Numbers.at("n") == 2.5);
+		CHECK(state.Pins == std::vector<std::string>{ "inst:o_debug.x" });
+		CHECK(state.Locks.size() == 1 && state.Locks[0].Path == "map:1@{a=b}" && state.Locks[0].Value == 8);
+	});
+
+	Test("치트 표: 주소가 모두 읽히고 Id 가 겹치지 않는다", [] {
+		std::set<std::string> ids;
+		for (const Cheat& cheat : Cheats())
+		{
+			const AskPath path = ParseAskPath(cheat.Path);
+			if (!path.Error.empty() || path.Steps.empty())
+			{
+				std::printf("  FAIL %s: %s (%s)\n", cheat.Id, cheat.Path, path.Error.c_str());
+				g_Failed++;
+			}
+			CHECK(path.Root == "global" || path.Root == "inst");		// 표에는 ds 번호를 적지 않는다
+			CHECK(ids.insert(cheat.Id).second);
+			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
+			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
+			if (cheat.Kind == CheatKind::Toggle)
+				CHECK(cheat.On != cheat.Off);
+			else
+				CHECK(cheat.Min < cheat.Max);
+		}
+		CHECK(Cheats().size() == 31);
+	});
+
+	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {
+		std::set<std::string> keys;
+		for (const AreaInfo& area : Areas())
+		{
+			CHECK(keys.insert(area.Key).second);
+			CHECK(FindArea(area.Key) == &area);
+			CHECK(&GetArea(area.Id) == &area);
+			CHECK(area.Stage >= 2 && area.Stage <= 7);
+		}
+		CHECK(Areas().size() == 17);
+		CHECK(FindArea("nope") == nullptr);
+		CHECK_STR(GetArea(Area::Time).Key, "time");
+		for (const Cheat& cheat : Cheats())
+			CHECK(FindArea(GetArea(cheat.Where).Key) != nullptr);
+	});
+
+	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {
+		CheatState state;
+		state.On = { "instant_build", "rest_decrease", "nope" };			// rest_decrease 는 Number 다
+		state.Numbers = { { "rest_decrease", 999 }, { "instant_build", 1 }, { "nope", 1 } };
+		state.Pins = { "inst:o_debug.x" };
+		state.Locks = { { "inst:o_debug.y", 3 } };
+		const CheatState kept = KeepKnown(state);
+		CHECK(kept.On == std::set<std::string>{ "instant_build" });
+		CHECK(kept.Numbers.size() == 1 && kept.Numbers.at("rest_decrease") == FindCheat("rest_decrease")->Max);
+		CHECK(kept.Pins == state.Pins && kept.Locks.size() == 1);
+		CHECK(FindCheat("nope") == nullptr && FindCheat("instant_build")->Kind == CheatKind::Toggle);
+	});
+
+	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
+		Rate rate(1.0);
+		CHECK(!rate.Ready() && rate.PerSecond() == 0);
+		for (int i = 0; i <= 4; i++)
+			rate.Add(i * 0.1, 100 + i * 5.74);			// 실제 1초에 57.4
+		CHECK(!rate.Ready());								// 0.4초: 창의 절반이 안 된다
+		for (int i = 5; i <= 30; i++)
+			rate.Add(i * 0.1, 100 + i * 5.74);
+		CHECK(rate.Ready() && std::abs(rate.PerSecond() - 57.4) < 1e-6);
+	});
+
+	Test("흐름: 창보다 오래된 표본은 잊는다", [] {
+		Rate rate(1.0);
+		double value = 0;
+		for (int i = 0; i <= 20; i++)						// 2초 동안 1초에 10
+			rate.Add(i * 0.1, value = i * 1.0);
+		for (int i = 21; i <= 35; i++)						// 그 뒤 1.5초 동안 1초에 50
+			rate.Add(i * 0.1, value += 5.0);
+		CHECK(std::abs(rate.PerSecond() - 50) < 1e-6);
+	});
+
+	Test("흐름: 값이 줄면 처음부터 다시 잰다", [] {
+		Rate rate(1.0);
+		for (int i = 0; i <= 20; i++)
+			rate.Add(i * 0.1, 1000 + i);
+		CHECK(rate.Ready());
+		rate.Add(2.1, 5);									// 새 게임: 게임 시간이 처음으로 돌아갔다
+		CHECK(!rate.Ready() && rate.PerSecond() == 0);
+		rate.Reset();
+		CHECK(!rate.Ready());
+	});
+
+	Test("흐름: 기대한 배율인지 가린다", [] {
+		CHECK(RateMatches(57.4, 114.8, 2));
+		CHECK(RateMatches(57.4, 100, 2));					// 13% 모자라다. 허용 안이다
+		CHECK(!RateMatches(57.4, 57.4, 2));				// 그대로다
+		CHECK(!RateMatches(57.4, 0, 2));
+		CHECK(!RateMatches(0, 100, 2));					// 누르기 전에 멈춰 있었다
+		CHECK(RateMatches(57.4, 14.35, 0.25));
+	});
+
+	Test("속도 시험: 첫 후보가 들으면 고르고, 쓰기를 멈춰도 남으면 한 번 쓰기다", [] {
+		FakeGame game;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.Sticky());
+		CHECK(trial.SavedOld() == 1 && trial.ProbeWarp() == 2 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
+		CHECK(trial.Attempts().size() == 1 && trial.Attempts()[0].Matched);
+	});
+
+	Test("속도 시험: 듣지 않는 후보는 원래 값으로 되돌리고 다음으로 간다", [] {
+		FakeGame game;
+		game.Live = 2;					// __debug_custom_wrap 의 자리. 원래 값은 -4 다
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 2 && trial.SavedOld() == -4);
+		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[3] == 1);
+		CHECK(trial.Attempts().size() == 3 && !trial.Attempts()[0].Matched && !trial.Attempts()[1].Matched && trial.Attempts()[2].Matched);
+		CHECK(trial.Attempts()[0].Readable && trial.Attempts()[0].Old == 1);
+	});
+
+	Test("속도 시험: 게임이 값을 되돌리면 계속 쓰기다", [] {
+		FakeGame game;
+		game.Live = 1;
+		game.Overwrites = true;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1 && !trial.Sticky());
+	});
+
+	Test("속도 시험: 아무 후보도 듣지 않으면 실패하고 모두 원래 값이다", [] {
+		FakeGame game;
+		game.Live = -1;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Failed && trial.Candidate() == -1 && !trial.Running());
+		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[2] == -4 && game.Values[3] == 1);
+		CHECK(trial.Attempts().size() == 4);
+	});
+
+	Test("속도 시험: 읽을 수 없는 후보는 건드리지 않는다", [] {
+		FakeGame game;
+		game.Live = 1;
+		game.Unreadable[0] = true;
+		game.Values[0] = 123;			// 건드렸다면 바뀐다
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1);
+		CHECK(game.Values[0] == 123 && !trial.Attempts()[0].Readable && !trial.Attempts()[0].Matched);
+	});
+
+	Test("속도 시험: 지금 속도가 1 이 아니어도 고른다", [] {
+		FakeGame game;
+		game.Values[0] = 2;				// 게임이 2배속이다
+		game.Values[1] = 2;
+		SpeedTrial trial(4);
+		RunTrial(trial, game, 2);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.SavedOld() == 2);
+		CHECK(trial.ProbeWarp() == 4 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
+	});
+
+	Test("속도 시험: 시험 중에 멈추면 그만두고 원래 값을 되돌린다", [] {
+		FakeGame game;
+		game.PauseAtTick = 25;			// 첫 후보를 쓰는 도중에 일시정지(기준을 재는 1.2초가 지난 뒤)
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Aborted && !trial.Running());
+		CHECK(game.Values[0] == 1 && trial.Attempts().empty());
+
+		game.PauseAtTick = -1;			// 풀고 다시 누르면 된다
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0);
+	});
+
+	Test("속도 시험: 기준은 시작한 뒤에 잰다. 그동안 멈춰 있으면 아무것도 쓰지 않고 그만둔다", [] {
+		FakeGame game;
+		game.PauseAtTick = 0;			// 처음부터 멈춰 있다
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Aborted && trial.Attempts().empty());
+		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[2] == -4 && game.Values[3] == 1);
+
+		SpeedTrial fresh(4);
+		CHECK(fresh.UnitRate() == 0);				// 재기 전에는 기준이 없다
+	});
+
+	Test("속도 시험: 배율이 0 이하이면 시작하지 않고, 그만두면 처음으로 돌아간다", [] {
+		SpeedTrial trial(4);
+		CHECK(!trial.Start(0) && !trial.Start(-1) && trial.State() == SpeedTrial::Phase::Idle);
+		CHECK(trial.Start(1) && trial.Running() && !trial.Start(1));		// 시험 중에는 다시 시작하지 않는다
+		trial.Cancel();
+		CHECK(!trial.Running() && trial.State() == SpeedTrial::Phase::Idle && trial.Candidate() == -1);
+		CHECK(trial.Start(1));
+	});
+
+	Test("속도: 첫 손잡이가 들으면 고르고 누른 배율을 건다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		RunWorld(world, control, now, 1);
+		control.Press(5);
+		RunWorld(world, control, now, 8);
+		CHECK(control.Chosen() && control.Sticky() && !control.Busy() && control.Wanted() == 5);
+		CHECK_STR(control.ChosenLabel(), "new");
+		CHECK(world.Values["new"] == 5 && world.Values["warp"] == 1 && world.Values["custom"] == -4 && world.Values["variants[0]"] == 1);
+		CHECK(std::abs(control.UnitRate() - 57.4) < 1 && std::abs(control.Flow() - 57.4 * 5) < 10);
+	});
+
+	Test("속도: 일시정지를 푼 직후에 눌러도 고른다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		world.Paused = true;
+		RunWorld(world, control, now, 3);
+		world.Paused = false;			// 흐름의 창에는 멈춰 있던 표본이 남아 있다
+		control.Press(5);
+		RunWorld(world, control, now, 8);
+		CHECK(control.Chosen() && control.Wanted() == 5 && world.Values["new"] == 5);
+		CHECK(std::abs(control.UnitRate() - 57.4) < 1);
+	});
+
+	Test("속도: 창을 닫아 두었다가 열고 바로 눌러도 고른다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		RunWorld(world, control, now, 1);
+		world.Paused = true;
+		RunWorld(world, control, now, 30, false);		// 창이 닫혀 있다: 흐름을 재지 않는다
+		world.Paused = false;
+		RunWorld(world, control, now, 0.2);
+		control.Press(2);
+		RunWorld(world, control, now, 8);
+		CHECK(control.Chosen() && control.Wanted() == 2 && world.Values["new"] == 2);
+		CHECK(std::abs(control.UnitRate() - 57.4) < 1);
+	});
+
+	Test("속도: 멈춰 있으면 아무것도 쓰지 않고 알린다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		world.Paused = true;
+		world.Values["warp"] = 0;		// 메뉴: 배율이 0 이다
+		control.Press(5);
+		RunWorld(world, control, now, 2);
+		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && world.Writes == 0 && !control.Note().empty());
+
+		world.Values["warp"] = 1;		// 게임 화면의 일시정지: 배율은 1 인데 시간이 흐르지 않는다
+		control.Press(5);
+		RunWorld(world, control, now, 3);
+		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && world.Writes == 0 && !control.Note().empty());
+	});
+
+	Test("속도: 게임에 맡기면 원래 값으로 되돌리고, 다시 누르면 시험 없이 건다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 8);
+		control.Release();
+		RunWorld(world, control, now, 0.5);
+		CHECK(control.Wanted() == 0 && Untouched(world) && control.Chosen());
+
+		control.Press(2);
+		RunWorld(world, control, now, 0.3);
+		CHECK(!control.Busy() && control.Wanted() == 2 && world.Values["new"] == 2);
+	});
+
+	Test("속도: 자리가 바뀌는 손잡이는 쓴 자리를 되돌리고 새 자리에 건다", [] {
+		FakeWorld world;
+		world.Live = "variants";
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 12);
+		CHECK(control.Chosen() && world.Values["variants[0]"] == 5);
+		CHECK_STR(control.ChosenLabel(), "variants");
+		CHECK(world.Values["new"] == 1 && world.Values["warp"] == 1 && world.Values["custom"] == -4);		// 앞의 셋은 되돌렸다
+
+		world.Values["index"] = 2;		// 사용자가 게임의 속도 단추를 눌렀다
+		RunWorld(world, control, now, 0.5);
+		CHECK(world.Values["variants[0]"] == 1 && world.Values["variants[2]"] == 5);
+
+		control.Release();
+		RunWorld(world, control, now, 0.5);
+		CHECK(Untouched(world));
+	});
+
+	Test("속도: 시험 중에 끄면 그만두고 되돌린다. 나중에 걸리지 않는다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 2);
+		CHECK(control.Busy() && world.Values["new"] == 2);		// 첫 후보에 시험 값을 쓰는 중이다
+		control.Release();
+		RunWorld(world, control, now, 0.5);
+		CHECK(!control.Busy() && control.Wanted() == 0 && Untouched(world));
+		RunWorld(world, control, now, 10);
+		CHECK(control.Wanted() == 0 && Untouched(world) && !control.Chosen());
+	});
+
+	Test("속도: 시간 컨트롤러가 사라졌다 돌아오면 다시 건다", [] {
+		FakeWorld world;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 8);
+		CHECK(world.Values["new"] == 5);
+
+		world.Values.clear();			// 새 게임을 만드는 중: 컨트롤러가 없다
+		RunWorld(world, control, now, 1);
+		CHECK(!control.TimeFound() && control.Wanted() == 5);
+		world.Create();
+		RunWorld(world, control, now, 1);
+		CHECK(control.TimeFound() && world.Values["new"] == 5 && control.Wanted() == 5);
+
+		control.Release();				// 돌아온 뒤의 원래 값(1)으로 되돌린다
+		RunWorld(world, control, now, 0.5);
+		CHECK(Untouched(world));
+	});
+
+	Test("속도: 게임이 값을 되돌리면 계속 써 넣는다", [] {
+		FakeWorld world;
+		world.OverwriteEvery = 0.1;
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 9);
+		CHECK(control.Chosen() && !control.Sticky() && control.Wanted() == 5);
+		RunWorld(world, control, now, 2);
+		CHECK(control.Flow() > 57.4 * 4);		// 0.1초마다 되돌려져도 대부분의 시간은 x5 다
+	});
+
+	Test("속도: 아무 손잡이도 듣지 않으면 실패하고 모두 원래 값이다", [] {
+		FakeWorld world;
+		world.Live = "none";
+		SpeedControl control(FakePaths(), world.Io());
+		double now = 0;
+		control.Press(5);
+		RunWorld(world, control, now, 14);
+		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && Untouched(world) && !control.Note().empty());
 	});
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.

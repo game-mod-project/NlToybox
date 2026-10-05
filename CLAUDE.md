@@ -18,8 +18,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   원격을 만들면 2단계 PR로 바꾸고 이 절을 고친다.
 - CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/test-native.ps1`·
   `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests`와 `py -3.14 -m unittest discover -s tools/overlay/tests` 통과,
-  `tools/check-load.ps1` 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
-  `check-load.ps1`을 뺀 나머지는 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
+  `tools/check-load.ps1`(또는 같은 판정을 함께 내는 `tools/ui-check.ps1`) 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
+  `check-load.ps1`과 `ui-check.ps1`을 뺀 나머지는 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
 - 머지한 브랜치는 지운다(`git branch -d`).
 
 ## 경로
@@ -46,7 +46,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     pwsh -File tools/test-native.ps1   # src/core 의 시험. 게임을 켜지 않는다
     pwsh -File tools/deploy.ps1        # → <게임>\mods\Aurie\
     pwsh -File tools/check-load.ps1    # 게임을 켜서 NlToyBox.log 로 판정, 끝나면 끈다
-    pwsh -File tools/ui-check.ps1      # 게임을 켜서 모드창이 그려진 프레임을 refs\ui\ 로 받아 온다, 끝나면 끈다
+    pwsh -File tools/ui-check.ps1      # 게임을 켜서 모드창이 그려진 프레임을 refs\ui\ 로 받아 온다, 끝나면 끈다. 적재 판정도 함께 낸다
+                                       # -Page <영역> -Path <주소> -Ask '<주소>,…' -Poke '<주소>=<수>,…' 로 영역, 주소, 읽기, 쓰기를 시험한다
 
 - 스크립트는 `pwsh`(PowerShell 7)로 실행한다. Windows PowerShell 5.1은 BOM 없는 UTF-8의
   한글을 깨뜨린다.
@@ -55,6 +56,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 게임을 켜는 확인은 한 번에 몰아서 하고 끝나면 바로 끈다. 켜기 전에 사용자에게
   게임 창을 누르지 말라고 알린다(사용자가 새 게임을 시작해야 하는 실행이면 할 일을 차례대로 알린다).
   켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
+- 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
+  `Using LEA pattern for RI ending`에서 끝난다. 모듈이 적재되기 전이라 모듈과 무관하다. 승인받은 횟수 안에서 다시 켠다.
+  강제로 끄기 전에 Aurie 콘솔 창의 글을 받아 둔다(`research/06-cheat-menu.md`).
 - `check-load.ps1`과 `probe.ps1`은 게임 창에 `WM_CLOSE`를 보내 정상 종료시키고(그래야 `aurie.log`가
   채워진다), 15초 안에 끝나지 않을 때만 강제 종료한다(`Stop-NlGame`).
 
@@ -70,6 +74,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 배율은 `src/Tweaks.cpp`가 실행 중인 게임의 값에 써 넣는다(데이터 파일을 읽은 ds_map, `global.__gameplay_vars`, 지식의 구조체).
   대상은 번호가 아니라 키 이름으로 찾고, 처음 본 값을 바탕으로 기억해 배율을 곱한다. **써 넣은 값이 남는 것까지만 확인했다.**
   게임이 그 값을 따르는지는 항목마다 플레이해 봐야 안다. 배율은 `mods\Aurie\NlToyBox.settings.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
+- 치트 메뉴(`src/Menu.cpp`)는 왼쪽 목록의 영역마다 패널을 그린다. 스펙은 `docs/superpowers/specs/2026-10-05-cheat-menu-design.md`.
+  - 게임의 값은 주소(`src/core/AskPath`) 하나로 가리킨다: `global.a.b[3]`, `inst:o_debug.is_x`, `inst:o_building:1.generic`, `map:150@key#0`.
+    읽고 쓰는 것은 `src/Access.cpp`가 한다. 없는 것을 만들지 않고, 쓴 뒤에는 다시 읽어 확인한다.
+  - **그리는 쪽(`Draw*`)에서 러너를 부르지 않는다.** 창은 바라는 상태나 명령만 남기고, 러너는 `GameTick`이 건드린다.
+    `RValue`를 틱 너머로 들지 않는다(스냅샷은 글이다).
+  - 치트 항목을 더하는 일은 `src/core/CheatTable.cpp`의 표에 한 줄을 더하는 일이다. 주소에 ds 번호를 적지 않는다.
+    `Verified`는 플레이에서 효과를 본 뒤에만 참으로 바꾸고 `research/`에 적는다. **이름에서 읽은 뜻은 추정이다.**
+  - 켠 치트와 즐겨찾기·잠금은 `mods\Aurie\NlToyBox.cheats.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
+    파일에서 불러온 잠금은 꺼진 채로 시작한다(`inst:<오브젝트>:<n>`의 n 이 실행마다 다른 인스턴스일 수 있다).
+  - 게임 속도는 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(`src/core/SpeedControl`, `SpeedTrial`).
+    메뉴에서는 시간이 흐르지 않아 게임으로는 미리 잴 수 없다. 논리는 `tests/native`의 가짜 세계로 시험한다.
+  - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
+  - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
 - **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.

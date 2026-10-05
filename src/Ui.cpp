@@ -15,6 +15,7 @@
 #include <cstdio>
 #include <fstream>
 #include <sstream>
+#include <utility>
 #include <vector>
 
 // imgui_impl_win32.h 는 이 선언을 주석으로만 둔다(쓰는 쪽이 직접 선언하라고 한다).
@@ -61,6 +62,7 @@ namespace
 	double g_ShotSeconds = -1;
 	bool g_ShotDone = false;
 	std::vector<std::string> g_TestSets;
+	std::vector<std::pair<std::string, std::string>> g_TestExtra;	// 이 파일이 모르는 줄(키, 값). Menu 가 읽는다
 	long long g_MouseMessages = 0, g_KeyMessages = 0;		// 창이 열려 있는 동안 받은 입력 메시지의 수
 	long long g_YytkWndProcCalls = 0;						// YYToolkit 의 창 메시지 콜백이 온 횟수(오는지 보려고 센다)
 	WNDPROC g_OrigWndProc = nullptr;
@@ -370,7 +372,7 @@ namespace
 		if (visible)
 		{
 			ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSize(ImVec2(760, 400), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(980, 620), ImGuiCond_FirstUseEver);
 			if (ImGui::Begin("NlToyBox  (F8)"))
 			{
 				if (g_Content)
@@ -440,6 +442,8 @@ void NlUi::Init(AurieModule* Module, const std::filesystem::path& ModuleDir, Log
 			g_TestDrag = std::sscanf(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;
 		else if (key == "set")
 			g_TestSets.push_back(value.substr(0, value.find_last_not_of(" \r\n") + 1));
+		else
+			g_TestExtra.emplace_back(key, value.substr(0, value.find_last_not_of(" \r\n") + 1));
 	}
 	in.close();
 	std::error_code ec;
@@ -460,6 +464,25 @@ bool NlUi::Visible()
 const std::vector<std::string>& NlUi::TestSets()
 {
 	return g_TestSets;
+}
+
+std::vector<std::string> NlUi::TestValues(const std::string& Key)
+{
+	std::vector<std::string> values;
+	for (const auto& [key, value] : g_TestExtra)
+		if (key == Key)
+			values.push_back(value);
+	return values;
+}
+
+double NlUi::ShotSeconds()
+{
+	return g_ShotSeconds;
+}
+
+double NlUi::SecondsSinceReady()
+{
+	return g_Ready ? std::chrono::duration<double>(Clock::now() - g_ReadyAt).count() : -1;
 }
 
 void NlUi::GameTick()

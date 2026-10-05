@@ -11,10 +11,16 @@ endif()
 
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
+  src/core/AskPath.cpp
+  src/core/CheatState.cpp
+  src/core/CheatTable.cpp
   src/core/Knobs.cpp
+  src/core/Rate.cpp
   src/core/Text.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
+  src/core/SpeedControl.cpp
+  src/core/SpeedTrial.cpp
 )
 set_target_properties(nlcore PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_compile_options(nlcore PUBLIC /std:c++latest /W3 /utf-8)
@@ -33,9 +39,14 @@ endif()
 
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
+  src/Access.cpp
+  src/Cheats.cpp
   src/Dump.cpp
+  src/Explorer.cpp
   src/Finder.cpp
   src/Game.cpp
+  src/Menu.cpp
+  src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"

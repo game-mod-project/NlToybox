@@ -1,10 +1,11 @@
-// NlToyBox Phase 0 모듈.
-// 붙었다는 증거만 남긴다. 모듈 옆 NlToyBox.log 에 적재, YYToolkit 버전, 프로브 두 개의 결과를 쓴다.
-// 줄 형식은 tools/check-load.ps1 이 그대로 찾는다 (스펙 §4.3). 바꾸면 그쪽도 바꾼다.
+// NlToyBox 모듈의 들머리. 모듈 옆 NlToyBox.log 에 적재, YYToolkit 버전, 프로브 두 개의 결과를 쓰고
+// 게임 스레드의 콜백에서 덤프, 모드창, 배율, 치트 메뉴의 틱을 돌린다.
+// 처음 여섯 줄의 형식은 tools/common.ps1 의 Get-NlLoadFailures 가 그대로 찾는다 (Phase 0 스펙 §4.3). 바꾸면 그쪽도 바꾼다.
 
 #include <YYTK_Shared.hpp>
 #include "Dump.hpp"
 #include "Game.hpp"
+#include "Menu.hpp"
 #include "Tweaks.hpp"
 #include "Ui.hpp"
 
@@ -17,7 +18,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.3.0";
+	constexpr const char* k_Version = "0.4.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -83,6 +84,7 @@ namespace
 		ProbeOnce("object_call");
 		NlDump::Tick(std::get<2>(CodeContext.Arguments()));
 		NlUi::GameTick();
+		NlMenu::GameTick();
 		NlTweaks::GameTick();
 	}
 
@@ -133,7 +135,8 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlDump::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::Init(Module, module_dir, [](const std::string& Line) { LogLine(Line); });
 	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
-	NlUi::SetContent(NlTweaks::Draw);
+	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
+	NlUi::SetContent(NlMenu::Draw);
 
 	AurieStatus status = Register(Module, EVENT_OBJECT_CALL, CodeCallback, "object_call");
 	if (!AurieSuccess(status))
