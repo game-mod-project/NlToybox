@@ -3,6 +3,7 @@
 
 #include "core/AskPath.hpp"
 #include "core/CheatState.hpp"
+#include "core/CheatTable.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Request.hpp"
@@ -388,6 +389,57 @@ int main(int argc, char** argv)
 		CHECK(state.Numbers.size() == 1 && state.Numbers.at("n") == 2.5);
 		CHECK(state.Pins == std::vector<std::string>{ "inst:o_debug.x" });
 		CHECK(state.Locks.size() == 1 && state.Locks[0].Path == "map:1@{a=b}" && state.Locks[0].Value == 8);
+	});
+
+	Test("치트 표: 주소가 모두 읽히고 Id 가 겹치지 않는다", [] {
+		std::set<std::string> ids;
+		for (const Cheat& cheat : Cheats())
+		{
+			const AskPath path = ParseAskPath(cheat.Path);
+			if (!path.Error.empty() || path.Steps.empty())
+			{
+				std::printf("  FAIL %s: %s (%s)\n", cheat.Id, cheat.Path, path.Error.c_str());
+				g_Failed++;
+			}
+			CHECK(path.Root == "global" || path.Root == "inst");		// 표에는 ds 번호를 적지 않는다
+			CHECK(ids.insert(cheat.Id).second);
+			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
+			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
+			if (cheat.Kind == CheatKind::Toggle)
+				CHECK(cheat.On != cheat.Off);
+			else
+				CHECK(cheat.Min < cheat.Max);
+		}
+		CHECK(Cheats().size() == 31);
+	});
+
+	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {
+		std::set<std::string> keys;
+		for (const AreaInfo& area : Areas())
+		{
+			CHECK(keys.insert(area.Key).second);
+			CHECK(FindArea(area.Key) == &area);
+			CHECK(&GetArea(area.Id) == &area);
+			CHECK(area.Stage >= 2 && area.Stage <= 7);
+		}
+		CHECK(Areas().size() == 17);
+		CHECK(FindArea("nope") == nullptr);
+		CHECK_STR(GetArea(Area::Time).Key, "time");
+		for (const Cheat& cheat : Cheats())
+			CHECK(FindArea(GetArea(cheat.Where).Key) != nullptr);
+	});
+
+	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {
+		CheatState state;
+		state.On = { "instant_build", "rest_decrease", "nope" };			// rest_decrease 는 Number 다
+		state.Numbers = { { "rest_decrease", 999 }, { "instant_build", 1 }, { "nope", 1 } };
+		state.Pins = { "inst:o_debug.x" };
+		state.Locks = { { "inst:o_debug.y", 3 } };
+		const CheatState kept = KeepKnown(state);
+		CHECK(kept.On == std::set<std::string>{ "instant_build" });
+		CHECK(kept.Numbers.size() == 1 && kept.Numbers.at("rest_decrease") == FindCheat("rest_decrease")->Max);
+		CHECK(kept.Pins == state.Pins && kept.Locks.size() == 1);
+		CHECK(FindCheat("nope") == nullptr && FindCheat("instant_build")->Kind == CheatKind::Toggle);
 	});
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.

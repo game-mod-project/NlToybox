@@ -13,6 +13,7 @@ endif()
 add_library(nlcore STATIC
   src/core/AskPath.cpp
   src/core/CheatState.cpp
+  src/core/CheatTable.cpp
   src/core/Knobs.cpp
   src/core/Text.cpp
   src/core/Request.cpp
