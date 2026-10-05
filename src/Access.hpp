@@ -6,6 +6,7 @@
 
 #include <YYTK_Shared.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -60,6 +61,10 @@ namespace NlAccess
 
 	// 주소가 가리키는 그릇의 자식들. As: 그것이 수일 때 Map 이나 List 로 연다. Limit 개까지만 적고 Total 은 전체 수.
 	bool List(const NlCore::AskPath& Path, Holder As, size_t Limit, std::vector<Row>& Rows, size_t& Total, std::string& Why);
+
+	// inst: 뿌리가 지금 가리키는 인스턴스를 가리는 수. 같은 주소가 다른 인스턴스를 가리키게 됐는지 보는 데 쓴다
+	// (instance_find 의 n 번째는 앞의 인스턴스가 사라지면 다음 인스턴스가 된다). inst: 가 아니거나 없으면 거짓.
+	bool InstanceIdentity(const NlCore::AskPath& Path, int64_t& Out);
 
 	// 인스턴스가 하나라도 있는 오브젝트들.
 	std::vector<RootObject> LiveObjects();

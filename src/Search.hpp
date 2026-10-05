@@ -26,6 +26,7 @@ namespace NlSearch
 		std::vector<Hit> Hits;
 		size_t Visited = 0;
 		bool Truncated = false;		// 한도(방문 수, 시간, 결과 수)에 걸려 일부만 봤다
+		size_t Skipped = 0;			// 한도(깊이, 배열의 길이, 오브젝트마다의 인스턴스 수) 때문에 들어가지 않은 그릇의 수
 		double Seconds = 0;
 	};
 

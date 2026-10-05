@@ -569,6 +569,16 @@ bool NlAccess::List(const AskPath& Path, Holder As, size_t Limit, std::vector<Ro
 	return true;
 }
 
+bool NlAccess::InstanceIdentity(const AskPath& Path, int64_t& Out)
+{
+	Cursor at;
+	std::string why;
+	if (Path.Root != "inst" || !Root(Path, at, why))
+		return false;
+	Out = at.Value.m_i64;		// Search.cpp 와 Dump.cpp 가 인스턴스를 가리는 바로 그 값이다
+	return true;
+}
+
 std::vector<NlAccess::RootObject> NlAccess::LiveObjects()
 {
 	std::vector<RootObject> live;

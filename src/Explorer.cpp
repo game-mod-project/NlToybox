@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cfloat>
 #include <cmath>
+#include <cstdint>
 #include <cstdio>
 #include <mutex>
 
@@ -28,6 +29,8 @@ namespace
 		bool HasLock = false;
 		bool Locked = false;			// 지금 걸려 있는가
 		double LockValue = 0;
+		bool HasOwner = false;			// 잠글 때 주소가 가리키던 인스턴스를 적어 두었다(inst: 주소만)
+		int64_t Owner = 0;
 		// 아래는 GameTick 이 채우는 스냅샷
 		bool Found = false;
 		NlAccess::Row Row;
@@ -201,6 +204,18 @@ namespace
 
 	void Hold(Watch& W)
 	{
+		// 잠근 뒤에 같은 주소가 다른 인스턴스를 가리키게 됐으면(앞의 인스턴스가 사라졌다) 잠금을 푼다.
+		// 그대로 두면 다른 인물의 같은 변수에 0.1초마다 써 넣게 된다.
+		int64_t owner = 0;
+		if (W.HasOwner && (!NlAccess::InstanceIdentity(NlCore::ParseAskPath(W.Path), owner) || owner != W.Owner))
+		{
+			W.Locked = false;
+			W.HasOwner = false;
+			W.Note = "인스턴스가 바뀌어 잠금을 풀었습니다";
+			Log("explorer lock " + W.Path + " released: the instance changed");
+			return;
+		}
+
 		double now = 0;
 		if (!NlAccess::ReadNumber(W.Path, now))
 		{
@@ -274,6 +289,7 @@ namespace
 			watch.HasLock = true;
 			watch.LockValue = C.Number;
 			watch.Locked = C.Flag;
+			watch.HasOwner = C.Flag && NlAccess::InstanceIdentity(NlCore::ParseAskPath(C.Path), watch.Owner);
 			watch.Note = C.Flag ? "" : "풀림";
 			g_Changed = true;
 			Log("explorer lock " + C.Path + " = " + Shortest(C.Number) + (C.Flag ? " on" : " off"));
@@ -285,7 +301,8 @@ namespace
 			g_Searched = true;
 			Log("explorer search '" + C.Spec.Name + "'" + (C.Spec.HasValue ? " value " + Shortest(C.Spec.Value) : "")
 				+ ": " + std::to_string(g_Found.Hits.size()) + " hits, " + std::to_string(g_Found.Visited) + " visited, "
-				+ NlCore::Fixed(g_Found.Seconds, 2) + "s" + (g_Found.Truncated ? ", truncated" : ""));
+				+ NlCore::Fixed(g_Found.Seconds, 2) + "s, " + std::to_string(g_Found.Skipped) + " skipped"
+				+ (g_Found.Truncated ? ", truncated" : ""));
 			break;
 
 		case Command::Kind::Refine:
@@ -599,6 +616,9 @@ namespace
 		}
 		ImGui::Text("%zu개 찾음 (%zu개를 %.1f초에 봄)%s", g_Found.Hits.size(), g_Found.Visited, g_Found.Seconds,
 			g_Found.Truncated ? " - 한도에 걸려 일부만 봤습니다" : "");
+		if (g_Found.Skipped > 0)
+			ImGui::TextDisabled("들어가지 않은 그릇 %zu개(깊이 10, 길이 4096 을 넘는 배열, 오브젝트마다 64번째 뒤의 인스턴스). "
+				"여기에 없다고 게임에 없는 것은 아닙니다.", g_Found.Skipped);
 
 		const ImGuiTableFlags flags = ImGuiTableFlags_RowBg | ImGuiTableFlags_BordersInnerV | ImGuiTableFlags_ScrollY
 			| ImGuiTableFlags_Resizable | ImGuiTableFlags_SizingStretchProp;

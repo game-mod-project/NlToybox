@@ -87,6 +87,12 @@ namespace
 			m_Queue.clear();
 		}
 
+		// 한도 때문에 들어가지 않은 뿌리를 센다.
+		void Skip()
+		{
+			m_Result.Skipped++;
+		}
+
 		NlSearch::Result Finish()
 		{
 			m_Result.Seconds = Elapsed();
@@ -124,12 +130,17 @@ namespace
 
 			// 구조체와 배열만 내려간다. ref(인스턴스)는 인스턴스 뿌리에서 따로 본다.
 			const Holder kind = Value.IsArray() ? Holder::Array : Value.IsStruct() ? Holder::Struct : Holder::None;
-			if (kind == Holder::None || Depth >= k_MaxDepth)
+			if (kind == Holder::None)
 				return;
-			if (kind == Holder::Array && NlGame::ArrayLength(Value) > k_MaxArray)
-				return;
-			if (Value.m_Pointer && !m_Seen.insert(Value.m_Pointer).second)
+			if (Value.m_Pointer && m_Seen.count(Value.m_Pointer))
 				return;			// 너비 우선이라 처음 닿은 길이 가장 얕다
+			if (Depth >= k_MaxDepth || (kind == Holder::Array && NlGame::ArrayLength(Value) > k_MaxArray))
+			{
+				m_Result.Skipped++;		// 한도 때문에 들어가지 않는다. "없다"를 믿으면 안 되는 자리다
+				return;
+			}
+			if (Value.m_Pointer)
+				m_Seen.insert(Value.m_Pointer);
 			m_Queue.push_back({ Value, kind, m_Paths.Add(Parent, NlCore::FormatStep(Step)), Depth });
 		}
 
@@ -168,14 +179,17 @@ NlSearch::Result NlSearch::Run(const Spec& Spec)
 
 		std::unordered_set<int64_t> seen;
 		for (const auto& [count, object] : order)
-			for (int n = 0; n < count && n < k_MaxPerObject; n++)
+			for (int n = 0; n < count; n++)
 			{
 				RValue id;
 				if (!NlGame::Call("instance_find", { RValue(object->Index), RValue(static_cast<double>(n)) }, id))
 					continue;
 				if ((NlGame::IsNumber(id) && id.ToDouble() < 0) || !seen.insert(id.m_i64).second)		// noone, 이미 본 것
 					continue;
-				walker.Root(id, Holder::Instance, "inst:" + object->Name + (n > 0 ? ":" + std::to_string(n) : ""));
+				if (n >= k_MaxPerObject)
+					walker.Skip();		// 오브젝트마다 앞의 k_MaxPerObject 개만 들어간다. 나머지는 센다
+				else
+					walker.Root(id, Holder::Instance, "inst:" + object->Name + (n > 0 ? ":" + std::to_string(n) : ""));
 			}
 	}
 
