@@ -158,9 +158,24 @@ pwsh -NoProfile -File tools/session.ps1 -Action stop -Name stage3c-session1
 
 ---
 
-### Task 3: 치트로 굳힌다 (Task 2 의 답으로 채운다)
+### Task 3: 치트로 굳힌다 (Task 2 의 답으로 채웠다)
 
-Task 2 가 끝나면 이 절을 채운다. 미리 정하는 것은 꼴뿐이다:
+> **한 것(2026-10-05)**: Task 2 의 실행(`stage3c-session1`)과 그 답은 `research/09-build.md`. 그 답으로 아래를 만들었다(모듈 0.7.0). 코드는 커밋이 기준이다.
+>
+> **Files:** Create `src/core/CostBook.hpp`·`.cpp`, `src/Build.hpp`·`.cpp`. Modify `src/core/CheatTable.hpp`·`.cpp`, `src/core/RemoteCommand.hpp`·`.cpp`, `src/Cheats.hpp`·`.cpp`,
+> `src/Access.hpp`·`.cpp`(`Follow`), `src/Menu.cpp`, `src/Remote.cpp`, `src/ModuleMain.cpp`, `CMakeLists.txt`, `tests/native/core_tests.cpp`.
+>
+> - **건설 조건**: 치트 표의 `Hook` 항목 `build_any` → `…__knowledge_manager.is_have_knowledge_to_upgrade_building`이 돌려주는 값을 참으로(`NlRecorder::Override`).
+>   주소로 적어 두고 게임 화면에서 스크립트를 알아낸다(메뉴에서는 "게임을 시작하면 적용"으로 두고 0.5초마다 다시 해 본다). 끄면 `Unoverride`.
+> - **건설 창의 표시**: `Hook` 항목 `build_marks` → `…is_knowledge_unlocked`를 참으로. 확인 전(`Verified = false`). 지식 창에도 영향이 간다고 설명에 적었다.
+> - **건설비·업그레이드비**: `Custom` 항목 `build_free`. `src/Build.cpp`가 `building_generic_get_array_of_all_buildings()`의 이름마다 `get_generic_building(이름)`을 불러
+>   `__construction_cost.levels[등급]`의 `money`와 자원 39칸을 0 으로 쓰고, 처음 본 값을 `NlCore::CostBook`에 적는다. 끄면 그 값으로 되돌린다.
+>   장부의 첫 자리에 값이 돌아와 있으면(게임이 건물 종류를 다시 만들었다) 다시 쓴다. 사용자가 본 "업그레이드 불가"(자원 부족)도 이 비용이다.
+> - **시험(RED → GREEN)**: "건설비 장부: 처음 본 값을 기억하고 0 은 기억하지 않는다", 치트 표(33개, `build_any`·`build_marks`는 `Hook`, `build_free`는 `Custom`),
+>   "훅과 모듈 항목도 켠 채로 저장되고 불러와진다"(`KeepKnown`이 `Toggle`이 아닌 것을 버리고 있었다), 원격 명령 `cheat <Id> on|off`. `core tests: 72 passed`.
+> - 러너에 닿는 부분(`ApplyHook`, `NlBuild`, `NlAccess::Follow`)은 네이티브 시험이 없다. Task 4 의 실행에서 `cheat … on`과 화면·창고의 수로 본다.
+
+처음에 정해 둔 꼴:
 
 - 치트 표에 종류를 더한다: `Hook`(스크립트의 정식 이름 + 바꿔 돌려줄 값 + `skip`). 켜면 `NlRecorder::Override`, 끄면 `Unoverride`. 스크립트 이름은 이 게임 버전의 것이다
   (메서드의 `gml_Script_anon_…` 이름에 든 번호는 빌드마다 다르다. 없으면 "이 버전에는 없다"고 보이고 켜지 않는다).
@@ -172,7 +187,10 @@ Task 2 가 끝나면 이 절을 채운다. 미리 정하는 것은 꼴뿐이다:
 ### Task 4: 확인 실행, 문서, 머지
 
 - [ ] 독립 코드 검토(전체 브랜치) → Critical·Important 를 시험과 함께 고친다(켜기 전에).
-- [ ] 실행 묶음 1회(사용자 승인): 적재 판정, 건설비 무료·건설 조건·업그레이드 조건을 사용자가 플레이로 본다. 끄고 켠 뒤 바꾼 값이 돌아오는지.
+- [ ] 실행 묶음 1회(사용자 승인): 적재 판정. 세이브를 불러온 뒤 원격으로 `cheat build_any on`, `cheat build_free on` → 로그(`cheat build_any: overriding …`, `build: zeroed …`)와
+  `ask`로 비용이 0 인지 본다. 사용자가 (가) 잠긴 건물 하나를 짓고 (나) 주택의 업그레이드 단추가 켜졌는지 보고 누른다 (다) 시간을 흘려 건물이 지어지는 동안
+  창고의 수가 줄지 않는지 본다(`ask …__total__[1]`). `cheat build_free off` → 비용이 원래 값으로 돌아오는지(`ask`). `cheat build_marks on` → 건설 창의 빨간 표시와 지식 창을 화면으로.
+  끝나면 `cheat … off`를 모두 보내고 끈다.
 - [ ] `research/09-build.md`, `CLAUDE.md`, `README.md`, 스펙 §10·§13. `git merge --no-ff feat/cheat-build` → `develop`.
 
 ## Self-Review
