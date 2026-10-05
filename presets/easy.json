@@ -1,0 +1,28 @@
+{
+  "name": "easy",
+  "note": "배율(mul)의 숫자를 고치고 tools/overlay.ps1 apply 를 다시 돌리면 바뀐다. 값을 직접 정하려면 mul 대신 set 을 쓴다.",
+  "game_version": "0.5588.9777.0",
+  "allow_experimental": true,
+  "changes": [
+    { "note": "건물 건설 비용의 배율 (0.5 = 절반)",
+      "file": "debug_params.json", "path": "building_resources.*[*][1]", "mul": 0.5, "round": "ceil" },
+
+    { "note": "시작 자원(나무, 당근, 약)의 배율",
+      "file": "debug_params.json", "path": "product_count.*", "mul": 3, "round": "nearest" },
+
+    { "note": "교본으로 얻는 능력치 경험의 배율",
+      "file": "knowledge/technology/textbooks/*.json", "path": "upgrade_skill[*].value", "mul": 2, "round": "nearest" },
+
+    { "note": "뇌물 비용(give_rings)의 배율",
+      "file": "gameplay_variables.json", "path": "bribe.give_rings", "mul": 0.5, "round": "ceil" },
+
+    { "note": "자유 영주가 머무는 기간의 배율",
+      "file": "gameplay_variables.json", "path": "free_lord.stay_duration", "mul": 2 },
+
+    { "note": "교회 수용 인원의 배율",
+      "file": "gameplay_variables.json", "path": "church.max_capacity", "mul": 2 },
+
+    { "note": "선술집 수용 인원의 배율",
+      "file": "gameplay_variables.json", "path": "tavern.max_capacity", "mul": 2 }
+  ]
+}

@@ -47,13 +47,21 @@ class PresetTests(unittest.TestCase):
             "name": {"game_version": "1", "changes": []},
             "changes": {"name": "T", "game_version": "1"},
             "allow_experimental": data(allow_experimental="yes"),
-            "모르는 항목 ": data(note="x"),
+            "모르는 항목 ": data(comment="x"),
         }
         for message, bad in cases.items():
             with self.subTest(message=message):
                 with self.assertRaises(PresetError) as caught:
                     preset.parse(bad)
                 self.assertIn(message.strip(), str(caught.exception))
+
+    def test_the_preset_and_each_change_may_carry_a_note(self):
+        p = preset.parse(data({"note": "시작 금화", "file": "debug.json", "path": "budget_money", "set": 1}, note="쉬운 시작"))
+        self.assertEqual((len(p.changes), p.changes[0].value), (1, 1))
+        for bad in (data({"note": 5, "file": "debug.json", "path": "budget_money", "set": 1}), data(note=["x"])):
+            with self.assertRaises(PresetError) as caught:
+                preset.parse(bad)
+            self.assertIn("note", str(caught.exception))
 
     def test_errors_name_the_change(self):
         with self.assertRaises(PresetError) as caught:

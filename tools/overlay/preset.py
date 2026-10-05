@@ -15,8 +15,8 @@ import paths
 from jsonedit import OverlayError
 
 ROUNDINGS = ("ceil", "floor", "nearest")
-_FIELDS = {"name", "game_version", "allow_experimental", "changes"}
-_CHANGE_FIELDS = {"file", "path", "set", "mul", "round"}
+_FIELDS = {"name", "game_version", "allow_experimental", "changes", "note"}
+_CHANGE_FIELDS = {"file", "path", "set", "mul", "round", "note"}      # note 는 사람이 읽는 설명이다. 도구는 쓰지 않는다
 
 
 class PresetError(OverlayError):
@@ -52,6 +52,8 @@ def parse(data):
             raise PresetError(f"프리셋의 {field} 는 비어 있지 않은 글이어야 한다")
     if not isinstance(data.get("allow_experimental", False), bool):
         raise PresetError("프리셋의 allow_experimental 은 불리언이어야 한다")
+    if not isinstance(data.get("note", ""), str):
+        raise PresetError("프리셋의 note 는 글이어야 한다")
     if not isinstance(data.get("changes"), list):
         raise PresetError("프리셋의 changes 는 배열이어야 한다")
     changes = []
@@ -62,6 +64,8 @@ def parse(data):
         unknown = sorted(set(raw) - _CHANGE_FIELDS)
         if unknown:
             raise PresetError(f"{where}: 모르는 항목 {unknown}")
+        if not isinstance(raw.get("note", ""), str):
+            raise PresetError(f"{where}: note 는 글이어야 한다")
         ops = [op for op in ("set", "mul") if op in raw]
         if len(ops) != 1:
             raise PresetError(f"{where}: set 과 mul 가운데 하나만 있어야 한다")
