@@ -72,6 +72,14 @@
 - 이벤트의 자료: `inst:o_data.__game_director_events_data`: `__debug_forced_event`(undefined), `__events`·`__events_by_name`·`__groups`(ds_map), `__params`.
   지금 국면의 뽑기: `gm.__game_director.__current_phase.__events_weighted_random.__array_of_elements[8]` = 0, 200, 1, 60, 2, 80, 3, 70(번호와 무게가 번갈아 든 것으로 보인다. 추정).
 
+## 세이브에 남는 것 (세이브 파일을 읽기만 했다)
+
+- **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다.** "아덴" 세이브에서 `"events_cooldowns"` 1곳, `"__events_cooldowns"` 0곳. `"next_day_migrants_bonus"`도 밑줄 없이 1곳이다.
+  열쇠를 찾을 때는 밑줄을 떼고 찾는다(밑줄째로만 찾으면 있는 것을 "없다"고 읽는다).
+- 있는 열쇠: `events_cooldowns`, `events_groups_cooldowns`, `difficulty`, `speed_div`, `bishop_uuid`. 이벤트 쿨다운과 게임 조건에 쓴 값은 저장하면 남는다(쓴 0 이 저장을 거쳐 남는 것 자체는 재지 않았다).
+- 없는 열쇠(밑줄이 있든 없든 0곳): `other_faction_relation_cache`, `faction_update_relations`, `debug_override_raid_budget`, `debug_is_can_die_of_old_age`,
+  그리고 앞 단계에서 "없다"고 적은 것들(`capacity_in_categories`, `generic_warehouses`, `fair_trade_default_price_buy`·`_sell`, `map_of_production`, `construction_cost`, `production_points_cost`)도 두 이름 모두 0곳이었다.
+
 ## 확인하지 못한 것
 
 - 이벤트 쿨다운을 0 으로 쓴 효과(이벤트가 일찍 오는가). 이벤트를 골라 일으키는 길(`__debug_forced_event`에 무엇을 쓰는가).

@@ -258,14 +258,14 @@ lock inst:o_character:0.starving_hours=0
 | | 장비 지급 | 소지품에 넣은 장비는 바로 착용되지만 게임이 `give_possible_equipment(구조체)`로 되돌린다. 그 구조체를 찾아야 한다 | 아직 |
 | | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 배율(`get_combat_level_in_battle`, `get_mortal_pain_threshold`에 self 로 가린 배율)과 사기는 아직 | 5(아군 무적) |
 | | 전투 즉시 승리, 적 사기 0 | B 전투 중인 분대의 사기를 찾는다. 안 되면 C | 5 |
-| 외교 | 관계·호감 설정, 동맹·전쟁·평화 강제 | B `__factions_manager` 안에서 찾는다. 강제는 C | 6 |
+| 외교 | 관계·호감 설정, 동맹·전쟁·평화 강제 | 적대 없음: D `Faction.is_enemy_with(세력) -> 불리언`을 거짓으로(모든 세력. 효과는 확인 전). 관계의 수(`__other_faction_relation_cache`의 −7, `get_relation_with`), 동맹·속국·중립(`add_to_alliance_with_leader`, `vassalise_by_faction`, `force_neutrality`)은 꼴을 재지 못했다(`research/14`) | 6(훅만) |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
-| 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data` | 2(일부), 6 |
+| 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교의 평판(`attach_opinion_to_bishop`)·예언·설교는 아직 | 2(일부), 6(주교) |
 | 시간 | 게임 속도 0.25~50배 | B `o_time_controller`의 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(§9) | 2 |
 | | 이동 속도, 쿨다운 제거 | B 를 찾는다. 안 되면 D | 6 |
 | 월드 | 지도·지역 공개, 자원 위치, 이동 제한 | D `is_in_fog_of_war`, A `is_fast_action_task_on_global_map`, B `o_global_map` | 2(A), 6 |
 | | 광산·자원 생성 | C (기록해서) | 6 |
-| 이벤트 | 강제 실행, 쿨다운 제거, 확률 100% | C `try_to_force_start`, B `o_data.__game_director_events_data.__params`(자리를 쟀다. `research/02`) | 6 |
+| 이벤트 | 강제 실행, 쿨다운 제거, 확률 100% | 쿨다운 제거: B `gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`에 0(써지는 것까지 봤다). 강제 실행(`o_data.__game_director_events_data.__debug_forced_event`)과 확률은 아직. 궁수 매복 디버그 함수는 게임을 끝낸다(쓰지 않는다) | 6(쿨다운) |
 | 유틸 | UI 숨기기, 디버그 표시, 게임의 디버그 창 | A `is_hide_*`, `is_gw_gui_draw_disabled`, `is_debug_enabled`, `is_show_debug_managers` | 2 |
 | | 저장, 시간 정지, 인물·아이템 검색 | C `o_time_controller.pause`(기록해서), 탐색기의 찾기 | 7 |
 | 프리셋 | God, Sandbox, Easy, Normal(전부 끔) | 표 항목의 묶음. 상태 파일을 통째로 갈아 끼운다 | 7 |

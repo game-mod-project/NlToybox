@@ -13,6 +13,18 @@ namespace NlCore
 	// 이벤트 쿨다운(남은 날)의 한 칸에 0 을 쓸지: 0 보다 큰 수에만 쓴다(수가 아닌 칸과 이미 0 인 칸은 건드리지 않는다).
 	bool ShouldClearCooldown(bool IsNumber, double Value);
 
+	// 쿨다운의 구조체 하나를 지운 결과. Opened: 그 구조체를 열었다. Cleared: 0 을 써서 남은 칸. Failed: 쓰지 못한 칸.
+	struct ClearResult
+	{
+		bool Opened = false;
+		int Cleared = 0;
+		int Failed = 0;
+	};
+	// 두 구조체(이벤트, 묶음)의 결과를 창과 원격에 보일 글로. 한쪽만 된 것, 쓰지 못한 칸을 숨기지 않는다.
+	std::string CooldownReport(const ClearResult& Events, const ClearResult& Groups);
+	// 게임의 자료를 건드렸거나 건드리려다 실패했는가(로그를 남길지).
+	bool CooldownTouched(const ClearResult& Events, const ClearResult& Groups);
+
 	// 주교를 부를지. Read: 주교가 있는지(is_has_bishop)를 읽었다. 읽지 못했거나 이미 있으면 부르지 않는다.
 	enum class BishopStep { Call, AlreadyHere, Unknown };
 	BishopStep ChooseBishopStep(bool Read, bool Has);

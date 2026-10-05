@@ -26,6 +26,13 @@ namespace
 	std::deque<WorldAct> g_Queue;		// 창이 쌓고 틱이 한다
 	std::string g_Last;					// 마지막으로 한 일
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
+	bool g_BishopCalled = false;		// 이 게임에서 주교를 이미 불렀다(디버그 함수를 되풀이해 부르지 않는다). 게임 화면이 아니게 되면 푼다
+
+	struct Busy
+	{
+		Busy() { g_Busy = true; }
+		~Busy() { g_Busy = false; }
+	};
 
 	void Log(const std::string& Line)
 	{
@@ -38,35 +45,42 @@ namespace
 		return NlAccess::CallMethod(NlCore::ParseAskPath(Path), {}, Result, Why);
 	}
 
-	// 구조체의 칸 가운데 0 보다 큰 수에 0 을 쓴다. 돌려주는 것: 쓴 칸의 수(구조체를 열지 못하면 -1). Seen 에는 수인 칸의 수를 더한다.
-	int ClearNumbers(const std::string& Path, int& Seen, std::string& Why)
+	// 구조체의 칸 가운데 0 보다 큰 수에 0 을 쓴다. 불리언인 칸은 수로 치지 않는다(true 를 false 로 덮어쓰지 않게).
+	NlCore::ClearResult ClearNumbers(const std::string& Path)
 	{
+		NlCore::ClearResult out;
 		RValue box;		// 이 함수 안에서만 든다
 		Holder kind = Holder::None;
-		if (!NlAccess::Open(NlCore::ParseAskPath(Path), box, kind, Why) || kind != Holder::Struct)
+		std::string why;
+		if (!NlAccess::Open(NlCore::ParseAskPath(Path), box, kind, why) || kind != Holder::Struct)
 		{
-			if (Why.empty())
-				Why = "not a struct";
-			return -1;
+			Log("world: cannot open " + Path + ": " + (why.empty() ? "not a struct" : why));
+			return out;
 		}
 		std::vector<NlCore::PathStep> steps;		// 도는 동안에는 쓰지 않는다
-		NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
-			const bool number = NlGame::IsNumber(child);
-			Seen += number;
+		const double children = NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
+			const bool number = NlGame::IsNumber(child) && (static_cast<int>(child.m_Kind) & 0x0ffffff) != VALUE_BOOL;		// 형만 남긴다(YYTK_Shared_Types.hpp 의 VALUE_UNSET 의 폭)
 			if (NlCore::ShouldClearCooldown(number, number ? child.ToDouble() : 0))
 				steps.push_back(step);
 			return true;
 		});
-		int cleared = 0;
+		if (children < 0)
+		{
+			Log("world: cannot list " + Path);
+			return out;
+		}
+		out.Opened = true;
 		for (const NlCore::PathStep& step : steps)
 		{
-			std::string why;
 			if (NlAccess::SetNumber(box, step, 0, why))		// 쓴 뒤 다시 읽어 확인한다
-				cleared++;
+				out.Cleared++;
 			else
-				Why = why;
+			{
+				out.Failed++;
+				Log("world: cannot clear " + Path + "." + step.Name + ": " + why);
+			}
 		}
-		return cleared;
+		return out;
 	}
 
 	bool HasBishop(bool& Has, std::string& Why)
@@ -81,19 +95,20 @@ namespace
 	std::string DoNow(WorldAct Act)
 	{
 		if (!NlAccess::InGame())
+		{
+			g_BishopCalled = false;
 			return "게임 화면이 아닙니다";
+		}
 		switch (Act)
 		{
 		case WorldAct::CooldownsClear:
 		{
-			int seen = 0;
-			std::string why;
-			const int events = ClearNumbers(std::string(k_Director) + ".__events_cooldowns", seen, why);
-			const int groups = ClearNumbers(std::string(k_Director) + ".__events_groups_cooldowns", seen, why);
-			if (events < 0 || groups < 0)
-				return "이벤트 쿨다운을 읽지 못했습니다: " + why;
-			Log("world: event cooldowns cleared: " + std::to_string(events) + " event(s), " + std::to_string(groups) + " group(s), " + std::to_string(seen) + " numeric");
-			return "이벤트 쿨다운 " + std::to_string(events) + "개와 묶음 쿨다운 " + std::to_string(groups) + "개를 0 으로 썼습니다 (수인 칸 " + std::to_string(seen) + "개)";
+			const NlCore::ClearResult events = ClearNumbers(std::string(k_Director) + ".__events_cooldowns");
+			const NlCore::ClearResult groups = ClearNumbers(std::string(k_Director) + ".__events_groups_cooldowns");
+			if (NlCore::CooldownTouched(events, groups))		// 한쪽만 됐어도 건드린 것은 남긴다
+				Log("world: event cooldowns: events cleared " + std::to_string(events.Cleared) + " failed " + std::to_string(events.Failed)
+					+ ", groups cleared " + std::to_string(groups.Cleared) + " failed " + std::to_string(groups.Failed));
+			return NlCore::CooldownReport(events, groups);
 		}
 		case WorldAct::BishopSend:
 		{
@@ -109,14 +124,17 @@ namespace
 			case NlCore::BishopStep::Call:
 				break;
 			}
+			if (g_BishopCalled)		// 불렀는데 아직 없다고 읽힌다. 디버그 함수를 되풀이해 부르지 않는다
+				return "주교를 이미 불렀습니다. 아직 보이지 않으면 세이브를 다시 불러온 뒤에 눌러 주세요";
 			RValue result;
 			Log("world call debug_force_send_bishop()");		// 부르기 전에 남긴다
 			if (!CallNoArgs(std::string(k_Religion) + ".debug_force_send_bishop", result, why))
 				return "주교를 부르지 못했습니다: " + why;
+			g_BishopCalled = true;
 			bool came = false;
-			HasBishop(came, why);
-			Log(std::string("world: bishop ") + (came ? "is here" : "did not come"));
-			return came ? "주교가 왔습니다" : "불렀지만 주교가 오지 않았습니다";
+			const bool reread = HasBishop(came, why);
+			Log(std::string("world: bishop ") + (!reread ? "called (cannot read back)" : came ? "is here" : "called (not here yet)"));
+			return reread && came ? "주교가 왔습니다" : "주교를 불렀습니다 (아직 왔다고 읽히지 않습니다)";
 		}
 		}
 		return std::string();
@@ -154,11 +172,10 @@ void NlWorld::GameTick()
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy || g_Queue.empty())
 		return;
-	g_Busy = true;
+	const Busy busy;
 	const WorldAct act = g_Queue.front();
 	g_Queue.pop_front();
 	g_Last = DoNow(act);
-	g_Busy = false;
 }
 
 void NlWorld::DrawEvents()
@@ -167,7 +184,7 @@ void NlWorld::DrawEvents()
 	if (ImGui::Button("이벤트 쿨다운 지우기"))
 		Push(WorldAct::CooldownsClear);
 	Hint("게임이 이벤트를 고를 때 보는 '남은 날'(이벤트마다, 묶음마다)을 0 으로 씁니다. 써지는 것까지 봤고, 이벤트가 더 일찍 오는지는 확인 전입니다. "
-		"쓴 값은 저장하면 세이브에 남을 것으로 보입니다.");
+		"쿨다운은 세이브에 들어가는 자료입니다(세이브 파일에 그 열쇠가 있습니다). 쓴 채 저장하면 남습니다.");
 	DrawLast();
 }
 
@@ -185,8 +202,7 @@ std::string NlWorld::Do(NlCore::WorldAct Act)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return "busy";
-	g_Busy = true;
+	const Busy busy;
 	g_Last = DoNow(Act);
-	g_Busy = false;
 	return g_Last;
 }

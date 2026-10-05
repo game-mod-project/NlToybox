@@ -1468,6 +1468,18 @@ int main(int argc, char** argv)
 		CHECK(ChooseBishopStep(true, true) == BishopStep::AlreadyHere);
 		CHECK(ChooseBishopStep(false, false) == BishopStep::Unknown && ChooseBishopStep(false, true) == BishopStep::Unknown);
 
+		// 쿨다운 지우기의 보고: 쓴 것, 쓰지 못한 것, 열지 못한 것을 그대로 적는다(검토의 지적)
+		const ClearResult none;									// 열지 못했다
+		const ClearResult two{ true, 2, 0 }, one{ true, 1, 0 }, empty{ true, 0, 0 }, part{ true, 1, 2 };
+		CHECK(CooldownReport(two, one) == "이벤트 쿨다운 2개와 묶음 쿨다운 1개를 0 으로 썼습니다");
+		CHECK(CooldownReport(empty, empty) == "지울 쿨다운이 없습니다 (0 보다 큰 칸이 없습니다)");
+		CHECK(CooldownReport(part, one) == "이벤트 쿨다운 1개와 묶음 쿨다운 1개를 0 으로 썼습니다. 쓰지 못한 칸: 이벤트 2, 묶음 0");
+		CHECK(CooldownReport(two, none) == "이벤트 쿨다운 2개를 0 으로 썼습니다. 묶음 쿨다운은 읽지 못했습니다");		// 앞의 쓰기를 숨기지 않는다
+		CHECK(CooldownReport(none, one) == "묶음 쿨다운 1개를 0 으로 썼습니다. 이벤트 쿨다운은 읽지 못했습니다");
+		CHECK(CooldownReport(none, none) == "이벤트 쿨다운을 읽지 못했습니다");
+		CHECK(CooldownTouched(two, none) && CooldownTouched(none, part) && CooldownTouched(ClearResult{ true, 0, 3 }, empty));
+		CHECK(!CooldownTouched(empty, empty) && !CooldownTouched(none, none));
+
 		RemoteCommand c = ParseRemoteLine("world bishop");
 		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
 		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());

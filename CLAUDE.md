@@ -126,6 +126,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `__production.__map_of_production`(ds_map: 만드는 자원 → 재료의 배열과 만들어지는 수)이다(`research/10`).
   - **세이브 파일(`%LOCALAPPDATA%\Strategy\saves\*.norland`)은 머리(버전, 이름) 뒤가 평문 JSON 이다.** 고쳐 쓰는 자료가 세이브에 남는지는 그 열쇠가 파일에 있는지로 본다(읽기만 한다).
     기본 가격·창고 종류의 용량·조리법·생산 비용·건설비의 열쇠는 없었다(시장 깊이와 포화도는 있다).
+    **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다**(`__events_cooldowns` → `"events_cooldowns"`). 밑줄을 떼고 찾는다(`research/14`. 위의 "없었다"는 두 이름 모두로 다시 봤다).
   - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
