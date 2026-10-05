@@ -625,7 +625,13 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.Min < cheat.Max);
 		}
-		CHECK(Cheats().size() == 31);
+		CHECK(Cheats().size() == 36);
+		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
+		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
+		CHECK(FindCheat("resources_edit_mode") == nullptr);
+		// 창고 용량: 갈래 여섯
+		for (const char* id : { "cap_food", "cap_liquid", "cap_resources", "cap_armory", "cap_herbs", "cap_raw" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Number && FindCheat(id)->Where == Area::Economy);
 	});
 
 	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {

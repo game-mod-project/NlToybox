@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Cheats.hpp"
+#include "Economy.hpp"
 #include "Explorer.hpp"
 #include "Tweaks.hpp"
 #include "Ui.hpp"
@@ -153,6 +154,7 @@ void NlMenu::GameTick()
 
 	NlExplorer::GameTick(now, visible && page == Area::Explorer);
 	NlCheats::GameTick(now, visible);
+	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;
@@ -216,7 +218,21 @@ void NlMenu::Draw()
 	case Area::Explorer: NlExplorer::Draw(); break;
 	case Area::Time: NlCheats::DrawTime(); break;
 	case Area::Tweaks: NlTweaks::Draw(); break;
+	case Area::Economy:
+		NlEconomy::Draw();
+		ImGui::Separator();
+		NlCheats::DrawArea(page);
+		break;
 	default: NlCheats::DrawArea(page); break;
 	}
 	ImGui::EndChild();
+}
+
+bool NlMenu::SetPage(const std::string& Key)
+{
+	const NlCore::AreaInfo* area = NlCore::FindArea(Key);
+	if (!area)
+		return false;
+	g_Page = static_cast<int>(area->Id);
+	return true;
 }

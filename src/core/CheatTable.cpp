@@ -49,13 +49,30 @@ namespace NlCore
 		// Off 는 그 덤프의 값이다. 뜻은 변수 이름에서 읽은 것이고 효과는 아직 재지 않았다(Verified = false).
 		// 차례: Id, 영역, 이름, 주소, 종류, On, Off, Min, Max, Verified, 설명
 		static const std::vector<Cheat> cheats = {
-			{ "resources_edit_mode", Area::Economy, "자원 수량 편집 모드", "inst:o_debug.is_resources_edit_mode", T, 1, 0, 0, 0, false,
-				"게임의 창고 화면에서 자원의 수량을 고치게 하는 개발자 스위치로 보인다" },
+			// o_debug.is_resources_edit_mode 는 넣지 않는다: 켜도 자원의 목록이 나오지 않아 쓸 수 없었다(사용자가 플레이에서 봤다. research/07).
+			// 금화와 자원은 경제 패널(src/Economy.cpp)이 게임의 함수로 바꾼다.
 
-			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, false,
-				"건물을 놓으면 바로 다 지어지게 하는 개발자 스위치로 보인다" },
-			{ "build_all", Area::Build, "모든 건물 건설 가능", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, false,
-				"지식이나 조건 없이 모든 건물을 지을 수 있게 하는 개발자 스위치로 보인다" },
+			// 창고의 갈래별 용량. 자리는 research/07 에서 읽기만 했다(새 게임의 값은 설명에). 이 구조체는 게임을 시작한 직후에는 비어 있었고
+			// 뒤에 여섯이 찼다. 게임이 다시 채우면 0.5초마다 다시 써 넣는다. 게임이 이 값을 따르는지는 모른다.
+			{ "cap_food", Area::Economy, "용량: 음식", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.food",
+				N, 0, 0, 0, 1000000, false, "음식 갈래의 창고 용량으로 보인다(새 게임 250)" },
+			{ "cap_liquid", Area::Economy, "용량: 액체", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.liquid",
+				N, 0, 0, 0, 1000000, false, "액체 갈래의 창고 용량으로 보인다(새 게임 100)" },
+			{ "cap_resources", Area::Economy, "용량: 물자", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.resources",
+				N, 0, 0, 0, 1000000, false, "물자 갈래의 창고 용량으로 보인다(새 게임 50)" },
+			{ "cap_armory", Area::Economy, "용량: 전쟁 물자", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.armory",
+				N, 0, 0, 0, 1000000, false, "전쟁 물자 갈래의 창고 용량으로 보인다(새 게임 20)" },
+			{ "cap_herbs", Area::Economy, "용량: 약초·작물", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.herbs",
+				N, 0, 0, 0, 1000000, false, "약초·작물 갈래의 창고 용량으로 보인다(새 게임 300)" },
+			{ "cap_raw", Area::Economy, "용량: 원자재", "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type.raw",
+				N, 0, 0, 0, 1000000, false, "원자재 갈래의 창고 용량으로 보인다(새 게임 300)" },
+
+			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
+			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
+				"건물을 놓으면 바로 다 지어진다" },
+			// 사용자가 플레이에서 봤다: 건설 목록은 풀리지만 조건에 걸리는 건물은 여전히 지을 수 없다. 조건까지 푸는 것은 아직 없다.
+			{ "build_all", Area::Build, "건설 목록 모두 열기 (조건은 그대로)", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, false,
+				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
 

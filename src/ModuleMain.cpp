@@ -4,6 +4,7 @@
 
 #include <YYTK_Shared.hpp>
 #include "Dump.hpp"
+#include "Economy.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
 #include "Recorder.hpp"
@@ -20,7 +21,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.5.1";
+	constexpr const char* k_Version = "0.6.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -140,6 +141,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
 	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
+	NlEconomy::Init([](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::SetContent(NlMenu::Draw);
 

@@ -28,6 +28,10 @@ namespace NlGame
 	// 수를 돌려주는 빌트인. 실패하거나 수가 아니면 Fallback.
 	double CallNumber(const char* Name, const std::vector<YYTK::RValue>& Args, double Fallback);
 
+	// 게임 스크립트를 정식 이름("gml_Script_x". 접두가 없으면 붙인다)으로 부른다. self 와 other 는 전역이다.
+	// 인자의 수와 형은 부르는 쪽이 책임진다: 틀리면 게임이 GML 오류로 끝난다. 없는 스크립트면 거짓.
+	bool CallScript(const std::string& Name, const std::vector<YYTK::RValue>& Args, YYTK::RValue& Result);
+
 	// 수(불리언 포함)인가. 문자열·구조체·배열·undefined 는 아니다.
 	bool IsNumber(const YYTK::RValue& Value);
 

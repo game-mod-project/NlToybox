@@ -45,6 +45,7 @@ add_library(nltoybox SHARED
   src/Access.cpp
   src/Cheats.cpp
   src/Dump.cpp
+  src/Economy.cpp
   src/Explorer.cpp
   src/Finder.cpp
   src/Game.cpp

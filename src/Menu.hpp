@@ -16,4 +16,7 @@ namespace NlMenu
 
 	// 모드창 안을 그린다.
 	void Draw();
+
+	// 영역을 고른다(원격 명령 page). Key 는 core/CheatTable 의 영역 키. 모르는 키면 거짓.
+	bool SetPage(const std::string& Key);
 }
