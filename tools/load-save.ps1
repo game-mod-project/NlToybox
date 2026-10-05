@@ -18,11 +18,16 @@ function Ask-Lines([string[]]$Lines, [int]$Timeout = 40) {
     return @($out)
 }
 
+# session.ps1 -Action start 는 기다리지 않고 돌아온다. 게임 프로세스가 뜰 때까지 조금 기다린다.
+$up = (Get-Date).AddSeconds(90)
+while (-not (Test-NlGameRunning) -and (Get-Date) -lt $up) { Start-Sleep -Seconds 2 }
+if (-not (Test-NlGameRunning)) { throw '게임이 켜져 있지 않습니다. 먼저 tools\session.ps1 -Action start 를 실행하세요.' }
+
 # 메인 메뉴가 뜰 때까지 기다린다(게임이 자료를 읽는 동안에는 답이 늦다).
 $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $menu = $false
 while ((Get-Date) -lt $deadline) {
-    if (-not (Test-NlGameRunning)) { throw '게임이 켜져 있지 않습니다. 먼저 tools\session.ps1 -Action start 를 실행하세요.' }
+    if (-not (Test-NlGameRunning)) { throw '게임이 꺼졌습니다.' }
     $state = Ask-Lines @('state') 20
     if ($state -match 'in_game 1') { throw '이미 게임 화면입니다. 세이브는 메인 메뉴에서만 불러옵니다.' }
     if ($state -match 'o_main_menu\s+[1-9]') { $menu = $true; break }

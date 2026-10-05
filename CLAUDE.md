@@ -50,6 +50,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
                                        # -Page <영역> -Path <주소> -Ask '<주소>,…' -Poke '<주소>=<수>,…' 로 영역, 주소, 읽기, 쓰기를 시험한다
     pwsh -File tools/session.ps1 -Action start   # 게임을 켜 둔다(사용자의 배율·치트 설정은 *.kept 로 치운다). 기다리지 않는다
     & tools\ask.ps1 -Lines 'state', 'list inst:o_debug max=20'   # 켜 둔 게임에 묻는다. 몇 번이든
+    pwsh -File tools/load-save.ps1 -Name <이름의 일부>          # 켜 둔 게임의 메인 메뉴에서 세이브를 불러온다(-List 로 이름을 본다). 사람이 누르지 않아도 된다
     pwsh -File tools/session.ps1 -Action stop -Name <이름>       # 끄고, 설정을 되돌리고, 답을 refs\runtime\ 으로 옮긴다
 
 - 스크립트는 `pwsh`(PowerShell 7)로 실행한다. Windows PowerShell 5.1은 BOM 없는 UTF-8의
@@ -59,6 +60,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 게임을 켜는 확인은 한 번에 몰아서 하고 끝나면 바로 끈다. 켜기 전에 사용자에게
   게임 창을 누르지 말라고 알린다(사용자가 새 게임을 시작해야 하는 실행이면 할 일을 차례대로 알린다).
   켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
+- **세이브는 직접 불러온다**(`tools/load-save.ps1`. 게임의 `GameLoadOperator.load_save`를 부른다. `research/11`). 사용자에게 넘기는 것은 새 게임을 만드는 일뿐이다.
+  게임 창을 눌러야 하면(이야기 창의 "계속하기", 인물의 초상) `shot`으로 자리를 보고, 게임 창이 앞에 있을 때 `SetCursorPos` + `mouse_event`로 누른다.
+  시간을 흘리다 게임이 멈추면(`time_warp` 0) 화면부터 뜬다: 이야기 창이 떠 있을 수 있다(아덴 세이브는 4일차 08:00).
+- 게임은 게임 시각 06시와 18시에 자동 저장을 하고 같은 종류의 앞 자동 저장을 갈아 끼운다. **시험 값이 든 채 그 시각을 넘기지 않는다**
+  (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
 - 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
   `Using LEA pattern for RI ending`에서 끝난다. 모듈이 적재되기 전이라 모듈과 무관하다. 승인받은 횟수 안에서 다시 켠다.
   강제로 끄기 전에 Aurie 콘솔 창의 글을 받아 둔다(`research/06-cheat-menu.md`).
@@ -124,14 +130,30 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
   업그레이드 중인 건물에 `c_construction.build_instantly()`(인자 없음)를 부르면 바로 끝난다(`src/Build.cpp`의 `instant_upgrade`. `research/09`). 3 이 아닌 상태에는 부르지 않는다.
+- 인물·영주·인구 패널(`src/People.cpp`, `core/PeoplePlan`. `research/11`). 영주·손님은 `o_character`, 주민·노예는 `o_dummy`이고 값은 `__soul` 아래에 있다.
+  - 사람은 `__soul.__uuid`로 가리킨다. `inst:o_character:<n>`의 n 은 인물이 드나들면 바뀐다: 쓰기 전에 그 자리의 uuid 를 다시 본다(`StillThere`).
+    플레이어의 사람은 `__soul.__faction.__system_name == "player"`다. 여럿에게 하는 명령과 표의 항목은 플레이어의 산 사람에게만 간다(손님은 `unique_guests`였다).
+  - **죽음은 `c_status.__is_dead`의 `true`·`false`만 믿는다.** 그것은 게임의 캐시라 특성이 바뀌면 `-4`로 비워진다. 그때는 `__soul.is_alive()`로 묻는다
+    (`-4`를 죽음으로 읽어 특성을 붙인 바로 뒤의 명령이 그 사람을 놓친 적이 있다). 게임의 `c_*` 구성요소에서 `-4`인 수는 "아직 셈하지 않음"이다.
+  - 능력치는 `__soul.__skills.__level.<이름>`에 바로 쓴다(0~20. 게임의 인물 창이 그 수를 보인다. 게임의 `set_level`이 받는 기술 구조체는 찾지 못했다).
+    욕구는 `__soul.__motive.__motive[0..5]`(수면, 음식, 휴식, 신앙심, 성관계, 돌봄)에 쓴다. 나이·특성·생각·치료는 게임의 메서드로 한다:
+    `set_age(나이)`, `Traits.trait_attach("이름")`·`trait_detach("이름")`, `Minds.attach_generic_mind(생각 구조체)`, `cure_all_disease()`·`cure_bleeding()`.
+  - 기분은 바로 써도 남지 않는다(게임이 10분쯤마다 생각의 합으로 다시 셈한다). 올리려면 생각을 붙인다(`inst:o_data.mind_debug_totally_happy`: +100, 하루).
+  - 종과 죽음의 특성(`human`, `dead`, `lost_head` …)은 붙이지도 떼지도 않는다(`IsProtectedTrait`). 여럿에게는 능력치 최대·욕구·행복·치료만 한다.
+  - 표의 인구 항목은 사람을 40명씩 0.25초마다 돌며 쓴다. 바퀴의 판단(노화 깃발을 끈 뒤 처음부터 온전한 한 바퀴로 되돌리기)은 `core`의 `HoldRound`에 있고 시험한다.
+    **오브젝트 이벤트마다 불리는 틱에서는 시각부터 본다**(치트 표를 읽는 것도 그 뒤에).
+  - 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 틱이 다시 들어올 수 있다. 다시 들어온 틱은 아무것도 하지 않는다(`g_Busy`). 대상의 목록은 부르기 전에 사본으로 뜬다.
+  - 인구를 늘릴 때는 소환 함수가 아니라 이주 관리자의 `__next_day_migrants_bonus`에 쓴다(다음 이주 때 그만큼 더 온다. 세이브에 남는 열쇠다).
+  - **인자가 없는 함수는 기계어로 가린다**: 본문이 `argc`(r9d)를 레지스터에도 스택에도 옮기지 않으면 인자를 읽지 않는다(`research/11`. 게임이 부르지 않는 디버그 함수에 쓴다).
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
-  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`, `cheat <Id> on|off|<수>`.
+  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`, `cheat <Id> on|off|<수>`,
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`.
   잰 것은 `research/07-remote.md`.
-  - 게임 화면의 값을 찾는 일은 사용자에게 넘기지 않는다. 실행 묶음을 켜고 `ask.ps1`로 찾는다. 사용자는 새 게임을 시작해 두기만 한다.
+  - 게임 화면의 값을 찾는 일은 사용자에게 넘기지 않는다. 실행 묶음을 켜고 세이브를 불러와(`load-save.ps1`) `ask.ps1`로 찾는다.
   - **게임 스크립트는 `gml_Script_` 이름으로만 부르고 훅을 건다.** 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(`NlCore::ScriptRoutineName`).
   - `call`과 `method`는 인자의 수와 형을 본 함수에만 쓴다. 수는 `record`의 기록이나 본문의 기계어(`dumpbin /disasm`. `research/07`)로,
     형은 기록으로 본다. 본 적 없는 꼴로 부르지 않는다. 순서를 모르면 뒤바뀌어도 탈이 없는 값으로 처음 부른다.
