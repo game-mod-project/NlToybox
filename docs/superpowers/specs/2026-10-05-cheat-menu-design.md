@@ -245,8 +245,8 @@ lock inst:o_character:0.starving_hours=0
 | | 건강, 피로, 스트레스, 행복, 충성, 관계, 욕구 | 욕구: B `__soul.__motive.__motive[6]`. 행복: C `Minds.attach_generic_mind`(디버그용 생각 +100). 건강: C `cure_all_disease`·`cure_bleeding` + 부상 특성 떼기. 충성·관계는 아직 | 4(충성·관계 빼고 됨) |
 | | 나이, 성별, 특성 더하기·빼기, 소속, 직업, 장비 | 나이: C `set_age`. 특성: C `Traits.trait_attach`·`trait_detach`(게임의 282개 이름). 성별·소속·직업·장비는 아직 | 4(나이·특성 됨) |
 | 영주 | 전원 능력치·충성·호감 최대, 상태 회복 | 인물의 것을 플레이어 진영(`__faction.__system_name == "player"`)의 산 `o_character` 전부에 건다: 능력치 20, 욕구, 행복, 치료. 충성·호감은 아직 | 4(됨) |
-| | 영입 비용 0, 체류 시간, 영입·해고·이동 | B `free_lord_stay_duration`(배율로 있음). 영입·해고·이동과 비용은 재지 못했다 | 5 이후 |
-| 인구·욕구 | 인구 추가·제거·상한 | 추가: B 이주 관리자의 `__next_day_migrants_bonus`(다음 이주 때 그만큼 더 온다). 소환 함수는 인자의 형을 몰라 쓰지 않았다. 제거·상한은 아직 | 4(추가 됨) |
+| | 영입 비용 0, 체류 시간, 영입·해고·이동 | B `free_lord_stay_duration`(배율로 있음). 영주 하나 만들기: C 디버그 소환기 `__spawn_lord()`(`research/13`). 해고·이동과 영입 비용은 재지 못했다 | 5(만들기 됨) |
+| 인구·욕구 | 인구 추가·제거·상한 | 추가: B 이주 관리자의 `__next_day_migrants_bonus`(다음 이주 때 그만큼 더 온다), C 디버그 소환기 `__spawn_peasant`·`__spawn_slave`()(바로, 마우스 자리. `research/13`). 제거·상한은 아직 | 4·5(추가 됨) |
 | | 배고픔·피로·스트레스 없음, 욕구 충족 | B 모듈이 플레이어의 사람을 돌며 욕구 칸을 상한으로 써 둔다(배고픔 없음, 피로 없음, 모든 욕구). 행복은 디버그용 생각을 붙여 둔다 | 4(됨) |
 | | 식량·음료 소비 없음 | 욕구를 채워 두면 먹지 않는다(2.6시간 동안 음식의 수가 그대로였다. 하루를 돌린 대조는 아직) | 4(확인 전) |
 | | 출생 즉시, 임신 확률, 성장 속도, 노화 정지, 사망 방지 | 노화로 죽지 않음: B 인물마다의 `__aging.__old.__debug_is_can_die_of_old_age`(써지는 것까지 봤다). 임신·출생·성장은 아직(`ComponentPregnancy.begin_pregnant`, `debug_pregnancy_next_stage`가 있다) | 4(일부) |
@@ -254,8 +254,9 @@ lock inst:o_character:0.starving_hours=0
 | | 연구 시간·비용·속도, 책 효과 | D 배율: `__library_manager.get_learn_time`의 결과에 곱한다(효과는 확인 전). 교본 경험은 배율로 있다. 비용·책은 아직 | 5(확인 전) |
 | 아이템 | 아이템·장비 생성·삭제·수량, 최고 등급 지급 | C 인물의 소지금 `__inventory.change_money(변화량)`, 소지품 `__inventory.change(자원, 변화량)`. 장비(`ComponentEquipment.give_possible_equipment`)는 꼴을 몰라 아직 | 5(소지품 됨) |
 | 군대·전투 | 부상 없는 전투, 회피 끔, 장비 파손 끔, 항복 끔 | A `is_combat_without_injuries`, `is_disable_dodge`, `is_disable_equipment_destroy`, `is_surrender_disable` | 2 |
-| | 병사 추가·제거·수, 모집 비용 0·즉시 | 재지 못했다(조사한 세이브에 병영과 병사가 없다). 이름만: `SoldiersBarracksHiringManager.try_to_hire`·`instant_spawn_hired_mercenaries`·`get_hiring_time`, `debug_spawn_army` | 병사가 있는 세이브에서 |
-| | 공격·방어·피해 배율, 받는 피해 0, 사기 | B 전투 값(`o_debug.battle_*`, `battle_params`가 옮겨진 자리), D | 5 |
+| | 병사 추가·제거·수, 모집 비용 0·즉시 | 추가: C `gml_Script_rebellion_debug_spawn_player_soldier()`(지도 가장자리에서 걸어온다), 디버그 소환기 `inst:o_debug.debug_spawner.__spawn_soldier`·`__spawn_knight`()(마우스 자리). 비용: D `SoulBasic.get_soldier_cost()`에 배율(0.01 까지. 0 은 아니다). 제거(`fire`의 꼴)와 모집 시간(`get_hiring_time`이 `undefined`)은 아직(`research/13`) | 5(추가·비용 됨) |
+| | 장비 지급 | 소지품에 넣은 장비는 바로 착용되지만 게임이 `give_possible_equipment(구조체)`로 되돌린다. 그 구조체를 찾아야 한다 | 아직 |
+| | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 배율(`get_combat_level_in_battle`, `get_mortal_pain_threshold`에 self 로 가린 배율)과 사기는 아직 | 5(아군 무적) |
 | | 전투 즉시 승리, 적 사기 0 | B 전투 중인 분대의 사기를 찾는다. 안 되면 C | 5 |
 | 외교 | 관계·호감 설정, 동맹·전쟁·평화 강제 | B `__factions_manager` 안에서 찾는다. 강제는 C | 6 |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
@@ -303,7 +304,7 @@ lock inst:o_character:0.starving_hours=0
 | 3나-2 | 건설비 무료, 건설 조건 제거, 업그레이드 조건 제거, 즉시 업그레이드. 계획: `plans/2026-10-05-cheat-menu-stage3c-build.md` | 됐다(모듈 0.8.1, `research/09`). 조건은 지식의 판정 함수를 바꿔 풀고, 비용은 건물 종류의 등급별 비용을 0 으로 쓰고, 업그레이드는 게임의 `build_instantly()`로 끝낸다. 사용자가 잠긴 건물을 짓고 자원 없이 올리는 것을 봤다. 건설 창의 잠금 표시 지우기만 확인 전 |
 | 3나-3 | 거래, 창고 용량, 생산. 배율 7개를 제 영역으로, 속도 시험의 정리. 계획: `plans/2026-10-05-cheat-menu-stage3d-production.md` | 됐다(모듈 0.9.1, `research/10`). 창고 용량과 생산 배율 셋(시간·작업 효율·생산량)은 플레이에서 확인. 거래 배율은 함수까지만(상단이 없었다), 생산 재료 없음은 게임의 판정까지만. 임금·세금·유지비·노동력은 재지 못해 만들지 않았다 |
 | 4 | 인물, 영주, 인구·욕구. 계획: `plans/2026-10-06-cheat-menu-stage4-people.md` | 됐다(모듈 0.10.1, `research/11`). 한 사람의 능력치·욕구·나이·특성·행복·치료, 영주 전원·사람 전원의 일괄, 욕구 유지·언제나 행복·추가 이주민을 플레이에서 확인했다(능력치는 게임의 인물 창으로). 노화로 죽지 않음은 깃발까지만. 충성·관계, 영입, 인구 줄이기, 임신·출생, 성별·소속·직업·장비는 재지 못해 만들지 않았다 |
-| 5 | 지식, 아이템, 군대·전투. 계획: `plans/2026-10-06-cheat-menu-stage5-knowledge-army.md` | 지식과 소지품은 됐다(모듈 0.11.x, `research/12`): 영주에게 지식 하나·전부 주기, 소지금, 소지품을 플레이에서 확인했다(게임의 지식 창과 인물 창으로). 연구 시간 배율은 확인 전. **군대·전투와 장비는 하지 못했다**(세이브에 병영과 병사가 없어 잴 수 없었다. 병사가 있는 세이브에서 이어 한다) |
+| 5 | 지식, 아이템, 군대·전투. 계획: `plans/2026-10-06-cheat-menu-stage5-knowledge-army.md` | 지식과 소지품은 됐다(모듈 0.11.x, `research/12`): 영주에게 지식 하나·전부 주기, 소지금, 소지품을 플레이에서 확인했다(게임의 지식 창과 인물 창으로). 연구 시간 배율은 확인 전. 군대·전투(모듈 0.12 ~ 0.13, `research/13`, 계획 `plans/2026-10-06-cheat-menu-stage5b-army.md`): 병사 추가, 고용 값 배율, 디버그 소환기로 병사·기사·주민·노예·영주 만들기를 플레이에서 확인했다. 아군 무적은 함수 수준까지 봤다(확인 전). **장비 지급, 병사 제거, 모집 시간, 전투의 배율·사기·승패는 하지 못했다**(싸움을 붙이는 길을 찾지 못했다) |
 | 6 | 외교, 종교, 이벤트, 월드 | 관계 설정, 종교 값, 이벤트 강제 실행, 지도 공개의 효과를 본다 |
 | 7 | 프리셋, 유틸 | 18개 영역의 항목이 모두 `Verified`다 |
 

@@ -866,7 +866,11 @@ namespace
 			g_ShieldName = name;
 			Log("people: ally_invincible on, " + std::to_string(count) + " souls");
 		}
-		NlCheats::SetNote(id, "플레이어의 사람 " + std::to_string(count) + "명에게 적용 중");
+		// 넣은 주소의 수와, 훅이 실제로 막은 호출·지나가게 둔 호출의 수를 함께 보인다(주소를 넣었다는 것이 막았다는 뜻은 아니다).
+		uint64_t applied = 0, passed = 0;
+		NlRecorder::Counts(g_ShieldName, applied, passed);
+		NlCheats::SetNote(id, "플레이어의 사람 " + std::to_string(count) + "명의 주소를 넣음. 막은 상처 " + std::to_string(applied)
+			+ ", 그대로 둔 상처 " + std::to_string(passed));
 	}
 
 	void RefreshDetail()

@@ -43,6 +43,9 @@ namespace NlRecorder
 	// 훅 안에서는 빌트인을 부를 수 없어 진영을 그 자리에서 읽지 못한다. 그래서 주소를 미리 모아 둔다.
 	void SetPlayerSelves(std::vector<std::uintptr_t> Selves);
 
+	// Who 로 가린 바꾸기가 지금까지 건 호출과 그대로 지나가게 둔 호출의 수. 그 스크립트를 가려서 바꾸고 있지 않으면 거짓.
+	bool Counts(const std::string& Name, uint64_t& Applied, uint64_t& Passed);
+
 	// 그 함수가 돌려주는 값을 바꾼다. 훅이 없으면 건다. 바꾼 호출이 보이게 기록도 한다. Target 은 Watch 와 같다.
 	// 게임의 판정을 바꾸는 일이다: 그 함수가 무엇을 돌려주는지 기록으로 본 뒤에만 쓴다.
 	bool Override(const std::string& Target, const Forced& Value, std::string& Name, std::string& Why);

@@ -50,6 +50,16 @@
 
 - [ ] 독립 코드 검토 → Critical·Important 를 시험과 함께 고친다. 확인 실행. `research/13`, `CLAUDE.md`, `README.md`, 스펙. `git merge --no-ff feat/cheat-army` → `develop`.
 
+## 결과 (2026-10-06, 모듈 0.12.0 ~ 0.13.1)
+
+- Task 1: `research/13-army.md`. 병사 소환(`rebellion_debug_spawn_player_soldier()`), 고용 값(`SoulBasic.get_soldier_cost()`)을 쟀다. 첫 실행에서는 싸움이 없었다.
+- Task 2: 병사 +1·+5·+10 과 원격 `person spawn_soldier`, 치트 표의 `hire_cost`(0.12.0). 시험 82개.
+- Task 3: 독립 검토 두 번(Critical 0, Important 2 + 3). 확인 실행 두 번(`stage5b-session2`, `-session3`).
+  - 확인됨: 병사 추가(3, 5, 20명), 고용 값 배율(켜고 끄기), 디버그 소환기로 병사·기사·주민·노예·영주 만들기.
+  - 계획에 없던 것을 더했다(판단은 아래 "판단"): 마우스 자리에 소환, 아군 무적(`ally_invincible`. 훅을 self 로 가린다).
+  - 아군 무적은 함수 수준까지 봤다(직접 부른 호출이 플레이어의 병사에게는 건너뛰어지고 상인에게는 멍이 생겼다). 실제 싸움에서 아군이 맞는 것은 보지 못해 확인 전으로 냈다.
+  - 하지 못한 것: 장비 지급(게임이 되돌린다), 병사 제거, 모집 시간, 전투의 배율·사기·승패(싸움을 붙이는 길을 찾지 못했다).
+
 ## Self-Review
 
 - **스펙 대조**: §8 의 군대·전투 네 줄이 Task 1·2 에 있다. 전투의 배율은 전투를 일으킬 수 있을 때만 잰다(못 하면 적고 넘긴다).

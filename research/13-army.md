@@ -28,7 +28,7 @@
 - 읽은 것: `SoulBasic.get_mortal_pain_threshold() -> 40`(인자 없음. 계속 불린다), `get_combat_level_in_battle()`(인자 없음. 0번), `battle_hit(인자 5)`,
   `take_damage(글, 구조체, 불리언) -> true`(`research/11`의 실행에서 80번: `"cut"`, `"light_cut"`, `"bruise_light"`).
   수를 돌려주는 둘에 배율을 걸면 양쪽 모두에게 걸린다(영혼의 메서드라 적의 영혼도 같은 함수를 쓴다).
-- 아군에게만 걸려면 훅이 `self`(영혼 구조체)가 플레이어의 것인지 가려야 한다. 그 길은 만들지 않았다.
+- 아군에게만 걸려면 훅이 `self`(영혼 구조체)가 플레이어의 것인지 가려야 한다. 0.13.0 에서 만들었다(아래 "확인 실행 (모듈 0.13.0)").
 
 ## 이 실행이 게임에 남긴 것
 
@@ -61,8 +61,9 @@
 | `__spawn_peasant()` | `o_dummy`, 진영 `player`, 갈래 1 |
 | `__spawn_slave()` | `o_dummy`, 진영 `player`, 갈래 0 |
 | `__spawn_lord()` | `o_character`, 진영 `player`, 갈래 3("Nara". 특성 `__wolves_wont_attack__`, gambler, brave) |
-| `__spawn_bandit()` | `o_dummy`, 진영 `forest_bandits`. 주민이 일하는 곳으로 달려가 싸움을 건다 |
+| `__spawn_bandit()` | `o_dummy`, 진영 `forest_bandits`. 싸움을 걸지 않았다: 하나는 (8117, 6327)로 달려갔고, 뒤의 실행에서는 셋도 열둘도 (27800, 16700) 쪽으로 가서 사라졌다 |
 | `__spawn_wolf()` | `o_dummy`가 아니다. 다섯 마리를 풀었지만 세 시간 동안 싸움이 늘지 않았다 |
+| `__spawn_thug()`, `__spawn_criminal()` | `o_dummy`. 사람 목록에 다른 진영으로 나오지 않았다(플레이어의 진영으로 생긴 것으로 보인다. 추정). 한 시간 동안 싸움이 없었다 |
 
 - 기계어: `gml_Script_debug_spawn_army`는 여덟 곳에서 인자 여섯으로 불린다(소환기의 메서드들은 그것을 부르지 않았다: 기록 0번).
   `gml_Script_rebellion_debug_spawn_player_dummy`(인자 둘까지)·`_character`(없음)·`make_*_rebellion_possible`(없음)·`allow_rebellions`(없음)은 부르지 않았다.
@@ -75,15 +76,38 @@
 
 ## 전투
 
+- **싸움을 붙이는 길은 찾지 못했다.** 아래의 싸움들은 게임이 스스로 건 것이고 무엇이 맞았는지는 보지 못했다. 두 실행 모두 4일차 14:20 쯤에 `take_damage`가 몰려 불렸다
+  (0.13.0 의 실행: 14:18 ~ 14:45 에 162번, 그 뒤로 0번. 그동안 `o_dummy`의 수는 그대로였고 플레이어의 사람의 상처도 그대로였다. 사냥처럼 사람이 아닌 것이 맞는 일로 보인다. 추정).
+  16시쯤에는 노예 상단(`traders_slaves` 13명과 상인 하나)이 왔다.
 - 도적 하나를 풀고 세 시간 반 뒤: `gml_Script_battle_start(배열, 정수, 구조체, 배열, 정수, 구조체) -> 구조체` 3번((65570, 2)가 둘, (128, 4096)이 하나), `SoulBasic.take_damage(글, 구조체, 불리언) -> true` 26번,
   `SoulBasic.battle_hit(구조체, 배열, undefined, 정수[, 수]) -> 구조체` 45번, `get_combat_level_in_battle() -> 10, 7` 150번.
-  주민 둘이 크게 다쳤다(Keelan: `lost_eye`, `cut`, `wound_deep`, `bleeding_middle`. 뒤에 목록에서 사라졌다). 도적도 사라졌다.
+  주민 둘의 상처가 늘었다(Keelan: 세이브의 `light_cut`, `cut`×4, `inflamed_wound`, `wound_deep`에 `lost_eye`, `bleeding_middle`, `scars`×3 이 더해졌다. 뒤에 목록에서 사라졌다.
+  Marna: `cut`×2 → 6개). 도적도 사라졌다. 누가 때렸는지는 보지 못했다.
 - 상처의 이름(`take_damage`의 첫 인자): `injury_face`, `bruise_light`, `bruise`, `lost_eye`, `light_cut`, `cut`, `stun`, `wound_deadly`. 사람의 특성으로 붙는다.
 - **`take_damage`를 건너뛰면 상처가 생기지 않는다.** `override … b:0 skip`(모두에게) 뒤 도적 셋을 풀자 두 시간 반 동안 6,371번 불렸고(`wound_deadly` 포함. 도적이 14명으로 불어났다)
   57명의 상처 특성은 8개 그대로였다. 들어올 때 `Result`는 `undefined`였다(`(skipped, Result came as undefined) => false`). 아무도 쓰러지지 않아 싸움이 끝나지 않았다.
 - 군대의 관리자: `inst:o_game_map_controller.battle_squads_direct_controller`(`order_attack`, `order_move`, `order_follow`, `get_selected_squad`),
   `battle_squads_manager`(`__array_of_squads` 0칸. 분대는 군대 창의 "분대 만들기"로 만든다), `battle_debugger`(`__array_of_battles`),
   `__raids_manager`(`try_to_set_raid`, `is_can_set_raid`, `is_raids_enabled`, `__debug_override_raid_budget`. 이 실행에서 0번), `…__province.__rebellions_manager`(`is_can_start_rebellion`: 0번).
+
+## 확인 실행 (모듈 0.13.0, 2026-10-06)
+
+실행 묶음 `stage5b-session3`(답: `refs/runtime/stage5b-session3.answer.txt`). 같은 세이브. 06:00 ~ 16:46, 저장하지 않고 껐다. 적재 판정 통과.
+
+| 한 것 | 본 것 |
+|---|---|
+| `person spawn_soldier amount=20`(한 틱에) | 25 → 45, 병영 20칸. 오류 없음 |
+| `person spawn soldier`·`knight`·`peasant`·`slave`·`lord` | 하나씩 생겼다(주민 45 → 49, 영주 5 → 6). 새 영주가 게임의 영주 줄에 올라왔다(`refs/ui/b3-scene.png`) |
+| `person spawn bandit` | 거부(플레이어의 사람만 만든다) |
+| 군대·인구 패널 | 단추와 안내 글이 그려진다(`refs/ui/b3-shield.png`, `b3-people.png`) |
+| `cheat ally_invincible on` | 훅이 걸렸다: `override -> false (skip …) (only when self is one of the player's souls)`. 옆의 글 "플레이어의 사람 54명" |
+| 켠 채 14:18 ~ 14:45 의 싸움 | `take_damage` 162번이 모두 지나갔다(막은 호출 0). 플레이어의 사람의 상처 특성은 9개 그대로(맞은 것이 플레이어의 사람이 아니었다) |
+| 켠 채 `method inst:o_dummy:25.__soul.take_damage s:bruise_light p:<다른 병사의 영혼> b:0`(플레이어의 병사) | `-> false`, 막은 호출 1, 그 병사의 특성 그대로(`wet_feet homeless human`) |
+| 같은 호출을 상인(진영 `traders`)에게 | `-> true`, 지나간 호출 163, 상인에게 `bruise_light`가 붙고 통증 0 → 1, 생각의 합 −6.61 → −7.61 |
+
+- 그래서 아는 것: 훅의 self 는 영혼 구조체의 주소와 같다(직접 부른 호출에서). `take_damage`는 self 의 영혼에 상처를 입히고, 둘째 인자로 영혼을 받는다.
+- **모르는 것: 게임이 스스로 건 싸움에서 플레이어의 사람이 맞을 때**(그런 호출이 이 실행에 없었다). 그래서 치트 표의 `ally_invincible`은 확인 전이다.
+  다음에 잴 때는 켠 채 `records <take_damage>`의 "applied to N call(s)"와 표본의 `[self in, …]`을 본다(0.13.1 부터 표본에 적힌다).
 
 ## 확인하지 못한 것
 

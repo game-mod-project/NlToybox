@@ -143,7 +143,19 @@ namespace
 		const bool forced = slot.Override
 			&& NlCore::HookApplies(value.Who, value.Who != 'a' && g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Self)));
 		if (slot.Override && value.Who != 'a')
+		{
 			(forced ? slot.Matched : slot.Passed)++;
+			if (sample)
+			{
+				// 가려지는지 재는 표식: self, other, 구조체인 앞의 인자 셋이 플레이어의 영혼 묶음에 있는가(주소만 견준다).
+				const auto in = [](const void* Pointer) { return g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Pointer)) ? "in" : "out"; };
+				args += std::string(" [self ") + in(Self) + ", other " + in(Other);
+				for (int i = 0; Args && i < Count && i < 3; i++)
+					if (Args[i] && Args[i]->IsStruct())
+						args += ", arg" + std::to_string(i) + " " + in(Args[i]->m_Object);
+				args += "]";
+			}
+		}
 		const auto make = [&value]() {
 			return value.Kind == 'n' ? RValue(value.Number) : value.Kind == 'b' ? RValue(value.Number != 0) : RValue();
 		};
@@ -361,6 +373,18 @@ namespace
 void NlRecorder::SetPlayerSelves(std::vector<std::uintptr_t> Selves)
 {
 	g_PlayerSelves.Replace(std::move(Selves));
+}
+
+bool NlRecorder::Counts(const std::string& Name, uint64_t& Applied, uint64_t& Passed)
+{
+	for (const Slot& slot : g_Slots)
+		if (slot.Used && slot.Override && slot.Value.Who != 'a' && slot.Name == Name)
+		{
+			Applied = slot.Matched;
+			Passed = slot.Passed;
+			return true;
+		}
+	return false;
 }
 
 bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string& Why)

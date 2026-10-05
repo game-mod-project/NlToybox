@@ -155,11 +155,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
   - **게임의 디버그 소환기 `inst:o_debug.debug_spawner`**: `__spawn_soldier`·`__spawn_knight`·`__spawn_peasant`·`__spawn_slave`·`__spawn_lord`·`__spawn_bandit`·`__spawn_wolf`()(인자 없음)가
     **마우스가 가리키는 지도의 자리**에 하나를 만든다. 앞의 다섯은 플레이어의 사람이다(`core/PeoplePlan`의 `SpawnKind`. 틱마다 하나씩 부른다).
-    싸움을 붙여 재려면 커서를 사람들 가까이에 두고 `__spawn_bandit()`을 부른다(도적은 주민에게 달려가 싸운다. 늑대는 싸우지 않았다).
+    **싸움을 붙이는 길은 아직 없다**: 도적·늑대·깡패를 풀어도 싸우지 않았다(도적은 지도 밖으로 나간다). 게임이 스스로 거는 싸움을 기다려야 한다(아덴 세이브는 4일차 14:20 쯤).
   - 상처는 `SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true`가 입힌다. 건너뛰면(`b:0 skip`) 상처가 생기지 않는다. 들어올 때 `Result`는 `undefined`다.
   - **훅을 불린 대상(self)으로 가릴 수 있다**(`NlRecorder::Forced::Who`: `'p'` 플레이어의 영혼일 때만, `'o'` 아닐 때만). 훅 안에서는 진영을 읽을 수 없으므로
     틱이 플레이어의 사람들의 `__soul` 구조체 주소를 모아 `NlRecorder::SetPlayerSelves`에 넣는다(`src/People.cpp`의 `ShieldTick`. 0.5초마다).
-    가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"로 본다.
+    가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"와 표본의 `[self in, other out, …]`으로 본다.
+    싸움이 없을 때는 그 함수를 `method`로 직접 불러 잰다: `take_damage`는 `s:<상처의 이름> p:<영혼의 주소> b:0`으로 플레이어의 병사와 다른 진영의 사람에게 한 번씩(앞은 건너뛰어지고 뒤는 멍이 생겼다).
   - 소지품에 넣은 장비는 바로 착용되지만 남지 않는다(게임이 `give_possible_equipment(구조체)`로 되돌린다). 장비는 그 길로 주지 않는다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
