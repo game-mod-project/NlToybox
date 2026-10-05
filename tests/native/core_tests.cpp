@@ -9,6 +9,7 @@
 #include "core/Rate.hpp"
 #include "core/Request.hpp"
 #include "core/Schedule.hpp"
+#include "core/SpeedTrial.hpp"
 #include "core/Text.hpp"
 
 #include <cmath>
@@ -62,6 +63,42 @@ namespace
 	{
 		std::istringstream in(Text);
 		return ParseRequest(in);
+	}
+
+	// 가짜 게임: 손잡이 넷 가운데 Live 번이 속도를 정한다(값이 0 보다 클 때. 아니면 배율 1). 흐름 = 57.4 × 배율.
+	struct FakeGame
+	{
+		double Values[4] = { 1, 1, -4, 1 };
+		int Live = 0;					// -1 이면 아무 손잡이도 듣지 않는다
+		bool Overwrites = false;		// 쓰지 않는 틱마다 게임이 Live 손잡이를 Reset 으로 되돌린다
+		double Reset = 1;
+		bool Unreadable[4] = {};
+		int PauseAtTick = -1;			// 이 틱부터 흐름이 0 이다
+
+		double Flow(int Tick) const
+		{
+			if (PauseAtTick >= 0 && Tick >= PauseAtTick)
+				return 0;
+			return 57.4 * (Live >= 0 && Values[Live] > 0 ? Values[Live] : 1);
+		}
+	};
+
+	// 시험을 끝까지 돌린다(0.1초 간격). 바깥이 할 일을 가짜 게임에 그대로 한다.
+	void RunTrial(SpeedTrial& Trial, FakeGame& Game, double Warp = 1)
+	{
+		if (!Trial.Start(Game.Flow(0), Warp))
+			return;
+		double now = 10;
+		for (int tick = 1; tick <= 400 && Trial.Running(); tick++)
+		{
+			now += 0.1;
+			const int candidate = Trial.Candidate();
+			const SpeedStep step = Trial.Tick(now, !Game.Unreadable[candidate], Game.Values[candidate], Game.Flow(tick));
+			if (step.What != SpeedStep::Kind::None)
+				Game.Values[step.Candidate] = step.Value;
+			else if (Game.Overwrites && Game.Live >= 0)
+				Game.Values[Game.Live] = Game.Reset;
+		}
 	}
 }
 
@@ -482,6 +519,85 @@ int main(int argc, char** argv)
 		CHECK(!RateMatches(57.4, 0, 2));
 		CHECK(!RateMatches(0, 100, 2));					// 누르기 전에 멈춰 있었다
 		CHECK(RateMatches(57.4, 14.35, 0.25));
+	});
+
+	Test("속도 시험: 첫 후보가 들으면 고르고, 쓰기를 멈춰도 남으면 한 번 쓰기다", [] {
+		FakeGame game;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.Sticky());
+		CHECK(trial.SavedOld() == 1 && trial.ProbeWarp() == 2 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
+		CHECK(trial.Attempts().size() == 1 && trial.Attempts()[0].Matched);
+	});
+
+	Test("속도 시험: 듣지 않는 후보는 원래 값으로 되돌리고 다음으로 간다", [] {
+		FakeGame game;
+		game.Live = 2;					// __debug_custom_wrap 의 자리. 원래 값은 -4 다
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 2 && trial.SavedOld() == -4);
+		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[3] == 1);
+		CHECK(trial.Attempts().size() == 3 && !trial.Attempts()[0].Matched && !trial.Attempts()[1].Matched && trial.Attempts()[2].Matched);
+		CHECK(trial.Attempts()[0].Readable && trial.Attempts()[0].Old == 1);
+	});
+
+	Test("속도 시험: 게임이 값을 되돌리면 계속 쓰기다", [] {
+		FakeGame game;
+		game.Live = 1;
+		game.Overwrites = true;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1 && !trial.Sticky());
+	});
+
+	Test("속도 시험: 아무 후보도 듣지 않으면 실패하고 모두 원래 값이다", [] {
+		FakeGame game;
+		game.Live = -1;
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Failed && trial.Candidate() == -1 && !trial.Running());
+		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[2] == -4 && game.Values[3] == 1);
+		CHECK(trial.Attempts().size() == 4);
+	});
+
+	Test("속도 시험: 읽을 수 없는 후보는 건드리지 않는다", [] {
+		FakeGame game;
+		game.Live = 1;
+		game.Unreadable[0] = true;
+		game.Values[0] = 123;			// 건드렸다면 바뀐다
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1);
+		CHECK(game.Values[0] == 123 && !trial.Attempts()[0].Readable && !trial.Attempts()[0].Matched);
+	});
+
+	Test("속도 시험: 지금 속도가 1 이 아니어도 고른다", [] {
+		FakeGame game;
+		game.Values[0] = 2;				// 게임이 2배속이다
+		game.Values[1] = 2;
+		SpeedTrial trial(4);
+		RunTrial(trial, game, 2);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.SavedOld() == 2);
+		CHECK(trial.ProbeWarp() == 4 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
+	});
+
+	Test("속도 시험: 시험 중에 멈추면 그만두고 원래 값을 되돌린다", [] {
+		FakeGame game;
+		game.PauseAtTick = 10;			// 첫 후보를 쓰는 도중에 일시정지
+		SpeedTrial trial(4);
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Aborted && !trial.Running());
+		CHECK(game.Values[0] == 1 && trial.Attempts().empty());
+
+		game.PauseAtTick = -1;			// 풀고 다시 누르면 된다
+		RunTrial(trial, game);
+		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0);
+	});
+
+	Test("속도 시험: 멈춰 있으면 시작하지 않는다", [] {
+		SpeedTrial trial(4);
+		CHECK(!trial.Start(0, 1) && !trial.Start(57.4, 0) && trial.State() == SpeedTrial::Phase::Idle);
+		CHECK(trial.Start(57.4, 1) && trial.Running() && !trial.Start(57.4, 1));		// 시험 중에는 다시 시작하지 않는다
 	});
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.
