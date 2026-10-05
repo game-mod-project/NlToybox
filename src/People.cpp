@@ -800,6 +800,7 @@ namespace
 			made++;
 		}
 		const int after = NlAccess::InstanceCount("o_dummy");
+		g_NextShield = 0;		// 새 병사의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
 		Log("people: spawned " + std::to_string(made) + "/" + std::to_string(count) + " soldier(s), o_dummy " + std::to_string(before) + " -> " + std::to_string(after));
 		return "병사 " + std::to_string(made) + "명을 만들었습니다 (주민과 병사 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
 	}
@@ -818,6 +819,7 @@ namespace
 		if (!CallNoArgs(path, result, why))
 			return label + ": 부르지 못했습니다: " + why;
 		const int after = NlAccess::InstanceCount("o_dummy") + NlAccess::InstanceCount("o_character");
+		g_NextShield = 0;		// 새 사람의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
 		Log("people: spawner " + std::string(NlCore::SpawnWord(Kind)) + ", people " + std::to_string(before) + " -> " + std::to_string(after));
 		return label + (after > before ? " 하나를 만들었습니다" : ": 불렀지만 사람의 수가 그대로입니다")
 			+ " (영주와 주민 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
@@ -846,8 +848,9 @@ namespace
 		Log(std::string("people: ") + Hook.Ally + "/" + Hook.Enemy + " off");
 	}
 
-	// 전투의 항목들(아군 무적, 아군·적의 전투력과 맷집): 훅이 self 가 플레이어의 영혼인지로 가린다. 영혼의 주소는 0.5초마다 다시 모은다
-	// (새로 온 사람은 그 사이에 빠져 있다. 사라진 영혼의 주소는 다음에 모을 때 빠진다).
+	// 전투의 항목들(아군 무적, 아군·적의 전투력과 맷집): 훅이 self 가 플레이어의 영혼인지로 가린다. 영혼의 주소는 0.5초마다 다시 모은다.
+	// 새로 온 플레이어의 사람(이주민, 태어난 아이)은 다음에 모을 때까지 "그 밖"으로 읽힌다: 0.5초까지 무적이 아니고 적의 배율을 받는다.
+	// 모듈이 만든 사람(병사 추가, 소환)은 만든 바로 다음 틱에 다시 모은다. 사라진 영혼의 주소는 다음에 모을 때 빠진다.
 	void BattleTick(double Now)
 	{
 		if (Now < g_NextShield)
@@ -879,7 +882,17 @@ namespace
 		}
 		if (!NlAccess::InGame())
 		{
-			NlRecorder::SetPlayerSelves({});		// 지난 게임의 주소가 남지 않게
+			// 지난 게임의 주소가 남지 않게 묶음을 비운다. 배율의 바꾸기도 끈다: 다음 게임에서 "주소부터 넣고 건다"의 차례를 되살린다
+			// (묶음이 빈 채 배율이 걸려 있으면 모두가 적의 배율을 받는다. 훅 쪽도 빈 묶음에는 곱하지 않는다: core 의 HookFactor).
+			for (SideHook& hook : g_SideHooks)
+			{
+				SideOff(hook);
+				if (NlCheats::IsOn(hook.Ally))
+					NlCheats::SetNote(hook.Ally, "게임을 시작하면 적용");
+				if (NlCheats::IsOn(hook.Enemy))
+					NlCheats::SetNote(hook.Enemy, "게임을 시작하면 적용");
+			}
+			NlRecorder::SetPlayerSelves({});
 			if (shield)
 				NlCheats::SetNote(id, "게임을 시작하면 적용");
 			return;
@@ -920,7 +933,7 @@ namespace
 				value.Number = want[i].Mine;
 				value.Other = want[i].Other;
 				value.Who = 'p';
-				value.Whole = true;		// 수준과 한도는 정수로 남긴다
+				value.Whole = true;		// 정수로 돌아온 값은 정수로 남기고 양수는 1 아래로 내리지 않는다(본 값은 10, 7, 5, 3, 40 모두 정수다)
 				value.Cap = hook.Cap;
 				std::string name, why;
 				if (!NlRecorder::Override(hook.Path, value, name, why))

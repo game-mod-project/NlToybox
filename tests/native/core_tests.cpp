@@ -696,7 +696,7 @@ int main(int argc, char** argv)
 			&& FindCheat("no_enemies")->On == 0 && !FindCheat("no_enemies")->Verified);
 		// 아군 무적(research/13): 상처를 입히는 함수를 플레이어의 사람에게만 건너뛴다. 모듈의 코드가 건다(Custom). 가려지는 것은 아직 보지 못했다.
 		CHECK(FindCheat("ally_invincible") && FindCheat("ally_invincible")->Kind == CheatKind::Custom && FindCheat("ally_invincible")->Where == Area::Army
-			&& !FindCheat("ally_invincible")->Verified);
+			&& FindCheat("ally_invincible")->Verified);		// research/13, 16: 직접 부른 호출이 가려졌고, 게임의 호출에서 self 가 영혼이다
 		// 군대(research/13): 병사의 고용 값. SoulBasic.get_soldier_cost() 가 돌려주는 수에 곱한다. 고용 창의 값과 실제로 빠진 금화로 봤다(160 → 16).
 		CHECK(FindCheat("hire_cost") && FindCheat("hire_cost")->Kind == CheatKind::HookScale && FindCheat("hire_cost")->Where == Area::Army
 			&& FindCheat("hire_cost")->Verified && FindCheat("hire_cost")->Max <= 1 && FindCheat("hire_cost")->Off == 1);		// 값은 정수로 남긴다
@@ -1477,7 +1477,7 @@ int main(int argc, char** argv)
 
 		// 확인 전의 항목, 없는 항목, 범위 밖의 수, 수가 없는 항목에 준 수, 겹친 항목, 값을 써 넣는 항목은 거부한다
 		std::string why;
-		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "ally_invincible", 0 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "no_enemies", 0 } } }, why));				// 확인 전의 항목
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "no_such_cheat", 0 } } }, why));
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 5 } } }, why));
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 0 } } }, why));			// 배율 항목은 배율을 준다
@@ -1563,10 +1563,15 @@ int main(int argc, char** argv)
 
 	Test("전투: 아군과 적에게 따로 거는 배율", [] {
 		// 한 함수에 거는 배율: self 가 플레이어의 것이면 Number, 아니면 Other('p'). 'a' 는 언제나 Number
-		CHECK(HookFactor('a', false, 3, 0.5) == 3 && HookFactor('a', true, 3, 0.5) == 3);
-		CHECK(HookFactor('p', true, 3, 0.5) == 3 && HookFactor('p', false, 3, 0.5) == 0.5);
-		CHECK(HookFactor('o', true, 3, 0.5) == 0.5 && HookFactor('o', false, 3, 0.5) == 3);
-		CHECK(HookFactor('p', false, 3, 1) == 1);		// 적 배율이 없으면 그대로 지나간다
+		CHECK(HookFactor('a', false, 3, 0.5, true) == 3 && HookFactor('a', true, 3, 0.5, true) == 3);
+		CHECK(HookFactor('p', true, 3, 0.5, true) == 3 && HookFactor('p', false, 3, 0.5, true) == 0.5);
+		CHECK(HookFactor('o', true, 3, 0.5, true) == 0.5 && HookFactor('o', false, 3, 0.5, true) == 3);
+		CHECK(HookFactor('p', false, 3, 1, true) == 1);		// 적 배율이 없으면 그대로 지나간다
+		// 검토의 지적: 영혼의 주소를 아직 모르면(묶음이 비었다: 메뉴에서 막 들어왔다) 아무에게도 곱하지 않는다. 아군이 적의 배율을 받지 않게
+		CHECK(HookFactor('p', false, 3, 0.5, false) == 1 && HookFactor('o', false, 3, 0.5, false) == 1);
+		CHECK(HookFactor('a', false, 3, 0.5, false) == 3);		// 가리지 않는 바꾸기는 묶음과 무관하다
+		// 수가 아닌 값은 한도가 있어도 그대로 지나간다
+		CHECK(std::isnan(ScaleCapped(std::numeric_limits<double>::quiet_NaN(), 2, true, 20)));
 
 		// 위쪽 한도: 올린 값은 한도에서 멈추고, 원래 한도를 넘던 값과 내린 값은 건드리지 않는다
 		CHECK(ScaleCapped(10, 2, true, 20) == 20 && ScaleCapped(12, 2, true, 20) == 20 && ScaleCapped(7, 2, true, 20) == 14);

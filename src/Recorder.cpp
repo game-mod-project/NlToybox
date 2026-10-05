@@ -142,7 +142,7 @@ namespace
 		// 누구의 호출에 걸지(Who). self 가 플레이어의 영혼인지는 틱이 넣어 둔 주소와 견준다(빌트인을 부르지 않는다).
 		const bool mine = value.Who != 'a' && g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Self));
 		// 배율('x')은 걸리는 쪽과 걸리지 않는 쪽에 다른 배율을 곱할 수 있다(Number, Other). 1 이면 그대로 지나간다.
-		const double factor = NlCore::HookFactor(value.Who, mine, value.Number, value.Other);
+		const double factor = NlCore::HookFactor(value.Who, mine, value.Number, value.Other, g_PlayerSelves.Size() > 0);
 		const bool forced = slot.Override && (value.Kind == 'x' ? factor != 1 : NlCore::HookApplies(value.Who, mine));
 		if (slot.Override && value.Who != 'a')
 		{
@@ -466,7 +466,8 @@ std::string NlRecorder::Report(const std::string& Name)
 		if (slot.Used && (Name.empty() || slot.Name == name))
 			text += slot.Name + (slot.Recording ? "" : " (stopped)") + "\n"
 				+ (slot.Override ? "  override -> " + ForcedText(slot.Value) + "\n" : "")
-				+ (slot.Override && slot.Value.Who != 'a' ? "  applied to " + std::to_string(slot.Matched) + " call(s), let " + std::to_string(slot.Passed) + " pass\n" : "")
+				+ (slot.Override && slot.Value.Who != 'a' ? "  applied to " + std::to_string(slot.Matched) + " call(s), let " + std::to_string(slot.Passed) + " pass"
+					+ (slot.Value.Kind == 'x' && slot.Value.Other != 1 ? " (those got x" + NlCore::Shortest(slot.Value.Other) + ")" : "") + "\n" : "")
 				+ slot.Log.Format("  ");
 	return text;
 }

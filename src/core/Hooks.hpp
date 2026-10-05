@@ -55,10 +55,15 @@ namespace NlCore
 	}
 
 	// 배율을 거는 바꾸기('x')가 이번 호출에 곱할 배율. 'a': 언제나 Number. 'p': self 가 플레이어의 것이면 Number, 아니면 Other. 'o': 그 반대.
-	// 1 이면 곱하지 않는다(원래 값이 그대로 지나간다).
-	constexpr double HookFactor(char Who, bool Mine, double Number, double Other)
+	// 1 이면 곱하지 않는다(원래 값이 그대로 지나간다). Known: 플레이어의 것들의 주소를 알고 있다(묶음이 비어 있지 않다).
+	// 가리는 바꾸기는 주소를 모르는 동안 아무에게도 곱하지 않는다: 묶음이 비면 모두가 "플레이어의 것이 아님"으로 읽혀 아군이 적의 배율을 받는다.
+	constexpr double HookFactor(char Who, bool Mine, double Number, double Other, bool Known)
 	{
-		return Who == 'p' ? (Mine ? Number : Other) : Who == 'o' ? (Mine ? Other : Number) : Number;
+		if (Who != 'p' && Who != 'o')
+			return Number;
+		if (!Known)
+			return 1;
+		return (Who == 'p') == Mine ? Number : Other;
 	}
 
 	// ScaleResult 에 위쪽 한도를 더한 것. Cap 이 0 보다 크면 올린 값이 Cap 을 넘지 않게 한다(번호로 쓰이는 수준 같은 값).
@@ -66,7 +71,7 @@ namespace NlCore
 	inline double ScaleCapped(double Value, double Factor, bool Whole, double Cap)
 	{
 		const double scaled = ScaleResult(Value, Factor, Whole);
-		if (!(Cap > 0) || scaled <= Cap || scaled <= Value)
+		if (!(Cap > 0) || !(scaled > Cap) || !(scaled > Value))		// 수가 아닌 값(NaN)은 견줌이 모두 거짓이다: 그대로 지나간다
 			return scaled;
 		return Value > Cap ? Value : Cap;
 	}
