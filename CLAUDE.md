@@ -150,6 +150,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/People.cpp`의 `One()`에 case 하나를 더한다
     (창의 단추와 원격 `person`이 같은 길을 탄다).
   - **인자가 없는 함수는 기계어로 가린다**: 본문이 `argc`(r9d)를 레지스터에도 스택에도 옮기지 않으면 인자를 읽지 않는다(`research/11`. 게임이 부르지 않는 디버그 함수에 쓴다).
+  - **들머리의 인자 맞춤(`0x14018A9B0`, N)은 "생략해도 된다"가 아니다.** 모자란 인자를 `undefined`로 채울 뿐이고, 그 값을 수로 쓰는 함수는 GML 오류로 게임을 끝낸다
+    (`ArmyLoyaltyManager.get_summary_army_loyalty()`를 인자 없이 불러 "I32 argument is undefined"로 죽었다. `research/13`). 인자 맞춤이 있는 함수는 인자가 N 개인 함수로 보고,
+    게임이 부르는 꼴을 `record`로 본 뒤에만 부른다(`rebellion_debug_spawn_player_soldier`는 인자 없이 되는 것을 불러서 본 예외다).
 - 군대(`research/13`). 병사는 `o_dummy`이고 갈래(`__soul.__social_strata`)가 2 다. 병영의 목록은 `…__soldiers_barracks_manager.get_array_of_soldiers()`.
   - 병사 추가: `gml_Script_rebellion_debug_spawn_player_soldier()`(인자 없음). 지도 가장자리에 생겨 걸어온다. 한 틱에 20번까지 불러 봤다(`NlCore::SoldierBatch`).
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).

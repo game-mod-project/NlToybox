@@ -109,6 +109,16 @@
 - **모르는 것: 게임이 스스로 건 싸움에서 플레이어의 사람이 맞을 때**(그런 호출이 이 실행에 없었다). 그래서 치트 표의 `ally_invincible`은 확인 전이다.
   다음에 잴 때는 켠 채 `records <take_damage>`의 "applied to N call(s)"와 표본의 `[self in, …]`을 본다(0.13.1 부터 표본에 적힌다).
 
+## 0.13.1 의 되짚기와 적재 판정 (2026-10-06)
+
+실행 묶음 `stage6-session1`의 앞부분(6단계의 조사 실행에 얹었다). 적재 판정 통과.
+
+- `person spawn soldier` → 하나. `cheat ally_invincible on` 뒤 그 병사에게 `take_damage`를 직접 부르자 `-> false`, 표본에
+  `("bruise_light", struct, false) [self in, other out, arg1 in] -> (skipped, Result came as undefined) => false`, "applied to 1 call(s), let 0 pass". 끄자 바꾸기가 풀렸다.
+- **이 실행은 내가 부른 함수 때문에 GML 오류로 끝났다**(저장하지 않는 실행이었다): `…__province.__army_loyalty.get_summary_army_loyalty()`를 인자 없이 불렀다.
+  기계어의 인자 맞춤(N=2)을 "생략할 수 있다"로 읽은 것이 틀렸다. 오류: `I32 argument is undefined`(`get_summary_army_loyalty` → `get_army_loyalty` → 안쪽 함수).
+  충성도 함수들(`get_army_loyalty`, `get_summary_army_loyalty`, `get_people_loyalty`, `get_summary_people_loyalty`)은 인자 둘을 받는 함수로 보고, 게임이 부르는 꼴을 본 뒤에만 부른다.
+
 ## 확인하지 못한 것
 
 - 전투의 사기와 승패, 분대의 싸움(이 실행의 싸움은 분대 없이 붙었다), 전투 스위치들(`o_debug`)의 효과. 병사를 내보내는 길(`SoldiersBarracksManager.fire(인자 3)`의 꼴).
