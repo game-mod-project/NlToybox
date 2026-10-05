@@ -203,6 +203,18 @@ namespace NlCore
 				C, 1, 0, 0, 0, false, "플레이어의 사람(영주, 주민, 병사)에게 상처를 입히는 호출을 건너뛴다. 플레이어의 사람끼리 싸울 때도 상처가 없다. "
 				"실제 싸움에서 아군이 맞는 것은 아직 보지 못했다(옆의 '막은 상처'가 그 수다)" },
 
+			// 전투의 배율(research/13, 16). 영혼의 두 함수가 돌려주는 수에 곱한다: 싸울 때의 전투 기술 get_combat_level_in_battle() -> 10, 7 과
+			// 치명적인 통증의 한도 get_mortal_pain_threshold() -> 40. self 가 플레이어의 영혼인지로 아군과 적을 가린다(src/People.cpp 의 BattleTick 이 한 함수에 둘을 함께 건다).
+			// 전투 기술은 올린 값이 20 에서 멈춘다(기술은 0~20 이다). 실제 싸움에서의 효과는 보지 못했다.
+			{ "ally_power", Area::Army, "아군 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 2, 0, 1, 5, false,
+				"플레이어의 사람이 싸울 때의 전투 기술에 곱한다(올린 값은 20 에서 멈춘다)" },
+			{ "enemy_power", Area::Army, "적 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 0.5, 0, 0.1, 1, false,
+				"플레이어의 사람이 아닌 모두가 싸울 때의 전투 기술에 곱한다(손님, 다른 세력끼리의 싸움도)" },
+			{ "ally_toughness", Area::Army, "아군 맷집 배율", "inst:o_character.__soul.get_mortal_pain_threshold", CS, 3, 0, 1, 10, false,
+				"플레이어의 사람이 버티는 통증의 한도에 곱한다(높을수록 잘 쓰러지지 않는다)" },
+			{ "enemy_toughness", Area::Army, "적 맷집 배율", "inst:o_character.__soul.get_mortal_pain_threshold", CS, 0.3, 0, 0.1, 1, false,
+				"플레이어의 사람이 아닌 모두가 버티는 통증의 한도에 곱한다(낮을수록 빨리 쓰러진다)" },
+
 			{ "combat_no_injuries", Area::Army, "부상 없는 전투", "inst:o_debug.is_combat_without_injuries", T, 1, 0, 0, 0, false,
 				"전투에서 부상이 생기지 않게 하는 개발자 스위치로 보인다" },
 			{ "no_dodge", Area::Army, "회피 끔", "inst:o_debug.is_disable_dodge", T, 1, 0, 0, 0, false,

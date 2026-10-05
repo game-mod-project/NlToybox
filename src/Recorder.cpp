@@ -140,11 +140,13 @@ namespace
 		// 게임이 반환 참조를 읽든 Result 를 읽든(YYToolkit 의 CallGameScriptEx 는 Result 만 읽는다) 같은 값을 본다.
 		const NlRecorder::Forced value = slot.Value;
 		// 누구의 호출에 걸지(Who). self 가 플레이어의 영혼인지는 틱이 넣어 둔 주소와 견준다(빌트인을 부르지 않는다).
-		const bool forced = slot.Override
-			&& NlCore::HookApplies(value.Who, value.Who != 'a' && g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Self)));
+		const bool mine = value.Who != 'a' && g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Self));
+		// 배율('x')은 걸리는 쪽과 걸리지 않는 쪽에 다른 배율을 곱할 수 있다(Number, Other). 1 이면 그대로 지나간다.
+		const double factor = NlCore::HookFactor(value.Who, mine, value.Number, value.Other);
+		const bool forced = slot.Override && (value.Kind == 'x' ? factor != 1 : NlCore::HookApplies(value.Who, mine));
 		if (slot.Override && value.Who != 'a')
 		{
-			(forced ? slot.Matched : slot.Passed)++;
+			(NlCore::HookApplies(value.Who, mine) ? slot.Matched : slot.Passed)++;
 			if (sample)
 			{
 				// 가려지는지 재는 표식: self, other, 구조체인 앞의 인자 셋이 플레이어의 영혼 묶음에 있는가(주소만 견준다).
@@ -193,7 +195,7 @@ namespace
 			if (number)
 			{
 				// 정수형으로 돌아온 수는 곱한 값이 정수이면 정수형으로 돌려준다(부르는 쪽이 형을 볼 수 있다. Access 의 NumberLike 와 같은 뜻).
-				const double product = NlCore::ScaleResult(out.ToDouble(), value.Number, value.Whole);
+				const double product = NlCore::ScaleCapped(out.ToDouble(), factor, value.Whole, value.Cap);
 				const bool integral = kind != VALUE_REAL && product == static_cast<double>(static_cast<int64_t>(product));
 				const RValue scaled = integral ? RValue(static_cast<int64_t>(product)) : RValue(product);
 				if (same)
@@ -363,7 +365,9 @@ namespace
 	std::string ForcedText(const NlRecorder::Forced& Value)
 	{
 		if (Value.Kind == 'x')
-			return "x" + NlCore::Shortest(Value.Number) + (Value.Whole ? " (whole numbers stay whole)" : "");
+			return "x" + NlCore::Shortest(Value.Number) + (Value.Whole ? " (whole numbers stay whole)" : "")
+				+ (Value.Who == 'p' ? " when self is one of the player's souls, x" + NlCore::Shortest(Value.Other) + " otherwise" : "")
+				+ (Value.Cap > 0 ? " (raised values stop at " + NlCore::Shortest(Value.Cap) + ")" : "");
 		const std::string text = Value.Kind == 'n' ? NlCore::Shortest(Value.Number) : Value.Kind == 'b' ? (Value.Number != 0 ? "true" : "false") : "undefined";
 		return text + (Value.Skip ? " (skip: the original is not called)" : "")
 			+ (Value.Who == 'p' ? " (only when self is one of the player's souls)" : Value.Who == 'o' ? " (only when self is not one of the player's souls)" : "");

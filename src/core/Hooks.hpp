@@ -54,6 +54,23 @@ namespace NlCore
 		return Who == 'p' ? Mine : Who == 'o' ? !Mine : true;
 	}
 
+	// 배율을 거는 바꾸기('x')가 이번 호출에 곱할 배율. 'a': 언제나 Number. 'p': self 가 플레이어의 것이면 Number, 아니면 Other. 'o': 그 반대.
+	// 1 이면 곱하지 않는다(원래 값이 그대로 지나간다).
+	constexpr double HookFactor(char Who, bool Mine, double Number, double Other)
+	{
+		return Who == 'p' ? (Mine ? Number : Other) : Who == 'o' ? (Mine ? Other : Number) : Number;
+	}
+
+	// ScaleResult 에 위쪽 한도를 더한 것. Cap 이 0 보다 크면 올린 값이 Cap 을 넘지 않게 한다(번호로 쓰이는 수준 같은 값).
+	// 원래 값이 이미 Cap 을 넘으면 낮추지 않고, 내리는 배율은 한도와 무관하다.
+	inline double ScaleCapped(double Value, double Factor, bool Whole, double Cap)
+	{
+		const double scaled = ScaleResult(Value, Factor, Whole);
+		if (!(Cap > 0) || scaled <= Cap || scaled <= Value)
+			return scaled;
+		return Value > Cap ? Value : Cap;
+	}
+
 	// 훅이 self 와 견줄 주소들(플레이어의 영혼). 틱이 통째로 갈아 끼우고 훅이 찾는다. 0 은 담지 않는다.
 	class SelfSet
 	{

@@ -37,6 +37,8 @@ namespace NlRecorder
 		bool Skip = false;		// 원래 함수를 부르지 않는다(값을 치르는 함수처럼 한 일 자체를 없애야 할 때). 'x' 에는 쓰지 않는다
 		bool Whole = false;		// 'x': 정수는 정수로 남기고 양수는 1 아래로 내리지 않는다(가격). core/Hooks 의 ScaleResult
 		char Who = 'a';			// 누구의 호출에 걸지: 'a' 모두, 'p' self 가 플레이어의 영혼일 때만, 'o' 아닐 때만(SetPlayerSelves 가 넣은 주소와 견준다)
+		double Other = 1;		// 'x' 이고 Who 가 'p'·'o' 일 때: 걸리지 않는 쪽의 호출에 곱할 배율(1 이면 그대로. core/Hooks 의 HookFactor)
+		double Cap = 0;			// 'x': 올린 값의 위쪽 한도(0 이면 없음. core/Hooks 의 ScaleCapped)
 	};
 
 	// 플레이어의 영혼(구조체)의 주소들. Who 가 'p'·'o' 인 바꾸기가 self 와 견준다. 틱이 통째로 갈아 끼운다(src/People.cpp).
