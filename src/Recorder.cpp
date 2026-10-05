@@ -15,7 +15,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr int k_Slots = 24;				// 동시에 훅을 걸 수 있는 함수의 수
+	constexpr int k_Slots = 64;				// 한 실행에 훅을 걸 수 있는 함수의 수. 자리는 다시 쓰지 않는다(24개는 한 실행에서 다 썼다. research/07)
 	constexpr int k_MaxKinds = 16;			// 꼴을 볼 때 보는 인자의 수
 	constexpr int k_KindMask = 0x0ffffff;	// m_Kind 에서 형만 남긴다(VALUE_UNSET 의 폭. YYTK_Shared_Types.hpp 199행)
 
@@ -147,46 +147,31 @@ namespace
 
 	constexpr std::array<PFUNC_YYGMLScript, k_Slots> k_Detours = MakeDetours(std::make_integer_sequence<int, k_Slots>{});
 
-	// 스크립트의 함수를 이름으로 찾는다. 이름은 "gml_Script_x" 꼴이다. 접두가 없으면 붙여 본다.
+	// 스크립트의 함수를 이름으로 찾는다. "gml_Script_x" 이름으로만 찾는다: 접두 없는 이름에도 러너가 스크립트 범위의 번호를 주지만
+	// 그것은 다른 루틴이다(research/07. 그 이름으로 부른 호출이 이 함수에 걸린 훅에 오지 않았다).
 	// 번호가 100000 미만이면 빌트인, 500000 이상이면 확장 함수다(YYToolkit MI_Public.cpp 55~66행). 스크립트만 받는다.
 	bool FindScript(const std::string& Given, std::string& Name, PFUNC_YYGMLScript& Fn, std::string& Why)
 	{
-		for (const std::string& name : { Given, "gml_Script_" + Given })
-		{
-			int index = -1;
+		const std::string name = NlCore::ScriptRoutineName(Given);
+		int index = -1;
+		if (!name.empty())
 			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-			if (index < 100000 || index >= 500000)
-				continue;
-
-			CScript* script = nullptr;
-			if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - 100000, script)) || !script || !script->m_Functions
-				|| !script->m_Functions->m_ScriptFunction)
-			{
-				Why = "the script has no function: " + name;
-				return false;
-			}
-			Name = name;
-			Fn = script->m_Functions->m_ScriptFunction;
-			return true;
-		}
-		Why = "no such script: " + Given;
-		return false;
-	}
-
-	// 메서드가 묶인 스크립트의 이름. script_get_name 은 메서드도 받는다(매뉴얼). 안 되면 method_get_index 를 거친다.
-	bool MethodScriptName(const RValue& Method, std::string& Name)
-	{
-		RValue name;
-		if (NlGame::Call("script_get_name", { Method }, name) && name.IsString() && !name.ToString().empty())
+		if (index < 100000 || index >= 500000)
 		{
-			Name = name.ToString();
-			return true;
-		}
-		RValue index;
-		if (!NlGame::Call("method_get_index", { Method }, index) || !NlGame::Call("script_get_name", { index }, name) || !name.IsString())
+			Why = "no such script: " + Given;
 			return false;
-		Name = name.ToString();
-		return !Name.empty();
+		}
+
+		CScript* script = nullptr;
+		if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - 100000, script)) || !script || !script->m_Functions
+			|| !script->m_Functions->m_ScriptFunction)
+		{
+			Why = "the script has no function: " + name;
+			return false;
+		}
+		Name = name;
+		Fn = script->m_Functions->m_ScriptFunction;
+		return true;
 	}
 }
 
@@ -205,13 +190,15 @@ bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string
 	if (path.Error.empty() && !path.Steps.empty())
 	{
 		RValue value;
+		NlAccess::MethodInfo info;
 		if (!NlAccess::Read(path, value, Why))
 			return false;
-		if (NlGame::CallNumber("is_method", { value }, 0) <= 0 || !MethodScriptName(value, given))
+		if (!NlAccess::AboutMethod(value, info) || info.Script.empty())
 		{
 			Why = "not a method: " + Target;
 			return false;
 		}
+		given = info.Script;
 	}
 
 	PFUNC_YYGMLScript fn = nullptr;
@@ -261,10 +248,11 @@ bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string
 
 int NlRecorder::Unwatch(const std::string& Name)
 {
+	const std::string name = NlCore::ScriptRoutineName(Name);
 	std::lock_guard lock(g_Mutex);
 	int stopped = 0;
 	for (Slot& slot : g_Slots)
-		if (slot.Used && slot.Recording && (Name == "all" || slot.Name == Name || slot.Name == "gml_Script_" + Name))
+		if (slot.Used && slot.Recording && (Name == "all" || slot.Name == name))
 		{
 			slot.Recording = false;
 			stopped++;
@@ -274,10 +262,11 @@ int NlRecorder::Unwatch(const std::string& Name)
 
 std::string NlRecorder::Report(const std::string& Name)
 {
+	const std::string name = NlCore::ScriptRoutineName(Name);
 	std::lock_guard lock(g_Mutex);
 	std::string text;
 	for (const Slot& slot : g_Slots)
-		if (slot.Used && (Name.empty() || slot.Name == Name || slot.Name == "gml_Script_" + Name))
+		if (slot.Used && (Name.empty() || slot.Name == name))
 			text += slot.Name + (slot.Recording ? "" : " (stopped)") + "\n" + slot.Log.Format("  ");
 	return text;
 }

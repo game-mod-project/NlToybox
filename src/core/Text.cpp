@@ -107,4 +107,15 @@ namespace NlCore
 	{
 		return !Part.empty() && Name.find(Part) != std::string::npos;
 	}
+
+	std::string ScriptRoutineName(const std::string& Given)
+	{
+		static const std::string prefix = "gml_Script_";
+		const std::string name = Trim(Given);
+		if (name.empty() || name.find_first_of(" \t") != std::string::npos)
+			return "";
+		if (name.compare(0, prefix.size(), prefix) != 0)
+			return prefix + name;
+		return name.size() > prefix.size() ? name : "";
+	}
 }

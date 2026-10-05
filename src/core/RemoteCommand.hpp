@@ -1,6 +1,7 @@
 #pragma once
 // 켜져 있는 게임에 묻는 파일(NlToyBox.ask.txt)의 한 줄. 러너에 기대지 않는다. 스펙: 치트 메뉴 §14.
 //   ask <주소>                                      값 하나
+//   about <주소>                                    값 하나. 메서드이면 묶인 스크립트의 이름과 묶인 곳이 있는지도
 //   list <주소> [as=map|list] [max=N]               그릇의 자식들
 //   tree <주소> [depth=N] [max=N]                   자식들을 깊이 N 까지
 //   find [name=글] [value=수] [in=global,inst,ds]   이름·값으로 찾기
@@ -9,8 +10,8 @@
 //   poke <주소>=<수>                                써 넣고, 읽고, 되돌린다
 //   record <스크립트 이름|메서드의 주소>            그 함수의 호출을 기록한다
 //   unrecord <스크립트 이름|all>,  records [스크립트 이름]
-//   call <스크립트 이름> [인자…]                    게임 스크립트를 부른다
-//   method <메서드의 주소> [인자…]                  메서드를 그것이 묶인 구조체에서 부른다
+//   call <스크립트 이름> [인자…]                    게임 스크립트를 부른다(이름에 gml_Script_ 가 없으면 붙인다)
+//   method <메서드의 주소> [인자…]                  메서드를 부른다. 묶인 곳이 없으면 주소의 부모에 묶어 부른다
 //   state,  shot <이름>,  window open|close
 // 인자: n:<수>  s:<글> 또는 s:{공백이 든 글}  b:0|1  u(undefined)  p:<주소>(그 주소의 값)
 

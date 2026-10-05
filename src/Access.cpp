@@ -601,3 +601,74 @@ bool NlAccess::InGame()
 {
 	return InstanceCount("o_character") > 0 && InstanceCount("o_main_menu") == 0;
 }
+
+bool NlAccess::AboutMethod(const RValue& Method, MethodInfo& Out)
+{
+	if (!Truthy("is_method", { Method }))
+		return false;
+
+	// script_get_name 은 메서드도 받는다(research/07 에서 이름이 나왔다). 안 되면 method_get_index 를 거친다.
+	RValue name, index;
+	Out.Script.clear();
+	if (NlGame::Call("script_get_name", { Method }, name) && name.IsString())
+		Out.Script = name.ToString();
+	if (Out.Script.empty() && NlGame::Call("method_get_index", { Method }, index)
+		&& NlGame::Call("script_get_name", { index }, name) && name.IsString())
+		Out.Script = name.ToString();
+
+	// method_get_self: 묶인 인스턴스나 구조체. 없으면 undefined(매뉴얼).
+	RValue self;
+	Out.Bound = NlGame::Call("method_get_self", { Method }, self) && self.m_Kind != VALUE_UNDEFINED && self.m_Kind != VALUE_UNSET;
+	return true;
+}
+
+bool NlAccess::CallMethod(const AskPath& Path, const std::vector<RValue>& Args, RValue& Result, std::string& Why)
+{
+	RValue method;
+	MethodInfo info;
+	if (!Read(Path, method, Why))
+		return false;
+	if (!AboutMethod(method, info))
+	{
+		Why = "not a method";
+		return false;
+	}
+
+	if (!info.Bound && !Path.Steps.empty())
+	{
+		RValue owner, bound;
+		Holder kind = Holder::None;
+		if (!Open(NlCore::ParentPath(Path), owner, kind, Why))
+			return false;
+		if (kind == Holder::Struct || kind == Holder::Instance)
+		{
+			// method(구조체나 인스턴스, 함수): 거기에 묶인 새 메서드(매뉴얼).
+			if (!NlGame::Call("method", { owner, method }, bound) || !Truthy("is_method", { bound }))
+			{
+				Why = "could not bind the method to its owner";
+				return false;
+			}
+			method = bound;
+		}
+	}
+
+	// method_call(메서드, 인자의 배열). 인자가 있는 호출은 이 꼴로 됐다(research/07). 인자가 없을 때도 같은 길로 간다.
+	RValue args;
+	if (Args.empty())
+	{
+		if (!NlGame::Call("array_create", { RValue(0.0) }, args))
+		{
+			Why = "array_create failed";
+			return false;
+		}
+	}
+	else
+		args = RValue(Args);
+
+	if (!NlGame::Call("method_call", { method, args }, Result))
+	{
+		Why = "method_call failed";
+		return false;
+	}
+	return true;
+}

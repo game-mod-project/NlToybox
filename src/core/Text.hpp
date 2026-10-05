@@ -24,4 +24,8 @@ namespace NlCore
 
 	// Name 안에 Part 가 들어 있는가(대소문자를 가린다). 빈 Part 는 아무것에도 맞지 않는다.
 	bool Contains(const std::string& Name, const std::string& Part);
+
+	// 게임 스크립트 함수의 정식 이름("gml_Script_x"). 접두가 없으면 붙인다. 이름이 비었거나 빈칸이 끼어 있으면 빈 글.
+	// 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(research/07). 부르거나 훅을 걸 때는 이 이름만 쓴다.
+	std::string ScriptRoutineName(const std::string& Given);
 }

@@ -213,51 +213,64 @@ namespace
 			Say("  : " + (global ? why : std::string("no global instance")));
 			return;
 		}
-		for (const std::string& name : { C.Target, "gml_Script_" + C.Target })
-		{
-			int index = -1;
+		// 정식 이름으로만 부른다. 접두 없는 이름은 다른 루틴을 가리킨다(research/07).
+		const std::string name = NlCore::ScriptRoutineName(C.Target);
+		int index = -1;
+		if (!name.empty())
 			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-			if (index < 100000 || index >= 500000)
-				continue;
-
-			Say("  calling " + name + " with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
-			Log("remote call " + name + " (" + std::to_string(args.size()) + " arguments)");
-			RValue result;
-			const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, name, global, global, args);
-			if (AurieSuccess(status))
-				SayResult(result);
-			else
-				Say(std::string("  : ") + AurieStatusToString(status));
+		if (index < 100000 || index >= 500000)
+		{
+			Say("  : no such script: " + C.Target);
 			return;
 		}
-		Say("  : no such script: " + C.Target);
+
+		Say("  calling " + name + " with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
+		Log("remote call " + name + " (" + std::to_string(args.size()) + " arguments)");
+		RValue result;
+		const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, name, global, global, args);
+		if (AurieSuccess(status))
+			SayResult(result);
+		else
+			Say(std::string("  : ") + AurieStatusToString(status));
 	}
 
-	// 메서드를 그것이 묶인 구조체에서 부른다(method_call. 매뉴얼).
+	// 메서드를 부른다. 묶인 곳이 없는 메서드(생성자의 정적 메서드)는 주소의 부모에 묶어 부른다(NlAccess::CallMethod).
 	void DoMethod(const RemoteCommand& C)
 	{
-		RValue method, result;
+		RValue result;
 		std::vector<RValue> args;
 		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(C.Target), method, why) || !BuildArgs(C.Args, args, why))
+		if (!BuildArgs(C.Args, args, why))
 		{
 			Say("  : " + why);
 			return;
 		}
-		if (NlGame::CallNumber("is_method", { method }, 0) <= 0)
-		{
-			Say("  : not a method");
-			return;
-		}
-		Say("  calling the method with " + std::to_string(args.size()) + " arguments");
+		Say("  calling the method with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
 		Log("remote method " + C.Target + " (" + std::to_string(args.size()) + " arguments)");
-		std::vector<RValue> call = { method };
-		if (!args.empty())
-			call.push_back(RValue(args));		// 인자들의 배열
-		if (NlGame::Call("method_call", call, result))
+		if (NlAccess::CallMethod(NlCore::ParseAskPath(C.Target), args, result, why))
 			SayResult(result);
 		else
-			Say("  : method_call failed");
+			Say("  : " + why);
+	}
+
+	// 값이 무엇인지. 메서드이면 그것이 묶인 스크립트의 이름과 묶인 곳이 있는지도 적는다. 부르지 않는다.
+	void DoAbout(const RemoteCommand& C)
+	{
+		RValue value;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(C.Target), value, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		const NlAccess::Row row = NlAccess::Describe({}, value);
+		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		NlAccess::MethodInfo info;
+		if (NlAccess::AboutMethod(value, info))
+		{
+			Say("  script " + (info.Script.empty() ? std::string("?") : info.Script));
+			Say(std::string("  self ") + (info.Bound ? "bound" : "unbound (method binds it to the owner)"));
+		}
 	}
 
 	void DoState()
@@ -281,6 +294,8 @@ namespace
 		}
 		if (C.Verb == "ask")
 			DoAsk(C);
+		else if (C.Verb == "about")
+			DoAbout(C);
 		else if (C.Verb == "list")
 			DoList(C);
 		else if (C.Verb == "tree")

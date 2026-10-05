@@ -485,6 +485,16 @@ int main(int argc, char** argv)
 		}
 	});
 
+	Test("ScriptRoutineName 은 접두 없는 이름에 gml_Script_ 를 붙인다", [] {
+		// 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(research/07). 부르거나 훅을 걸 이름은 하나뿐이어야 한다.
+		CHECK_STR(ScriptRoutineName("budget_money_get"), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("gml_Script_budget_money_get"), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("  budget_money_get "), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("gml_Script_"), "");
+		CHECK_STR(ScriptRoutineName(""), "");
+		CHECK_STR(ScriptRoutineName("a b"), "");
+	});
+
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
 		state.On = { "instant_build", "no_dodge" };
@@ -880,6 +890,8 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("record gml_Script_budget_money_get").Target == "gml_Script_budget_money_get");
 		CHECK(ParseRemoteLine("records").Error.empty() && ParseRemoteLine("unrecord all").Target == "all");
 		CHECK(ParseRemoteLine("shot hud-1").Target == "hud-1" && ParseRemoteLine("window close").Target == "close");
+		const RemoteCommand about = ParseRemoteLine("about inst:o_game_map_controller.__province.__warehouse.change");
+		CHECK(about.Error.empty() && about.Verb == "about" && about.Target == "inst:o_game_map_controller.__province.__warehouse.change");
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {
@@ -896,7 +908,7 @@ int main(int argc, char** argv)
 		for (const char* line : { "dance", "ask", "ask o_debug.x", "ask global.a global.b", "list", "list global.a max", "find", "find value=abc",
 			"refine", "refine value=x", "write inst:o_debug.x", "write inst:o_debug=3", "write inst:o_debug.x=abc", "poke global=1",
 			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
-			"call x p:nowhere.x", "method global", "method o_x.y", "state now" })
+			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y" })
 		{
 			if (ParseRemoteLine(line).Error.empty())
 			{

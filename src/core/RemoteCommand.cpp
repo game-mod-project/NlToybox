@@ -123,12 +123,12 @@ namespace NlCore
 			if (count != 1)
 				return fail("state takes nothing");
 		}
-		else if (verb == "ask" || verb == "list" || verb == "tree")
+		else if (verb == "ask" || verb == "about" || verb == "list" || verb == "tree")
 		{
 			if (count < 2 || !GoodPath(tokens[1], false))
 				return fail(verb + " needs a path");
-			if (verb == "ask" && count != 2)
-				return fail("ask takes one path");
+			if ((verb == "ask" || verb == "about") && count != 2)
+				return fail(verb + " takes one path");
 			command.Target = tokens[1];
 			options(2);
 		}
