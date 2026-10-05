@@ -24,6 +24,12 @@ namespace NlCheats
 	void DrawArea(NlCore::Area Where);
 	// "시간" 영역: 게임 속도.
 	void DrawTime();
+	// "프리셋" 영역: 확인된 항목의 묶음(core/Presets).
+	void DrawPresets();
+	// 묶음을 건다: 묶음에 없는 항목은 끄고 있는 항목은 켠다(배율은 묶음의 것으로). 없는 이름이면 거짓. Text 에 한 일.
+	bool ApplyPreset(const std::string& Key, std::string& Text);
+	// 게임의 시간을 멈추거나(Pause) 다시 흐르게 한다. 게임 스레드에서 부른다(원격). 게임 화면이 아니면 부르지 않는다. 돌려주는 글: 한 일.
+	std::string TimeNow(bool Pause);
 
 	// 그 영역에 표의 항목이 있는가.
 	bool HasItems(NlCore::Area Where);

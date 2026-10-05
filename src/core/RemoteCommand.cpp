@@ -4,6 +4,7 @@
 #include "CheatTable.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
+#include "Presets.hpp"
 #include "WorldPlan.hpp"
 #include "Text.hpp"
 
@@ -356,6 +357,20 @@ namespace NlCore
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");
+		}
+		else if (verb == "preset")
+		{
+			// preset <normal|easy|sandbox|god>      치트 표의 확인된 항목의 묶음을 건다(core/Presets)
+			if (count != 2 || !FindPreset(tokens[1]))
+				return fail("preset needs normal, easy, sandbox or god");
+			command.Target = tokens[1];
+		}
+		else if (verb == "time")
+		{
+			// time <pause|resume>                   게임의 시간을 멈춘다, 다시 흐르게 한다
+			if (count != 2 || (tokens[1] != "pause" && tokens[1] != "resume"))
+				return fail("time needs pause or resume");
+			command.Target = tokens[1];
 		}
 		else if (verb == "world")
 		{

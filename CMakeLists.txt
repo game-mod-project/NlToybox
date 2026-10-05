@@ -19,6 +19,7 @@ add_library(nlcore STATIC
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
   src/core/PeoplePlan.cpp
+  src/core/Presets.cpp
   src/core/Rate.cpp
   src/core/RemoteCommand.cpp
   src/core/Text.cpp

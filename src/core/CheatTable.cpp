@@ -24,7 +24,7 @@ namespace NlCore
 			{ Area::World, "world", "월드", 6 },
 			{ Area::Events, "events", "이벤트", 6, true },			// 이벤트 쿨다운 지우기(src/World.cpp)
 			{ Area::Util, "util", "유틸", 7 },
-			{ Area::Presets, "presets", "프리셋", 7 },
+			{ Area::Presets, "presets", "프리셋", 7, true },		// 확인된 항목의 묶음(core/Presets, src/Cheats.cpp)
 		};
 		return areas;
 	}
