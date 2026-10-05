@@ -1,0 +1,33 @@
+# 단계 0b 실행 2 (예비, 기록 실행): 실행 1 과 같되 찾기의 한도를 올린다.
+# 실행 1 에서는 새 게임을 시작하지 않아 네 덤프가 모두 메인 메뉴의 것이었다. 이번에 게임 안의 상태를 잰다.
+# 한도를 올리는 근거: 실행 1 의 메뉴 덤프에서 find_ds 가 1,145,502 개를 방문했다(한도 2,000,000). 게임 안에서는 더 늘 수 있다.
+# 덤프 한 번에 1.6~1.8초가 걸렸다(실행 1 의 로그).
+delay_seconds=60
+repeat_seconds=45
+keep_last=3
+trace_events=1
+max_visited=20000000
+max_hits=5000
+# 메인 메뉴 덤프(단계 0)에 있던 상태 변수. 게임에 들어갈 때 바뀌는지 본다.
+watch=global.__new_game_initializer.__is_active
+watch=global.__new_game_initializer.__current_step
+watch=global.__new_game_initializer.__step_index
+watch=global.__game_load_operator.__main_menu_state
+watch=global.__game_load_operator.__game_is_loading
+watch=global.__game_load_operator.__game_load_type
+# 바꾼 값: budget_money, initial_budget(양성 대조), group_cooldown_days.EPIDEMY, addiction_resist 의 population
+find=2345
+find=745
+find=3391
+find=3767
+find_name=budget_money
+find_name=initial_budget
+find_name=dodge_base
+find_name=production_cost
+find_name=building_resources
+find_name=building_duration_factor
+find_name=product_count
+find_name=fair_trade
+find_name=group_cooldown_days
+find_name=EPIDEMY
+find_name=addiction_resist
