@@ -169,6 +169,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"와 표본의 `[self in, other out, …]`으로 본다.
     싸움이 없을 때는 그 함수를 `method`로 직접 불러 잰다: `take_damage`는 `s:<상처의 이름> p:<영혼의 주소> b:0`으로 플레이어의 병사와 다른 진영의 사람에게 한 번씩(앞은 건너뛰어지고 뒤는 멍이 생겼다).
   - 소지품에 넣은 장비는 바로 착용되지만 남지 않는다(게임이 `give_possible_equipment(구조체)`로 되돌린다). 장비는 그 길로 주지 않는다.
+- 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다
+  (`CheckPreset`과 시험이 막는다). 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켠다(이미 켜져 있고 배율이 같으면 건드리지 않는다). 탐색기의 잠금과 배율 7개는 건드리지 않는다.
+  새 항목이 확인되면 맞는 묶음에 한 줄을 더한다. 원격 `preset <normal|easy|sandbox|god>`, `time pause|resume`.
 - 종교·이벤트 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0),
   주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world cooldowns_clear|bishop`이 같은 길을 탄다.
   세력의 자료는 `gm.__factions_manager`(`__array_of_factions[57]`, `__player_faction`)에 있고, 게임은 `Faction.get_relation_with(세력) -> 수`, `is_enemy_with(세력) -> 불리언`을 부른다.
