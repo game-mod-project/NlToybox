@@ -49,6 +49,7 @@ add_library(nltoybox SHARED
   src/Game.cpp
   src/Menu.cpp
   src/Recorder.cpp
+  src/Remote.cpp
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp

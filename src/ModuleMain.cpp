@@ -6,6 +6,8 @@
 #include "Dump.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
+#include "Recorder.hpp"
+#include "Remote.hpp"
 #include "Tweaks.hpp"
 #include "Ui.hpp"
 
@@ -18,7 +20,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.4.0";
+	constexpr const char* k_Version = "0.5.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -85,6 +87,7 @@ namespace
 		NlDump::Tick(std::get<2>(CodeContext.Arguments()));
 		NlUi::GameTick();
 		NlMenu::GameTick();
+		NlRemote::GameTick();
 		NlTweaks::GameTick();
 	}
 
@@ -135,6 +138,8 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlDump::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::Init(Module, module_dir, [](const std::string& Line) { LogLine(Line); });
 	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
+	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
+	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::SetContent(NlMenu::Draw);
 
