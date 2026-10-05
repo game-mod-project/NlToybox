@@ -52,6 +52,28 @@ try {
         Assert-True (@(Get-NlLoadFailures @('builtin code_is_compiled = false')) -contains 'builtin') '거짓이면 통과가 아니다'
     }
 
+    Test-Case 'ui-check 는 앞선 실행이 남긴 설정 사본이 있으면 켜지 않고 거부한다' {
+        # ui-check 는 사용자의 설정을 *.kept 로 치워 두었다가 되돌린다. 도중에 죽으면 *.kept 가 남는다.
+        # 그 위에 다시 치우면 사용자의 원본이 덮인다.
+        $modsDir = Join-Path $fake 'mods'
+        $hadMods = Test-Path -LiteralPath $modsDir
+        $aurieDir = Join-Path $modsDir 'Aurie'
+        New-Item -ItemType Directory -Force -Path $aurieDir | Out-Null
+        try {
+            foreach ($name in 'NlToyBox.settings.txt.kept', 'NlToyBox.cheats.txt.kept') {
+                $kept = Join-Path $aurieDir $name
+                Set-Content -LiteralPath $kept -Value 'building_cost=0.50' -Encoding ascii
+                $r = Invoke-Tool 'ui-check.ps1' '' $noLaunch
+                Assert-True ($r.Exit -ne 0 -and $r.Out -match '남긴 사본' -and $r.Out -notmatch 'LAUNCH-ATTEMPTED') "거부해야 한다: $name`n$($r.Out)"
+                Assert-Equal (Get-Content -LiteralPath $kept -Raw).Trim() 'building_cost=0.50' '사본은 그대로여야 한다'
+                Remove-Item -LiteralPath $kept -Force
+            }
+        }
+        finally {
+            if (-not $hadMods -and (Test-Path -LiteralPath $modsDir)) { Remove-Item -LiteralPath $modsDir -Recurse -Force }
+        }
+    }
+
     Test-Case 'setup 은 내용이 원본과 다른 기존 백업을 믿지 않고 다시 만든다' {
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
         [IO.File]::WriteAllBytes($backupPath, $garbage)      # 복사가 중간에 끊겨 남은 백업을 흉내 낸다

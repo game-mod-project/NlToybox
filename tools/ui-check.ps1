@@ -22,28 +22,38 @@ $Poke = @($Poke | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
 
 # 모드창이 제대로 그려지는지 본다. 게임을 켜고, 모듈이 ShotSeconds 초 뒤의 화면(게임이 그린 프레임)을 파일로 뜨면
 # 그것을 refs\ui\<Name>.png 로 가져오고 게임을 끈다. 화면을 긁지 않는다. 게임 창이 가려져 있어도 된다.
-Assert-NlReadyToLaunch
 $modDir = Join-Path (Get-NlGameDir) 'mods\Aurie'
 $config = Join-Path $modDir 'NlToyBox.ui.txt'
 $bmp = Join-Path $modDir 'NlToyBox.ui.bmp'
 $log = Join-Path $modDir 'NlToyBox.log'
 $outDir = Join-Path (Get-NlRepoRoot) 'refs\ui'
 $png = Join-Path $outDir "$Name.png"
-# 시험이 사용자의 배율 설정을 바꾸지 않게 한다: 있던 설정 파일은 치워 두었다가 되돌린다.
+# 시험이 사용자의 설정을 바꾸지 않게 한다: 있던 배율 설정과 치트 상태는 *.kept 로 치워 두었다가 되돌린다.
 $settings = Join-Path $modDir 'NlToyBox.settings.txt'
 $settingsKept = "$settings.kept"
-if (Test-Path -LiteralPath $settings) { Move-Item -LiteralPath $settings -Destination $settingsKept -Force }
-$Saved = @($Saved | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
-if ($Saved.Count) { Set-Content -LiteralPath $settings -Value $Saved -Encoding ascii }
-# 치트의 상태 파일도 같다.
 $cheats = Join-Path $modDir 'NlToyBox.cheats.txt'
 $cheatsKept = "$cheats.kept"
-if (Test-Path -LiteralPath $cheats) { Move-Item -LiteralPath $cheats -Destination $cheatsKept -Force }
-foreach ($f in $bmp, $log) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } }
+$Saved = @($Saved | ForEach-Object { $_ -split ',' } | Where-Object { $_ })
+# 앞선 실행이 도중에 죽었으면 *.kept 가 남아 있다. 그것이 사용자의 원본이다. 그 위에 다시 치우면 원본을 잃는다.
+foreach ($kept in $settingsKept, $cheatsKept) {
+    if (Test-Path -LiteralPath $kept) {
+        throw "앞선 실행이 남긴 사본이 있습니다: $kept`n내용을 확인해 원래 이름(.kept 를 뗀 이름)으로 되돌린 뒤 다시 실행하세요."
+    }
+}
+Assert-NlReadyToLaunch
 
 $result = $null
 $allLines = @()
+$settingsMoved = $false     # 참이면 그 이름의 파일은 시험의 것이고 사용자의 것은 *.kept 에 있다
+$cheatsMoved = $false
 try {
+    if (Test-Path -LiteralPath $settings) { Move-Item -LiteralPath $settings -Destination $settingsKept }
+    $settingsMoved = $true
+    if ($Saved.Count) { Set-Content -LiteralPath $settings -Value $Saved -Encoding ascii }
+    if (Test-Path -LiteralPath $cheats) { Move-Item -LiteralPath $cheats -Destination $cheatsKept }
+    $cheatsMoved = $true
+    foreach ($f in $bmp, $log) { if (Test-Path -LiteralPath $f) { Remove-Item -LiteralPath $f -Force } }
+
     $configLines = @("open=$([int](-not $Closed))", "shot_seconds=$ShotSeconds") + @($Set | ForEach-Object { "set=$_" }) +
         @(if ($TestDrag) { "drag=$TestDrag" }) + @(if ($Page) { "page=$Page" }) + @(if ($Path) { "path=$Path" }) +
         @($Ask | ForEach-Object { "ask=$_" }) + @($Poke | ForEach-Object { "poke=$_" })
@@ -95,18 +105,23 @@ try {
 finally {
     if (Test-Path -LiteralPath $config) { Remove-Item -LiteralPath $config -Force -ErrorAction SilentlyContinue }
     Write-Host "게임 종료: $(Stop-NlGame $GraceSec)"
-    if (Test-Path -LiteralPath $settings) {
-        Write-Host '--- 시험이 저장한 설정 ---'
-        Get-Content -LiteralPath $settings | ForEach-Object { Write-Host $_ }
-        Remove-Item -LiteralPath $settings -Force
+    # 치워 둔 것만 되돌린다. 치우기 전에 실패했으면 그 이름의 파일은 사용자의 것이다. 건드리지 않는다.
+    if ($settingsMoved) {
+        if (Test-Path -LiteralPath $settings) {
+            Write-Host '--- 시험이 저장한 설정 ---'
+            Get-Content -LiteralPath $settings | ForEach-Object { Write-Host $_ }
+            Remove-Item -LiteralPath $settings -Force
+        }
+        if (Test-Path -LiteralPath $settingsKept) { Move-Item -LiteralPath $settingsKept -Destination $settings }
     }
-    if (Test-Path -LiteralPath $settingsKept) { Move-Item -LiteralPath $settingsKept -Destination $settings -Force }
-    if (Test-Path -LiteralPath $cheats) {
-        Write-Host '--- 시험이 저장한 치트 상태 ---'
-        Get-Content -LiteralPath $cheats | ForEach-Object { Write-Host $_ }
-        Remove-Item -LiteralPath $cheats -Force
+    if ($cheatsMoved) {
+        if (Test-Path -LiteralPath $cheats) {
+            Write-Host '--- 시험이 저장한 치트 상태 ---'
+            Get-Content -LiteralPath $cheats | ForEach-Object { Write-Host $_ }
+            Remove-Item -LiteralPath $cheats -Force
+        }
+        if (Test-Path -LiteralPath $cheatsKept) { Move-Item -LiteralPath $cheatsKept -Destination $cheats }
     }
-    if (Test-Path -LiteralPath $cheatsKept) { Move-Item -LiteralPath $cheatsKept -Destination $cheats -Force }
 }
 
 if (Test-Path -LiteralPath $bmp) {
