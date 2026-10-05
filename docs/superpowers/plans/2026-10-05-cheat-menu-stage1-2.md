@@ -2744,9 +2744,8 @@ namespace
 		ImGui::TextDisabled("%zu개%s%s", g_Total, g_Total > g_Rows.size() ? " (일부만 적음)" : "",
 			g_Total > k_LiveRows ? " - 많아서 자동으로 새로 읽지 않습니다" : "");
 
-		// 거른 줄들. 번호는 g_Rows 의 것이다(다시 읽어도 같은 줄이 같은 ID 를 갖는다).
-		static std::vector<int> shown;
-		shown.clear();
+		// 거른 줄들(g_Rows 의 번호).
+		std::vector<int> shown;
 		const std::string filter = g_Filter;
 		for (int i = 0; i < static_cast<int>(g_Rows.size()); i++)
 			if (filter.empty() || g_Rows[i].Name.find(filter) != std::string::npos)
@@ -2771,7 +2770,8 @@ namespace
 				const int index = shown[line];
 				const NlAccess::Row& row = g_Rows[index];
 				const std::string path = g_Address + NlCore::FormatStep(row.Step);
-				ImGui::PushID(index);
+				// ID 는 이름으로 한다. 0.5초마다 다시 읽으면서 멤버가 늘면 번호는 다른 줄을 가리킨다(고치던 칸이 옮겨 간다).
+				ImGui::PushID(row.Name.c_str());
 				ImGui::TableNextRow();
 
 				ImGui::TableSetColumnIndex(0);
@@ -4317,8 +4317,10 @@ Expected: exe 가 패치돼 있다(`Patched`), `deployed -> …\mods\Aurie\NlToy
 ```powershell
 pwsh -File tools/ui-check.ps1 -Name cheat-menu-1 -ShotSeconds 80 -TimeoutSec 240 -Page explorer -Path inst:o_time_controller `
   -Ask inst:o_time_controller.time_warp,inst:o_time_controller.__game_time,inst:o_time_controller.__debug_custom_wrap,inst:o_time_controller.time_speed_index,inst:o_time_controller.time_speed_variants[0],inst:o_time_controller.time_speed_variants[1],inst:o_time_controller.time_speed_variants[2],inst:o_time_controller.time_speed_variants[3],inst:o_data.current_debug_mode,global.__gameplay_vars.bribe_give_rings,inst:o_debug.is_debug_enabled,inst:o_time_controller.set_time_speed `
-  -Poke inst:o_time_controller.time_warp_max=101,inst:o_time_controller.time_speed_variants[3]=7.5,global.__gameplay_vars.bribe_give_rings=11
+  -Poke inst:o_time_controller.time_warp_max=101,inst:o_time_controller.time_speed_variants[3]=7.5,global.__gameplay_vars.bribe_give_rings=11,global.default_falloff_max=11001,global.__dotobjWriteTangents=1
 ```
+
+`poke`는 한 틱 안에서 쓰고, 읽고, 되돌린다. 그 사이에 게임의 코드는 돌지 않는다. 마지막 둘은 최상위 전역이다(메뉴 덤프의 값: `default_falloff_max` 11000, `__dotobjWriteTangents` 불리언 0). `variable_global_set`과 불리언 쓰기를 잰다.
 
 Expected:
 - `적재 판정: 통과`, `PASS`, 종료 코드 0, `게임 종료: closed`
@@ -4328,7 +4330,9 @@ Expected:
 - `ask inst:o_time_controller.set_time_speed = method 함수`
 - `poke inst:o_time_controller.time_warp_max: old 100 -> wrote 101, read 101 (stuck); restored 100` — `variable_instance_set`이 이 러너에서 된다
 - `poke inst:o_time_controller.time_speed_variants[3]: old … -> wrote 7.5, read 7.5 (stuck); restored …` — `array_set`이 된다
-- `poke global.__gameplay_vars.bribe_give_rings: old 10 -> wrote 11, read 11 (stuck); restored 10`
+- `poke global.__gameplay_vars.bribe_give_rings: old 10 -> wrote 11, read 11 (stuck); restored 10` — 구조체의 멤버(`variable_struct_set`. 써 본 길이다)
+- `poke global.default_falloff_max: old 11000 -> wrote 11001, read 11001 (stuck); restored 11000` — `variable_global_set`이 된다
+- `poke global.__dotobjWriteTangents: old 0 -> wrote 1, read 1 (stuck); restored 0` — 불리언 자리에 불리언으로 쓴다
 - `ui tests done`, `ui shot done …`
 - 화면 `refs\ui\cheat-menu-1.png`: 왼쪽에 영역의 목록(인물·영주·지식·아이템·프리셋은 흐리고 단계가 적혀 있다), 오른쪽에 `o_time_controller`의 변수 표
 
