@@ -46,6 +46,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     pwsh -File tools/test-native.ps1   # src/core 의 시험. 게임을 켜지 않는다
     pwsh -File tools/deploy.ps1        # → <게임>\mods\Aurie\
     pwsh -File tools/check-load.ps1    # 게임을 켜서 NlToyBox.log 로 판정, 끝나면 끈다
+    pwsh -File tools/ui-check.ps1      # 게임을 켜서 모드창이 그려진 프레임을 refs\ui\ 로 받아 온다, 끝나면 끈다
 
 - 스크립트는 `pwsh`(PowerShell 7)로 실행한다. Windows PowerShell 5.1은 BOM 없는 UTF-8의
   한글을 깨뜨린다.
@@ -62,6 +63,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
   (YYToolkit v5.0.0c가 Present 훅을 걸지 않는다. `research/00-game-structure.md` 참고).
+- **`EVENT_WNDPROC` 콜백도 오지 않는다**(한 실행에 0번. `research/05-mod-window.md`). 입력이 필요하면 창 프로시저를 직접 바꿔 건다.
+- 화면에 그리는 것은 `src/Ui.cpp`가 한다: `os_get_info`의 `video_d3d11_swapchain`으로 스왑체인을 얻어 Present(가상 함수표 8번)에
+  Aurie의 `MmCreateHook`으로 훅을 건다. Present는 게임 스레드에서 불린다(실측). 모드창은 Dear ImGui로 그리고 F8로 여닫는다.
+  ImGui의 `IniFilename`은 비워 둔다(게임 폴더에 게임의 `imgui.ini`가 있다).
+- 배율은 `src/Tweaks.cpp`가 실행 중인 게임의 값에 써 넣는다(데이터 파일을 읽은 ds_map, `global.__gameplay_vars`, 지식의 구조체).
+  대상은 번호가 아니라 키 이름으로 찾고, 처음 본 값을 바탕으로 기억해 배율을 곱한다. **써 넣은 값이 남는 것까지만 확인했다.**
+  게임이 그 값을 따르는지는 항목마다 플레이해 봐야 안다. 배율은 `mods\Aurie\NlToyBox.settings.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
 - **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.
@@ -134,6 +142,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 의존
 
 - Aurie v2.0.2, YYToolkit v5.0.0c 릴리스 바이너리. 출처·크기·SHA256은 `tools/pins.json`.
+- Dear ImGui v1.91.9 (MIT). 서브모듈 `external/imgui`. 모듈에 함께 빌드한다.
 - 헤더는 서브모듈 `external/YYToolkit` (`experimental` 브랜치 `d5cc0078`).
   **git 태그 `v5.0.0c`를 체크아웃하지 않는다.** 그 태그는 v4 헤더를 가리킨다.
   새로 클론했으면 `git submodule update --init` 먼저.

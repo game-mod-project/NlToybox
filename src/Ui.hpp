@@ -8,6 +8,7 @@
 #include <filesystem>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace NlUi
 {
@@ -22,9 +23,12 @@ namespace NlUi
 	// 게임 스레드의 콜백에서 부른다. Present 에 훅을 건다. 될 때까지 몇 번 다시 해 본다.
 	void GameTick();
 
-	// 창 메시지 콜백에서 부른다. 모드창이 가져간 입력은 게임에 넘기지 않는다.
+	// YYToolkit 의 창 메시지 콜백에서 부른다. 이 콜백이 오는지 세기만 한다(입력은 모듈이 직접 건 창 프로시저로 받는다).
 	void WndProc(YYTK::FWWndProc& Context);
 
 	// 창이 열려 있는가.
 	bool Visible();
+
+	// 시험용 설정의 "set=이름:배율" 줄들(이름:배율). 평소에는 비어 있다.
+	const std::vector<std::string>& TestSets();
 }

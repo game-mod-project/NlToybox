@@ -11,6 +11,7 @@ endif()
 
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
+  src/core/Knobs.cpp
   src/core/Text.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
@@ -35,6 +36,7 @@ add_library(nltoybox SHARED
   src/Dump.cpp
   src/Finder.cpp
   src/Game.cpp
+  src/Tweaks.cpp
   src/Ui.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
   "${IMGUI_ROOT}/imgui.cpp"

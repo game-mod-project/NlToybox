@@ -5,6 +5,7 @@
 #include <YYTK_Shared.hpp>
 #include "Dump.hpp"
 #include "Game.hpp"
+#include "Tweaks.hpp"
 #include "Ui.hpp"
 
 #include <atomic>
@@ -82,6 +83,7 @@ namespace
 		ProbeOnce("object_call");
 		NlDump::Tick(std::get<2>(CodeContext.Arguments()));
 		NlUi::GameTick();
+		NlTweaks::GameTick();
 	}
 
 	// 게임 창이 메시지를 받을 때마다 온다.
@@ -130,6 +132,8 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlGame::Init(g_Yytk);
 	NlDump::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::Init(Module, module_dir, [](const std::string& Line) { LogLine(Line); });
+	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
+	NlUi::SetContent(NlTweaks::Draw);
 
 	AurieStatus status = Register(Module, EVENT_OBJECT_CALL, CodeCallback, "object_call");
 	if (!AurieSuccess(status))

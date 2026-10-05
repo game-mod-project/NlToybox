@@ -12,6 +12,7 @@
 #include <atomic>
 #include <chrono>
 #include <cstdint>
+#include <cstdio>
 #include <fstream>
 #include <sstream>
 #include <vector>
@@ -59,6 +60,15 @@ namespace
 	bool g_OpenAtStart = false;
 	double g_ShotSeconds = -1;
 	bool g_ShotDone = false;
+	std::vector<std::string> g_TestSets;
+	long long g_MouseMessages = 0, g_KeyMessages = 0;		// 창이 열려 있는 동안 받은 입력 메시지의 수
+	long long g_YytkWndProcCalls = 0;						// YYToolkit 의 창 메시지 콜백이 온 횟수(오는지 보려고 센다)
+	WNDPROC g_OrigWndProc = nullptr;
+	bool g_WindowUnicode = true;
+	// 시험용 끌기(drag=x1,y1,x2,y2): 화면을 뜨기 5초 전부터 2초 동안 ImGui 에 마우스 입력을 넣는다.
+	// 실제 마우스를 건드리지 않고 슬라이더가 움직이는지 본다.
+	bool g_TestDrag = false, g_DragDown = false, g_DragUp = false;
+	float g_Drag[4] = {};
 
 	void Log(const std::string& Line)
 	{
@@ -107,8 +117,42 @@ namespace
 		builder.AddRanges(Io.Fonts->GetGlyphRangesDefault());
 		builder.AddRanges(Io.Fonts->GetGlyphRangesKorean());
 		builder.BuildRanges(&ranges);
-		Io.Fonts->AddFontFromFileTTF(font.string().c_str(), 18.0f, nullptr, ranges.Data);
+		Io.Fonts->AddFontFromFileTTF(font.string().c_str(), 21.0f, nullptr, ranges.Data);
 		Log("ui font: malgun.ttf");
+	}
+
+	// 메시지를 모드창이 가져갔으면 참. 그 메시지는 게임에 넘기지 않는다.
+	bool HandleMessage(HWND Window, UINT Message, WPARAM W, LPARAM L)
+	{
+		if (Message == WM_KEYDOWN && W == k_ToggleKey)
+		{
+			if (!(L & (1LL << 30)))		// 누르고 있는 동안의 되풀이는 무시한다
+			{
+				g_Visible = !g_Visible;
+				Log(g_Visible ? "ui window opened (F8)" : "ui window closed (F8)");
+			}
+			return true;
+		}
+		if (!g_Visible)
+			return false;
+
+		ImGui_ImplWin32_WndProcHandler(Window, Message, W, L);
+		const ImGuiIO& io = ImGui::GetIO();
+		const bool mouse = Message >= WM_MOUSEFIRST && Message <= WM_MOUSELAST;
+		const bool keys = Message >= WM_KEYFIRST && Message <= WM_KEYLAST;
+		g_MouseMessages += mouse;
+		g_KeyMessages += keys;
+		return (mouse && io.WantCaptureMouse) || (keys && io.WantCaptureKeyboard);
+	}
+
+	// YYToolkit v5.0.0c 의 EVENT_WNDPROC 콜백은 이 게임에서 오지 않았다(F8 을 보내도 불리지 않았다).
+	// 그래서 창 프로시저를 직접 바꿔 건다. 가져가지 않은 메시지는 원래 프로시저로 넘긴다.
+	LRESULT CALLBACK HkWndProc(HWND Window, UINT Message, WPARAM W, LPARAM L)
+	{
+		if (g_Ready && HandleMessage(Window, Message, W, L))
+			return 0;
+		return g_WindowUnicode ? CallWindowProcW(g_OrigWndProc, Window, Message, W, L)
+			: CallWindowProcA(g_OrigWndProc, Window, Message, W, L);
 	}
 
 	bool Setup(IDXGISwapChain* Chain)
@@ -143,6 +187,17 @@ namespace
 		if (!ImGui_ImplWin32_Init(g_Window) || !ImGui_ImplDX11_Init(g_Device, g_Context))
 		{
 			Log("ui setup failed: imgui backend");
+			return false;
+		}
+
+		g_WindowUnicode = IsWindowUnicode(g_Window) != FALSE;
+		const LONG_PTR previous = g_WindowUnicode
+			? SetWindowLongPtrW(g_Window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HkWndProc))
+			: SetWindowLongPtrA(g_Window, GWLP_WNDPROC, reinterpret_cast<LONG_PTR>(HkWndProc));
+		g_OrigWndProc = reinterpret_cast<WNDPROC>(previous);
+		if (!g_OrigWndProc)
+		{
+			Log("ui setup failed: window procedure");
 			return false;
 		}
 
@@ -250,7 +305,9 @@ namespace
 		out.close();
 		Log("ui shot done " + std::to_string(width) + "x" + std::to_string(height) + " format "
 			+ std::to_string(static_cast<int>(desc.Format)) + " frames " + std::to_string(g_Frames)
-			+ (g_Visible ? " window open" : " window closed"));
+			+ (g_Visible ? " window open" : " window closed")
+			+ " mouse " + std::to_string(g_MouseMessages) + " keys " + std::to_string(g_KeyMessages)
+			+ " yytk wndproc " + std::to_string(g_YytkWndProcCalls));
 	}
 
 	void Frame(IDXGISwapChain* Chain)
@@ -288,11 +345,32 @@ namespace
 
 		ImGui_ImplDX11_NewFrame();
 		ImGui_ImplWin32_NewFrame();
+		if (g_TestDrag && g_ShotSeconds >= 0)
+		{
+			// 백엔드가 방금 실제 커서의 자리를 넣었을 수 있다. 그 뒤에 넣어 이 프레임의 자리를 정한다.
+			const double t = elapsed - (g_ShotSeconds - 5);
+			if (t >= 0 && t < 2)
+			{
+				io.AddMousePosEvent(g_Drag[t < 1 ? 0 : 2], g_Drag[t < 1 ? 1 : 3]);
+				if (t >= 0.5 && !g_DragDown)
+				{
+					g_DragDown = true;
+					io.AddMouseButtonEvent(0, true);
+				}
+			}
+			else if (t >= 2 && g_DragDown && !g_DragUp)
+			{
+				g_DragUp = true;
+				io.AddMousePosEvent(g_Drag[2], g_Drag[3]);
+				io.AddMouseButtonEvent(0, false);
+				Log("ui test drag done");
+			}
+		}
 		ImGui::NewFrame();
 		if (visible)
 		{
 			ImGui::SetNextWindowPos(ImVec2(60, 60), ImGuiCond_FirstUseEver);
-			ImGui::SetNextWindowSize(ImVec2(520, 560), ImGuiCond_FirstUseEver);
+			ImGui::SetNextWindowSize(ImVec2(760, 400), ImGuiCond_FirstUseEver);
 			if (ImGui::Begin("NlToyBox  (F8)"))
 			{
 				if (g_Content)
@@ -358,6 +436,10 @@ void NlUi::Init(AurieModule* Module, const std::filesystem::path& ModuleDir, Log
 			g_OpenAtStart = value.rfind("1", 0) == 0;
 		else if (key == "shot_seconds")
 			g_ShotSeconds = std::atof(value.c_str());
+		else if (key == "drag")
+			g_TestDrag = std::sscanf(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;
+		else if (key == "set")
+			g_TestSets.push_back(value.substr(0, value.find_last_not_of(" \r\n") + 1));
 	}
 	in.close();
 	std::error_code ec;
@@ -373,6 +455,11 @@ void NlUi::SetContent(std::function<void()> Draw)
 bool NlUi::Visible()
 {
 	return g_Ready && g_Visible;
+}
+
+const std::vector<std::string>& NlUi::TestSets()
+{
+	return g_TestSets;
 }
 
 void NlUi::GameTick()
@@ -420,24 +507,7 @@ void NlUi::GameTick()
 
 void NlUi::WndProc(FWWndProc& Context)
 {
-	if (!g_Ready)
-		return;
-	const auto& [window, message, wparam, lparam] = Context.Arguments();
-
-	if (message == WM_KEYDOWN && wparam == k_ToggleKey)
-	{
-		if (!(lparam & (1LL << 30)))		// 누르고 있는 동안의 되풀이는 무시한다
-			g_Visible = !g_Visible;
-		Context.Override(0);
-		return;
-	}
-	if (!g_Visible)
-		return;
-
-	ImGui_ImplWin32_WndProcHandler(window, message, wparam, lparam);
-	const ImGuiIO& io = ImGui::GetIO();
-	const bool mouse = message >= WM_MOUSEFIRST && message <= WM_MOUSELAST;
-	const bool keys = message >= WM_KEYFIRST && message <= WM_KEYLAST;
-	if ((mouse && io.WantCaptureMouse) || (keys && io.WantCaptureKeyboard))
-		Context.Override(0);
+	// 입력은 직접 건 창 프로시저(HkWndProc)가 받는다. 여기서는 이 콜백이 오는지만 센다.
+	UNREFERENCED_PARAMETER(Context);
+	g_YytkWndProcCalls++;
 }

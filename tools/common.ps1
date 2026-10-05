@@ -124,6 +124,22 @@ function Stop-NlGame([int]$GraceSec = 15) {
     $procs = @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)
     if ($procs.Count -eq 0) { return 'not-running' }
 
+    foreach ($h in Get-NlGameWindows) { [void][NlToyBox.Win]::PostMessageW($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }   # WM_CLOSE
+
+    $deadline = (Get-Date).AddSeconds($GraceSec)
+    while ((Get-Date) -lt $deadline -and (Test-NlGameRunning)) { Start-Sleep -Milliseconds 500 }
+    if (-not (Test-NlGameRunning)) { return 'closed' }
+
+    Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+    Start-Sleep -Seconds 2
+    'killed'
+}
+
+# 게임 창(클래스 YYGameMakerYY)의 핸들들. 게임이 꺼져 있으면 비어 있다.
+function Get-NlGameWindows {
+    $procs = @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return @() }
+
     if (-not ('NlToyBox.Win' -as [type])) {
         Add-Type -Namespace NlToyBox -Name Win -MemberDefinition @'
 public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
@@ -147,13 +163,5 @@ public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
         $true
     }
     [void][NlToyBox.Win]::EnumWindows($callback, [IntPtr]::Zero)
-    foreach ($h in $windows) { [void][NlToyBox.Win]::PostMessageW($h, 0x0010, [IntPtr]::Zero, [IntPtr]::Zero) }   # WM_CLOSE
-
-    $deadline = (Get-Date).AddSeconds($GraceSec)
-    while ((Get-Date) -lt $deadline -and (Test-NlGameRunning)) { Start-Sleep -Milliseconds 500 }
-    if (-not (Test-NlGameRunning)) { return 'closed' }
-
-    Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-    Start-Sleep -Seconds 2
-    'killed'
+    @($windows)
 }
