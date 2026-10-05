@@ -12,6 +12,9 @@
 //   unrecord <스크립트 이름|all>,  records [스크립트 이름]
 //   call <스크립트 이름> [인자…]                    게임 스크립트를 부른다(이름에 gml_Script_ 가 없으면 붙인다)
 //   method <메서드의 주소> [인자…]                  메서드를 부른다. 묶인 곳이 없으면 주소의 부모에 묶어 부른다
+//   economy <gold_add|gold_set|all> amount=<수>     금화를 더한다·맞춘다, 모든 자원을 더한다(경제 패널과 같은 길)
+//   economy <add|set> resource=<번호> amount=<수>   자원 하나를 더한다·맞춘다
+//   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   state,  shot <이름>,  window open|close
 // 인자: n:<수>  s:<글> 또는 s:{공백이 든 글}  b:0|1  u(undefined)  p:<주소>(그 주소의 값)
 

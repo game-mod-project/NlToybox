@@ -960,6 +960,13 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("shot hud-1").Target == "hud-1" && ParseRemoteLine("window close").Target == "close");
 		const RemoteCommand about = ParseRemoteLine("about inst:o_game_map_controller.__province.__warehouse.change");
 		CHECK(about.Error.empty() && about.Verb == "about" && about.Target == "inst:o_game_map_controller.__province.__warehouse.change");
+		const RemoteCommand gold = ParseRemoteLine("economy gold_add amount=1000");
+		CHECK(gold.Error.empty() && gold.Verb == "economy" && gold.Target == "gold_add" && gold.Number == 1000);
+		const RemoteCommand wood = ParseRemoteLine("economy add resource=1 amount=-5");
+		CHECK(wood.Error.empty() && wood.Target == "add" && wood.Number == -5 && OptionNumber(wood, "resource", -1) == 1);
+		CHECK(ParseRemoteLine("economy all amount=100").Error.empty());
+		const RemoteCommand page = ParseRemoteLine("page economy");
+		CHECK(page.Error.empty() && page.Verb == "page" && page.Target == "economy");
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {
@@ -976,7 +983,9 @@ int main(int argc, char** argv)
 		for (const char* line : { "dance", "ask", "ask o_debug.x", "ask global.a global.b", "list", "list global.a max", "find", "find value=abc",
 			"refine", "refine value=x", "write inst:o_debug.x", "write inst:o_debug=3", "write inst:o_debug.x=abc", "poke global=1",
 			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
-			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y" })
+			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y",
+			"economy", "economy gold", "economy gold_add", "economy gold_add amount=x", "economy add amount=5", "economy add resource=1.5 amount=5",
+			"economy set resource=-1 amount=5", "economy add resource=1e300 amount=5", "page", "page nowhere", "page economy now" })
 		{
 			if (ParseRemoteLine(line).Error.empty())
 			{
