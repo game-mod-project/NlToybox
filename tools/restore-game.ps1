@@ -45,6 +45,11 @@ foreach ($rel in $ours) {
     $p = Join-Path $gameDir $rel
     if (Test-Path -LiteralPath $p) { Remove-Item -LiteralPath $p -Force }
 }
+# 덤프는 이름이 여럿이다(menu, late0 …). 모듈이 쓰는 이름 꼴로 지운다.
+$aurieDir = Join-Path $gameDir 'mods\Aurie'
+if (Test-Path -LiteralPath $aurieDir) {
+    Get-ChildItem -LiteralPath $aurieDir -File -Filter 'NlToyBox.dump*.json' | ForEach-Object { Remove-Item -LiteralPath $_.FullName -Force }
+}
 foreach ($rel in 'mods\Native', 'mods\Aurie', 'mods') {
     $d = Join-Path $gameDir $rel
     if (-not (Test-Path -LiteralPath $d)) { continue }

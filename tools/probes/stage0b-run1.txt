@@ -1,0 +1,30 @@
+# 단계 0b 실행 1 (기록 실행): 다섯 값을 바꾼 뒤, 메인 메뉴에서 한 번 덤프하고 그 뒤로 45초마다 덤프한다(마지막 3개만 남는다).
+# 사용자가 메뉴 덤프 뒤에 새 게임을 시작하고, 게임 화면에서 2분쯤 둔 뒤 평소처럼 게임을 끈다.
+# 조건을 미리 정하지 않는다. 무엇이 "게임 안"을 가르는지는 이 실행의 기록에서 뽑는다.
+delay_seconds=60
+repeat_seconds=45
+keep_last=3
+trace_events=1
+# 메인 메뉴 덤프(단계 0)에 있던 상태 변수. 게임에 들어갈 때 바뀌는지 본다.
+watch=global.__new_game_initializer.__is_active
+watch=global.__new_game_initializer.__current_step
+watch=global.__new_game_initializer.__step_index
+watch=global.__game_load_operator.__main_menu_state
+watch=global.__game_load_operator.__game_is_loading
+watch=global.__game_load_operator.__game_load_type
+# 바꾼 값: budget_money, initial_budget(양성 대조), group_cooldown_days.EPIDEMY, addiction_resist 의 population
+find=2345
+find=745
+find=3391
+find=3767
+find_name=budget_money
+find_name=initial_budget
+find_name=dodge_base
+find_name=production_cost
+find_name=building_resources
+find_name=building_duration_factor
+find_name=product_count
+find_name=fair_trade
+find_name=group_cooldown_days
+find_name=EPIDEMY
+find_name=addiction_resist

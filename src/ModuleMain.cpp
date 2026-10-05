@@ -4,6 +4,7 @@
 
 #include <YYTK_Shared.hpp>
 #include "Dump.hpp"
+#include "Game.hpp"
 
 #include <atomic>
 #include <fstream>
@@ -14,7 +15,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.1.0";
+	constexpr const char* k_Version = "0.2.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -74,12 +75,11 @@ namespace
 		LogLine("probe done");
 	}
 
-	// 오브젝트 이벤트 코드가 실행될 때마다 온다. 래퍼의 내용은 쓰지 않는다.
+	// 오브젝트 이벤트 코드가 실행될 때마다 온다. 래퍼의 인자 가운데 코드 객체(세 번째)만 쓴다.
 	void CodeCallback(FWCodeEvent& CodeContext)
 	{
-		UNREFERENCED_PARAMETER(CodeContext);
 		ProbeOnce("object_call");
-		NlDump::Tick();
+		NlDump::Tick(std::get<2>(CodeContext.Arguments()));
 	}
 
 	// 게임 창이 메시지를 받을 때마다 온다.
@@ -123,6 +123,11 @@ EXPORTED AurieStatus ModuleInitialize(
 	g_Yytk->QueryVersion(major, minor, patch);
 	LogLine("yytk " + std::to_string(major) + "." + std::to_string(minor) + "." + std::to_string(patch));
 
+	// 콜백보다 먼저 준비한다. 콜백은 등록하자마자 게임 스레드에서 오기 시작한다.
+	// 요청 파일이 있을 때만 덤프를 준비한다 (스펙: 데이터 오버레이 §3.2, §3.7).
+	NlGame::Init(g_Yytk);
+	NlDump::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
+
 	AurieStatus status = Register(Module, EVENT_OBJECT_CALL, CodeCallback, "object_call");
 	if (!AurieSuccess(status))
 		return status;
@@ -130,9 +135,6 @@ EXPORTED AurieStatus ModuleInitialize(
 	status = Register(Module, EVENT_WNDPROC, WndProcCallback, "wndproc");
 	if (!AurieSuccess(status))
 		return status;
-
-	// 요청 파일이 있을 때만 덤프를 준비한다 (스펙: 데이터 오버레이 §3.2).
-	NlDump::Init(g_Yytk, module_dir, [](const std::string& Line) { LogLine(Line); });
 
 	return AURIE_SUCCESS;
 }

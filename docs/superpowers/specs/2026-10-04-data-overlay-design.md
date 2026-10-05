@@ -3,7 +3,7 @@
 - 작성일: 2026-10-04
 - 상위 문서: `docs/superpowers/specs/2026-10-04-configurable-rules-roadmap.md`
 - 대상: Norland `0.5588.9777.0`
-- 상태: 단계 0 완료(`research/01-data-overlay.md`). 단계 0b(§3.7)는 검토 대기
+- 상태: 단계 0, 0b 완료(`research/01-data-overlay.md`, `research/02-new-game-state.md`). 단계 1은 계획 대기
 
 ## 1. 목적
 
@@ -151,11 +151,14 @@
 | `ds_type_map` = 1, `ds_type_list` = 2 (stack 3, queue 4, grid 5, priority 6) | 공개된 공식 러너 소스 `YoYoGames/GameMaker-HTML5`의 `scripts/functions/Function_YoYo.js` 36~41행. 이 러너에서도 맞는지는 실행 때 자가 점검으로 다시 잰다 |
 | `ds_exists(ind, type)`은 불리언을 돌려준다. 같은 번호가 형이 다른 여러 자료구조에 쓰일 수 있다 | GameMaker 매뉴얼 `ds_exists` (Context7 `/yoyogames/gamemaker-manual`) |
 | `instance_number(obj)`는 자식 오브젝트의 인스턴스를 포함하고 비활성 인스턴스는 세지 않는다 | 매뉴얼 `instance_number` |
-| `instance_find(obj, n)`은 없으면 `noone`을 돌려준다. `noone`은 -4다 | 매뉴얼 `instance_find`, `Instance Keywords` |
-| `variable_instance_get_names(id)`는 인스턴스 변수 이름의 배열을 돌려준다 | 매뉴얼 `variable_instance_get_names` |
+| `instance_find(obj, n)`은 없으면 `noone`을 돌려준다. `noone`은 -4다. 부모 오브젝트를 주면 자식의 인스턴스도 돈다 | 매뉴얼 `instance_find`, `Instance Keywords` |
+| `variable_instance_get_names(id)`는 인스턴스 변수 이름의 배열을, `variable_instance_get(id, name)`은 값을(없으면 `undefined`) 돌려준다 | 매뉴얼 `variable_instance_get_names`, `variable_instance_get` |
+| `object_exists(obj)`는 불리언을(잘못된 번호면 거짓), `object_get_name(obj)`과 `room_get_name(index)`는 문자열을 돌려준다. 매뉴얼의 예가 `room_get_name(room)`이다 | 매뉴얼 `object_exists`, `object_get_name`, `room_get_name` |
 | `ds_map_keys_to_array(id)`는 키의 배열을, `ds_map_is_map`·`ds_map_is_list(id, key)`는 불리언을 돌려준다 | 매뉴얼 |
+| `ds_map_size(id)`·`ds_list_size(id)`는 수를, `ds_map_find_value(id, key)`는 값을(키가 없으면 `undefined`), `ds_list_find_value(id, pos)`는 값을 돌려준다 | 매뉴얼. **없는 번호에 부르면 어떻게 되는지는 매뉴얼에 없다.** 그래서 `ds_exists`로 있는 것을 본 번호에만 부른다 |
 | `json_decode`는 중첩된 ds_map·ds_list를 만든다 | 매뉴얼 `json_decode` |
-| `EnumInstanceMembers`의 콜백이 거짓을 돌려주면 열거가 이어진다 | YYToolkit 위키 `EnumInstanceMembers` (Context7 `/aurieframework/yytoolkit`), 단계 0의 실행 |
+| `EnumInstanceMembers`의 콜백이 거짓을 돌려주면 열거가 이어진다. 끝까지 돌면 `AURIE_OBJECT_NOT_FOUND`를 돌려주고, 멤버 하나를 얻지 못하면 그 자리에서 돌아온다. 멤버 수는 러너의 `StructGetKeys`로 얻는다 | YYToolkit 위키 `EnumInstanceMembers` (Context7 `/aurieframework/yytoolkit`), 서브모듈 `Module Interface/MI_Public.cpp` 315~416행, 단계 0의 실행(전역 4,737개가 열거됐다) |
+| 없는 이름으로 `GetInstanceMember`를 부르면 YYToolkit이 구조체에 대고 `variable_instance_exists`를 부른다. `GetInstanceMemberCount`는 `variable_instance_names_count`를 부른다. 이 러너에서 그 빌트인들이 구조체를 받는지는 **모른다.** 그래서 둘 다 쓰지 않고, 이름은 열거로 찾고 멤버 수는 `StructGetKeys`로 얻는다 | 서브모듈 `MI_Public.cpp` 255~313행, 859~900행 |
 | `GetBuiltin`으로 전역 빌트인 변수(`room`)를 읽을 수 있다. 이 게임에서 YYToolkit의 빌트인 변수 표 초기화가 성공했다 | YYToolkit 위키 `GetBuiltin`, `refs/phase0/aurie.pass.log`의 `Zeus::YYC::GetBuiltinInformation => AURIE_SUCCESS` |
 | 오브젝트 이벤트 콜백의 인자는 (Self, Other, CCode, Arguments, Flags) 순서다. 코드 이름은 `CCode::m_Name`이다 | 서브모듈 `Module Internals/Hooks/Hooks.cpp` 122행, `Private Interface/PI_Public.cpp` 646행 |
 | 게임의 첫 룸은 `rm_game`이고 거기 놓인 인스턴스는 `o_game_launch` 하나다. 룸은 18개, 오브젝트는 64개다 | `data.win`의 `GEN8` 룸 순서(첫 값 0)와 `ROOM`·`OBJT` 청크. 필드 배치는 UndertaleModTool `UndertaleGeneralInfo.cs` |
@@ -163,12 +166,15 @@
 | 게임은 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 `Menu Opened`, `Save game: <이름>`, `Load game: <이름>`을 시각과 함께 적는다. 자동 저장의 이름은 `…_Autosave_Morning_…`, `…_Autosave_Evening_…`다 | 그 파일의 2026-09-24 기록 |
 | 세이브 폴더는 67개 784KB이고 `saves\`에는 `steam_autocloud.vdf`뿐이다 | 2026-10-04에 읽음 |
 
-모른다 (이번 실행에서 잰다):
+계획을 쓸 때는 몰랐고 실행에서 잰 것 (2026-10-05, `research/02-new-game-state.md`):
 
-- 메인 메뉴와 게임 안에서 어떤 오브젝트의 인스턴스가 있는가. 룸이 바뀌는가.
-- 값이 든 자리. 수 하나로 된 전역(19, 18 등)이 ds_map 번호인가.
-- `CCode`의 배치가 이 러너와 맞는가(이름을 읽을 수 있는가).
-- 덤프 한 번에 걸리는 시간.
+- 룸은 바뀌지 않는다. 처음부터 끝까지 `rm_game`이다. 게임 화면은 `o_main_menu`가 없고 `o_character`가 있는 것으로 알아본다
+  (새 게임에서 잰 것이다. 세이브를 불러올 때는 재지 않았다). `o_time_controller`와 `o_camera_controller`는 메뉴에서 이미 있다.
+- 데이터 파일의 값은 게임을 켤 때 ds_map으로 읽히고, 게임을 시작하면 일부가 `o_debug`와 `o_province_controller`의 변수로 옮겨진다.
+- ds 형 상수 1(map)과 2(list)는 이 러너에서 맞다. ds 번호는 0부터 빈틈없이 배정돼 있었다.
+- `CCode`의 배치가 이 러너와 맞는다. 코드 이름 121개를 읽었고 못 읽은 것은 없다.
+- 덤프 한 번에 메뉴에서 1.6초, 게임 안에서 2.0~2.1초가 걸린다.
+- 런타임의 오브젝트는 65개다(`data.win`에서 센 것은 64개). 하나가 어디서 오는지는 모른다.
 
 커뮤니티에서 본 것 (확인하지 않았다. 이 단계에서는 쓰지 않는다):
 
@@ -196,6 +202,8 @@ keep_last=3              # 되풀이 덤프는 마지막 이만큼만 남긴다 
 watch=global.__new_game_initializer.__is_active   # 값이 바뀔 때마다 로그에 적는다
 trace_events=1           # 처음 보는 오브젝트 이벤트 코드의 이름을 로그에 적는다
 skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
+max_hits=2000            # 찾기의 한도. 요청으로 바꿀 수 있다: max_depth(6), max_visited(2000000), max_array(64),
+                         # max_hits(2000), max_ds_keys(20000), max_ds_id(100000), max_instances(16)
 ```
 
 - **상태 재기.** 0.5초마다 룸 이름, 오브젝트 64개의 인스턴스 수(`instance_number`), `watch`의 값을 잰다.
@@ -209,11 +217,19 @@ skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
   - ds_map과 ds_list를 번호 0부터 한도까지 모두 본다(`ds_exists`). 가장 큰 번호를 덤프에 적는다.
     이름으로 찾은 항목이 중첩된 map·list이면 그 속을 한 단계 적는다.
   - 오브젝트 인스턴스의 변수를 본다(`variable_instance_get_names`). 오브젝트마다 16개까지.
-  - 자가 점검: 표식을 넣은 ds_map과 ds_list를 하나씩 만들어 찾기가 그것을 보는지 확인한 뒤 지운다.
-    형 상수(1, 2)가 이 러너에서 맞는지도 이것으로 확인된다.
-    **이것이 §3.2의 "읽기만 한다"의 유일한 예외다.** 게임의 값은 바꾸지 않는다.
-  - 러너 내부 구조체의 배치에 기대는 호출(`GetInstanceObject`, `GetInstanceMemberCount`, `CRoom`)은 쓰지 않는다.
-    코드 이름(`CCode`)만 예외이고, 잘못 읽어도 게임이 죽지 않게 감싼다. 멤버 열거가 중간에 끊기는지는 여전히 알 수 없다.
+  - 형 상수(1, 2)가 이 러너에서 맞는지 먼저 잰다: ds_map과 ds_list를 하나씩 만들어 `ds_exists`가 참인지,
+    지운 뒤 거짓인지 본다. 맞지 않으면 ds를 훑지 않는다(없는 번호에 ds 함수를 부르지 않으려고).
+  - 자가 점검: 표식을 넣은 ds_map과 ds_list를 하나씩 만들어 찾기가 그 키와 값을 보는지 확인한 뒤 지운다.
+    **이 둘이 §3.2의 "읽기만 한다"의 유일한 예외다.** 게임의 값은 바꾸지 않는다.
+  - 한도와 통계는 구역(전역, ds, 인스턴스)마다 따로 센다. 한 구역이 한도에 걸려도 다음 구역은 제 몫을 본다.
+    한도는 요청으로 바꿀 수 있다.
+  - 구역마다 적는다: 방문한 수, 맞은 수(적지 못한 것도 센다), 히트를 다 적지 못했는가(`hits_cut`), 한도에
+    걸렸는가(`truncated`), 멤버 열거가 오류로 끝난 구조체의 수(`enum_failed`), 러너가 말한 멤버 수보다 적게 본
+    구조체의 수(`enum_short`), 길어서 들어가지 않은 배열·ds의 경로와 길이(`too_long`, 200개까지).
+  - 러너 내부 구조체의 배치에 기대는 호출(`GetInstanceObject`, `CRoom`)은 쓰지 않는다.
+    코드 이름(`CCode`)만 예외이고, 잘못 읽어도 게임이 죽지 않게 감싼다. 읽은 수와 못 읽은 수를 덤프에 적는다.
+- 첫 표본에서는 호출마다 앞에 로그 한 줄을 적는다(`sample: objects`, `sample: room`, `sample: counts`,
+  `sample: watch`, `sample: ok`). 처음 쓰는 호출이 게임을 죽이면 어느 호출이었는지 남는다.
 - 덤프의 순서는 덜 위험한 것부터다: 전역 목록, 전역 찾기, ds 찾기, 인스턴스, 스크립트 호출. 구역이 끝날 때마다
   로그에 한 줄을 적는다. 도중에 죽으면 어느 구역이었는지 남는다.
 - `script=`는 되풀이 덤프와 함께 쓸 수 없다(같은 스크립트를 여러 번 부르지 않는다).
@@ -226,6 +242,7 @@ skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
 - `tools/probe.ps1`: 덤프를 이름대로 가져온다(`-Out x.json` → `x.menu.json`, `x.late0.json` …).
   로그에 `dump failed`가 보이면 기다리지 않고 실패한다. 되풀이 요청이면 새 게임을 시작하라고 알리고,
   **사용자가 게임을 끌 때까지** 기다린다(게임 안에서 도구가 강제로 끄지 않는다).
+  덤프는 다시 켜야만 얻으므로, 복사한 것만 게임 폴더에서 지운다. 복사하지 못한 덤프는 남겨 두고 실패로 끝난다.
 - `tools/saves-backup.ps1`: 세이브 폴더의 사본을 `backups\saves\<시각>\`에 뜬다. `-Diff <사본>`은 사본과 지금의
   차이를 보여 준다. **세이브 폴더에는 쓰지 않는다.**
 - `tools/test-native.ps1`: `src/core`의 시험을 돌린다. `tools/probes/*.txt`가 오류 없이 읽히는지도 본다.
@@ -253,8 +270,9 @@ skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
 
 1. 그 덤프가 게임 안에서 뜬 것이다(사용자가 알려 준 때와 덤프의 시각, 상태 기록이 서로 맞는다).
 2. 값 745가 `global.__gameplay_vars.global_map_ai_economy_initial_budget`에서 찾아졌다.
-3. ds 자가 점검이 모두 참이고, 가장 큰 ds 번호가 본 범위 안에 있다.
-4. 어느 구역도 한도에 걸리거나 건너뛰지 않았다.
+3. ds 형 상수 확인과 자가 점검이 모두 참이고, 가장 큰 ds 번호가 본 범위 안에 있다.
+4. 어느 구역도 한도에 걸리거나(`truncated`), 히트를 다 적지 못하거나(`hits_cut`), 멤버 열거가 끊기거나
+   (`enum_failed`, `enum_short`), 건너뛰지 않았다.
 5. 인스턴스 구역에 변수가 적힌 오브젝트가 하나 이상 있다.
 
 예비 실행은 위 다섯 가운데 하나가 어긋났고 요청 파일을 고쳐 바로잡을 수 있을 때만 쓴다.
@@ -269,10 +287,13 @@ skip=ds                  # 구역을 건너뛴다 (ds, instances, room)
 
 ## 4. 단계 1 — 오버레이 도구
 
-단계 0의 결과: `research/01-data-overlay.md`. 요약하면 `gameplay_variables.json`은 반영이 확인됐고
-(런타임에 이름이 있는 키 94개), `debug_params.json`과 `battle_params.json`은 메인 메뉴에서는 확인하지 못했으며,
-파일에 없는 키를 넣는 것은 시험한 한 경로(`game.speed_slower_div`)에서 통하지 않았다. 그래서 단계 1의 첫 범위는 `gameplay_variables.json`의 94개 키다.
-다른 파일은 새 게임을 시작한 상태에서 반영을 잰 뒤에 카탈로그에 올린다.
+단계 0과 0b의 결과: `research/01-data-overlay.md`, `research/02-new-game-state.md`. 요약하면 값을 바꿔 본 다섯 파일
+(`debug_params.json`, `gameplay_variables.json`, `battle_params.json`, `director_params.json`, 지식 파일 하나) 모두
+바꾼 값이 런타임에 올라왔다. 값은 게임을 켤 때 ds_map으로 읽힌다(단계 0에서 못 찾은 것은 ds_map 안을 보지 않아서였다).
+파일에 없는 키를 넣는 것은 시험한 한 경로(`game.speed_slower_div`)에서 통하지 않았다.
+그래서 다섯 파일 모두 단계 1의 대상이 되고, 프리셋을 입힌 뒤에는 게임을 다시 켜야 한다.
+다만 "런타임에 올라온다"와 "게임이 달라진다"는 다르다. 효과까지 본 것은 `initial_budget` 하나이고,
+`budget_money`는 `default_budget_money`로 옮겨지지만 화면의 시작 금화는 3000이었다. 카탈로그는 이 둘을 따로 적는다(§4.3).
 
 단계 0에서 스펙 §3과 달라진 점: 실행 1은 요청의 스크립트 호출(인자 형 오류)로 게임이 끝나 실패했고 다시 뜨지 않았다.
 실행 3에서 추가한 키는 §3.4의 규칙 대신 사용자 승인을 받아 `game.speed_slower_div`로 했다. 찾기의 한도는
@@ -312,7 +333,8 @@ tools/apply-preset.ps1    게임 상태를 검사하고 cli.py 를 부른다
 
 ### 4.3 카탈로그
 
-키마다 파일, 경로, 형, 허용 범위, 실측 여부(단계 0에서 반영이 확인됐는가), 세이브에 굳는지를 적는다.
+키마다 파일, 경로, 형, 허용 범위, 실측 여부, 세이브에 굳는지를 적는다. 실측 여부는 두 칸이다:
+런타임에 올라오는 것을 확인했는가, 게임이 달라지는 것을 확인했는가.
 프리셋은 카탈로그에 있고 실측된 키만 바꿀 수 있다.
 
 ### 4.4 적용과 복원

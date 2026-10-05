@@ -16,9 +16,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - `main`에는 릴리스 시점에 `develop`에서만 들어간다.
 - 원격 저장소가 없다. PR 대신 로컬 merge commit(`git merge --no-ff`)을 쓴다.
   원격을 만들면 2단계 PR로 바꾸고 이 절을 고친다.
-- CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/tests/safety.tests.ps1` 통과,
+- CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/test-native.ps1`·
+  `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests` 통과,
   `tools/check-load.ps1` 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
-  `safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돌며 게임을 켜지 않는다.
+  앞의 셋은 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
 - 머지한 브랜치는 지운다(`git branch -d`).
 
 ## 경로
@@ -26,7 +27,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 게임 경로는 환경변수 `NORLAND_GAME_DIR` 우선, 없으면 `tools/common.ps1`의 기본값.
   **경로를 스크립트에 직접 적지 않는다.** `Get-NlGameDir`를 쓴다.
 - 게임 경로에 공백이 있다. PowerShell에서는 `-LiteralPath`를 쓴다.
-- 세이브·설정은 `%LOCALAPPDATA%\Strategy`. 도구는 이 폴더를 건드리지 않는다.
+- 세이브·설정은 `%LOCALAPPDATA%\Strategy`. 도구는 이 폴더에 쓰지 않는다(`tools/saves-backup.ps1`이 읽어서 사본을 뜰 뿐이다).
 - 작업 디렉토리가 게임 폴더로 열려 있어도 소스와 git은 `E:\NlToyBox`에 있다.
   git 명령은 `git -C E:\NlToyBox`로 쓴다.
 
@@ -42,6 +43,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 개발 루프
 
     pwsh -File tools/build.ps1         # build\NlToyBox.dll
+    pwsh -File tools/test-native.ps1   # src/core 의 시험. 게임을 켜지 않는다
     pwsh -File tools/deploy.ps1        # → <게임>\mods\Aurie\
     pwsh -File tools/check-load.ps1    # 게임을 켜서 NlToyBox.log 로 판정, 끝나면 끈다
 
@@ -50,7 +52,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 모듈 변경은 게임을 다시 켜야 적용된다. 배포는 게임을 끈 상태에서 한다.
 - `check-load.ps1`이 찾는 줄 형식은 `src/ModuleMain.cpp`가 쓴다. 한쪽을 바꾸면 다른 쪽도 바꾼다.
 - 게임을 켜는 확인은 한 번에 몰아서 하고 끝나면 바로 끈다. 켜기 전에 사용자에게
-  게임 창을 누르지 말라고 알린다. 켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
+  게임 창을 누르지 말라고 알린다(사용자가 새 게임을 시작해야 하는 실행이면 할 일을 차례대로 알린다).
+  켜는 횟수는 사용자에게 승인받은 만큼만 쓴다.
 - `check-load.ps1`과 `probe.ps1`은 게임 창에 `WM_CLOSE`를 보내 정상 종료시키고(그래야 `aurie.log`가
   채워진다), 15초 안에 끝나지 않을 때만 강제 종료한다(`Stop-NlGame`).
 
@@ -64,6 +67,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.
 - `gameplay_variables.json`의 값은 런타임에서 `global.__gameplay_vars.<키 경로를 _ 로 이은 이름>`에 앉는다
   (`research/01-data-overlay.md`).
+- 데이터 파일의 값은 게임을 켤 때 ds_map으로 읽히고, 게임을 시작하면 일부가 `o_debug`와 `o_province_controller`의
+  변수로 옮겨진다. ds_map은 번호가 아니라 키 이름으로 찾는다. **런타임에 있다는 것과 게임이 그 값을 쓴다는 것은 다르다**
+  (`budget_money`는 `default_budget_money`가 되지만 화면의 시작 금화는 달랐다. `research/02-new-game-state.md`).
+- 메인 메뉴와 게임은 같은 룸(`rm_game`)이다. 게임 화면은 `o_main_menu`가 없고 `o_character`가 있는 것으로 알아본다
+  (새 게임에서 잰 것이다. 세이브를 불러올 때는 재지 않았다). `o_time_controller`는 메뉴에서 이미 있다.
+- 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다. 러너에 닿는 호출은
+  `src/Game.cpp`를 거친다. 빌트인과 문서·소스·실행으로 확인한 인터페이스만 쓴다. `GetInstanceObject`와
+  `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다. 없는 이름으로 부르는 `GetInstanceMember`와
+  `GetInstanceMemberCount`는 확인하지 못한 빌트인을 구조체에 대고 부르므로 쓰지 않는다(이름은 열거로 찾는다).
+- 정적 저장 기간의 `RValue`를 두지 않는다. 함수 안에서만 든다.
+- 빌트인을 새로 쓸 때는 먼저 이름이 `refs/exe_strings.txt`에 있는지, 인자와 반환값이 매뉴얼
+  (Context7 `/yoyogames/gamemaker-manual`)에 어떻게 적혀 있는지 확인한다. GML 상수는 C++에서 이름으로 쓸 수
+  없으니 값의 출처를 주석에 적는다. ds 함수는 `ds_exists`로 있는 것을 본 번호에만 부른다.
 
 ## 게임에 가하는 변경
 
@@ -74,7 +90,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 데이터 파일은 `tools/data-snapshot.ps1`으로 바닐라 사본을 뜬 뒤에만 고친다. 되돌릴 때는
   `tools/data-restore.ps1`. 스냅샷은 `backups\data\<게임 버전>\`에 있다(추적 안 함).
 - `tools/probe.ps1`은 요청 파일(`tools/probes/*.txt`)을 놓고 게임을 켜서 런타임 덤프를 받아 온다.
-  덤프는 `refs\runtime\`에 둔다(추적 안 함). 분석은 `py -3.14 tools/re/dump_tool.py`.
+  요청에 `repeat_seconds`가 있으면 메인 메뉴에서 한 번, 그 뒤로 일정 간격으로 덤프하고, 사용자가 새 게임을
+  시작해 잠시 둔 뒤 직접 게임을 끈다. 덤프는 `refs\runtime\`에 둔다(추적 안 함). 분석은
+  `py -3.14 tools/re/dump_tool.py`, "없다"를 믿어도 되는지는 `dump_tool.py controls`로 본다.
+  요청 파일을 고치면 `tools/test-native.ps1`로 읽어 본다. 찾으려는 값은 요청에 미리 넣어야 한다
+  (덤프는 요청한 값과 이름만 깊이 찾는다).
+- 새 게임을 시작하는 실행 전에는 `tools/saves-backup.ps1`으로 세이브 폴더의 사본을 뜬다. 게임이 만든 파일을
+  지우는 것은 사용자가 정한다.
 - 게임 갱신이나 Steam 무결성 검사 뒤에는 `tools/game-status.ps1`로 패치가 남았는지 보고
   `tools/setup-aurie.ps1`을 다시 돌린다. 그 뒤 `tools/check-load.ps1`로 다시 확인한다.
 
@@ -95,5 +117,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 
 ## 작업 규칙
 
-- 원인은 실측(로그·해시·덤프)으로 확인한 뒤 보고한다. 추정을 결론처럼 쓰지 않는다.
+- 추측으로 작업하지 않는다. 계획과 코드에 쓰는 사실은 실측(로그·해시·덤프·게임 파일), 공식 문서, 서브모듈 소스로
+  확인하고 출처를 적는다. 확인하지 못한 것은 "모른다"로 두고 먼저 그것을 재는 단계를 만든다.
+  추정을 결론처럼 쓰지 않는다.
 - 게임 버전이 바뀌면 `research/00-game-structure.md`의 수치를 다시 잰다.
