@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "core/AskPath.hpp"
 #include "core/CostBook.hpp"
 #include "core/Retry.hpp"
 #include "core/Text.hpp"
@@ -208,6 +209,128 @@ namespace
 		}
 		return !NlAccess::Follow(generic, steps, value, why) || !NlGame::IsNumber(value) || value.ToDouble() == 0;
 	}
+
+	// ---- 즉시 업그레이드 (research/09) ----
+
+	constexpr const char* k_Instant = "instant_upgrade";
+	// 건물(o_building)의 건설 구성요소 c_construction(BuildingComponentConstruction).__construction_status.
+	// 3 인 건물에서 is_under_upgrade() 가 참, 0 인 건물에서 거짓이었다. 다른 값(짓는 중, 수리, 옮기기)은 건드리지 않는다.
+	constexpr double k_UnderUpgrade = 3;
+	// build_instantly(): 인자를 읽지 않는 것을 기계어로 봤다(0x142A224A0). 진행도를 1 로 쓰고 __check_progress_is_complete() 를 부른다.
+	// 업그레이드 중인 건물에 부르면 등급이 하나 오르고 상태가 0 이 된다(주택, 돼지 농장, 병영에서 봤다).
+	constexpr const char* k_Component = ".c_construction";
+
+	NlCore::Retry g_UpgradeRetry(2, 60);	// 불렀는데도 업그레이드 중으로 남으면 간격을 늘린다
+	size_t g_Upgraded = 0;					// 이 실행에서 바로 끝낸 수
+
+	void FinishUpgrades(double Now)
+	{
+		const int count = NlAccess::InstanceCount("o_building");
+		size_t failed = 0;
+		std::string first_failure;
+		for (int i = 0; i < count; i++)
+		{
+			const std::string base = "inst:o_building:" + std::to_string(i) + k_Component;
+			double status = 0;
+			if (!NlAccess::ReadNumber(base + ".__construction_status", status) || status != k_UnderUpgrade)
+				continue;
+
+			Log("build: calling build_instantly on o_building:" + std::to_string(i) + " (under upgrade)");		// 부르기 전에 남긴다
+			RValue result;		// 이 함수 안에서만 든다
+			std::string why;
+			const bool called = NlAccess::CallMethod(NlCore::ParseAskPath(base + ".build_instantly"), {}, result, why);
+			double after = k_UnderUpgrade;
+			if (called && NlAccess::ReadNumber(base + ".__construction_status", after) && after != k_UnderUpgrade)
+				g_Upgraded++;
+			else if (!failed++)
+				first_failure = "o_building:" + std::to_string(i) + ": " + (called ? "still under upgrade" : why);
+		}
+
+		if (failed)
+		{
+			Log("build: " + std::to_string(failed) + " upgrade(s) not finished (first: " + first_failure + ")");
+			g_UpgradeRetry.Failed(Now);
+			NlCheats::SetNote(k_Instant, std::to_string(failed) + "채를 끝내지 못했습니다 (" + first_failure + ")");
+			return;
+		}
+		g_UpgradeRetry.Succeeded();
+		NlCheats::SetNote(k_Instant, g_Upgraded ? "업그레이드 " + std::to_string(g_Upgraded) + "번을 바로 끝냈습니다" : "업그레이드를 누르면 바로 끝납니다");
+	}
+
+	void TickUpgrades(double Now)
+	{
+		if (!NlCheats::IsOn(k_Instant))
+		{
+			g_UpgradeRetry.Succeeded();
+			return;
+		}
+		if (!NlAccess::InGame())
+		{
+			NlCheats::SetNote(k_Instant, "게임을 시작하면 적용");
+			return;
+		}
+		if (g_UpgradeRetry.Due(Now))
+			FinishUpgrades(Now);
+	}
+
+	// ---- 건설비 (위의 ZeroAll, RestoreAll) ----
+
+	void TickCosts(double Now)
+	{
+		const bool want = NlCheats::IsOn(k_Cheat);
+		if (want != g_Wanted)
+		{
+			g_Wanted = want;
+			g_Retry.Succeeded();		// 사용자가 바꿨다. 기다리지 않고 바로 한다
+		}
+		if (!want && g_Book.Empty())
+		{
+			g_Applied = false;			// 되돌릴 것이 없다
+			return;
+		}
+		if (!NlAccess::InGame())
+		{
+			if (want)
+				NlCheats::SetNote(k_Cheat, "게임을 시작하면 적용");
+			return;
+		}
+		if (!g_Retry.Due(Now))
+		{
+			NlCheats::SetNote(k_Cheat, g_Note);
+			return;
+		}
+
+		if (want)
+		{
+			const bool again = g_Applied;
+			if (again && StillZero())
+			{
+				g_Retry.Succeeded();
+				NlCheats::SetNote(k_Cheat, g_Note);		// 메뉴에 다녀오면 글이 "게임을 시작하면 적용"에 머물러 있다
+				return;
+			}
+			Log(std::string("build: zeroing construction costs") + (again ? " again (they are no longer zero)" : ""));		// 부르기 전에 남긴다
+			const Outcome done = ZeroAll();
+			g_Applied = done.Ok;
+			g_Note = done.Note;
+			if (!done.Ok || again)
+				g_Retry.Failed(Now);		// 실패했거나 게임이 값을 되돌렸다. 잇달아 그러면 1초마다 171종을 다시 쓰지 않게 간격을 늘린다
+			else
+				g_Retry.Succeeded();
+		}
+		else
+		{
+			g_Applied = false;
+			Log("build: restoring construction costs");		// 부르기 전에 남긴다
+			const Outcome done = RestoreAll();
+			g_Note = done.Note;
+			if (done.Ok)
+				g_Retry.Succeeded();
+			else
+				g_Retry.Failed(Now);
+		}
+		NlCheats::SetNote(k_Cheat, g_Note);
+	}
 }
 
 void NlBuild::Init(LogFn Log_)
@@ -221,57 +344,6 @@ void NlBuild::GameTick(double Now)
 		return;
 	g_Next = Now + 1.0;
 
-	const bool want = NlCheats::IsOn(k_Cheat);
-	if (want != g_Wanted)
-	{
-		g_Wanted = want;
-		g_Retry.Succeeded();		// 사용자가 바꿨다. 기다리지 않고 바로 한다
-	}
-	if (!want && g_Book.Empty())
-	{
-		g_Applied = false;			// 되돌릴 것이 없다
-		return;
-	}
-	if (!NlAccess::InGame())
-	{
-		if (want)
-			NlCheats::SetNote(k_Cheat, "게임을 시작하면 적용");
-		return;
-	}
-	if (!g_Retry.Due(Now))
-	{
-		NlCheats::SetNote(k_Cheat, g_Note);
-		return;
-	}
-
-	if (want)
-	{
-		const bool again = g_Applied;
-		if (again && StillZero())
-		{
-			g_Retry.Succeeded();
-			NlCheats::SetNote(k_Cheat, g_Note);		// 메뉴에 다녀오면 글이 "게임을 시작하면 적용"에 머물러 있다
-			return;
-		}
-		Log(std::string("build: zeroing construction costs") + (again ? " again (they are no longer zero)" : ""));		// 부르기 전에 남긴다
-		const Outcome done = ZeroAll();
-		g_Applied = done.Ok;
-		g_Note = done.Note;
-		if (!done.Ok || again)
-			g_Retry.Failed(Now);		// 실패했거나 게임이 값을 되돌렸다. 잇달아 그러면 1초마다 171종을 다시 쓰지 않게 간격을 늘린다
-		else
-			g_Retry.Succeeded();
-	}
-	else
-	{
-		g_Applied = false;
-		Log("build: restoring construction costs");		// 부르기 전에 남긴다
-		const Outcome done = RestoreAll();
-		g_Note = done.Note;
-		if (done.Ok)
-			g_Retry.Succeeded();
-		else
-			g_Retry.Failed(Now);
-	}
-	NlCheats::SetNote(k_Cheat, g_Note);
+	TickCosts(Now);
+	TickUpgrades(Now);
 }

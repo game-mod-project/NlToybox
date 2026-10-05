@@ -745,11 +745,17 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 33);
+		CHECK(Cheats().size() == 34);
 		// 건설 조건과 건설비(research/09). 조건은 게임의 함수가 돌려주는 값을 바꾸는 훅이고, 비용은 모듈이 건물 종류를 돌며 0 으로 쓴다.
 		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
 		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
 		CHECK(FindCheat("build_free") && FindCheat("build_free")->Kind == CheatKind::Custom && FindCheat("build_free")->Where == Area::Build);
+		// 비용 없음은 플레이에서 봤다(research/09: 돼지 농장을 짓고 올려도 나무가 줄지 않았다). 하지만 켠 것을 다음 실행까지 기억하지는 않는다:
+		// 0 으로 쓴 비용이 세이브에 들어가는지 재지 않았다. 창을 열지도 않았는데 불러온 게임의 비용이 0 이 되지 않게 한다.
+		CHECK(FindCheat("build_free")->Verified && !FindCheat("build_free")->Remember);
+		CHECK(FindCheat("build_any")->Remember && FindCheat("instant_build")->Remember);
+		// 즉시 업그레이드: 업그레이드 중인 건물에 게임의 build_instantly() 를 부른다(모듈의 코드가 한다).
+		CHECK(FindCheat("instant_upgrade") && FindCheat("instant_upgrade")->Kind == CheatKind::Custom && FindCheat("instant_upgrade")->Where == Area::Build);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
 		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
@@ -796,8 +802,10 @@ int main(int argc, char** argv)
 		CheatState hooks;
 		hooks.On = { "build_any", "build_free", "build_marks", "rest_decrease", "build_all" };
 		const CheatState kept_hooks = KeepKnown(hooks);
-		CHECK(FindCheat("build_any")->Verified && !FindCheat("build_free")->Verified && !FindCheat("build_marks")->Verified);
+		CHECK(FindCheat("build_any")->Verified && !FindCheat("build_marks")->Verified);
 		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_all" }));		// 값을 쓰는 스위치(Toggle)는 확인 전이어도 그대로다
+		// 기억하지 않는 항목(Remember 가 거짓)은 확인한 것이어도 꺼진 채로 시작한다.
+		CHECK(FindCheat("build_free")->Verified && kept_hooks.On.count("build_free") == 0);
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {

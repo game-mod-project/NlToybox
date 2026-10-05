@@ -64,10 +64,18 @@ namespace NlCore
 			{ "build_marks", Area::Build, "건설 창의 잠금 표시 지우기", "inst:o_game_map_controller.__knowledge_manager.is_knowledge_unlocked",
 				H, 1, 0, 0, 0, false, "모든 지식을 해금된 것으로 답하게 한다. 지식 창에도 그렇게 보인다. 건설 창의 표시가 풀리는지는 확인 전" },
 			// 건설비와 업그레이드비(research/09). 건물 종류마다 등급별 비용(금화, 자원 39칸)이 있다. 모듈(src/Build.cpp)이 모두 0 으로 쓰고 끌 때 되돌린다.
-			// 업그레이드 단추가 "자원이 부족"으로 꺼지는 것도 이 비용이다(주택 2등급: 나무 10, 목재 5). 효과는 아직 플레이에서 보지 못했다.
+			// 업그레이드 단추가 "자원이 부족"으로 꺼지는 것도 이 비용이다(주택 2등급: 나무 10, 목재 5).
+			// 사용자가 플레이에서 봤다(2026-10-05): 목재가 0 인데 주택 12채의 업그레이드가 눌렸고, 돼지 농장(짓기 30 + 올리기 30 나무)을 짓고 올려도 나무가 줄지 않았다.
+			// 켠 것을 다음 실행까지 기억하지 않는다(맨 끝의 false): 0 으로 쓴 비용이 세이브에 들어가는지 재지 않았다.
 			{ "build_free", Area::Build, "건설·업그레이드 비용 없음", "inst:o_game_map_controller.__construction_manager",
-				C, 1, 0, 0, 0, false, "모든 건물 종류의 등급별 건설비를 0 으로 쓴다. 끄면 원래 값으로 되돌린다.\n"
-					"켠 채로 저장하지 말 것: 0 이 세이브에 남을 수 있다(남는지는 재지 않았다). 저장하기 전에 끈다" },
+				C, 1, 0, 0, 0, true, "모든 건물 종류의 등급별 건설비를 0 으로 쓴다. 자원이 모자라도 업그레이드를 누를 수 있다. 끄면 원래 값으로 되돌린다.\n"
+					"켠 채로 저장하지 말 것: 0 이 세이브에 남을 수 있다(남는지는 재지 않았다). 저장하기 전에 끈다.\n"
+					"게임을 켤 때마다 꺼진 채로 시작한다", false },
+			// 즉시 업그레이드(research/09). 게임의 즉시 건설(o_debug.is_instant_build_buildings)은 새로 짓는 건물만 끝낸다(사용자가 봤다).
+			// 업그레이드 중인 건물(c_construction.__construction_status 가 3)에 게임의 build_instantly() 를 부르면 바로 끝난다:
+			// 원격으로 불러 주택·돼지 농장·병영의 등급이 오르는 것을 봤다. 모듈이 스스로 부르는 길(src/Build.cpp)은 아직 보지 못했다.
+			{ "instant_upgrade", Area::Build, "건물 즉시 업그레이드", "inst:o_building.c_construction.build_instantly",
+				C, 1, 0, 0, 0, false, "업그레이드를 누른 건물을 1초 안에 끝낸다(게임의 build_instantly). 건물 즉시 건설은 새로 짓는 건물만 끝낸다" },
 
 			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
 			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
@@ -158,6 +166,8 @@ namespace NlCore
 				return true;
 			// 함수의 답을 바꾸거나 모듈이 게임의 값을 고쳐 쓰는 항목은 효과를 확인한 것만 켠 채로 시작한다. 확인 전의 것은 그 실행에서 사용자가 켠다:
 			// 창을 열지도 않았는데 게임의 판정이 바뀌거나 값이 고쳐 쓰여 세이브에 굳는 일이 없게.
+			if (!cheat->Remember)
+				return true;
 			return (cheat->Kind == CheatKind::Hook || cheat->Kind == CheatKind::Custom) && !cheat->Verified;
 		});
 		for (auto it = State.Numbers.begin(); it != State.Numbers.end();)
