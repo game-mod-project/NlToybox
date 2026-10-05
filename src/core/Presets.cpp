@@ -8,7 +8,7 @@ namespace NlCore
 	{
 		// 표의 항목 가운데 플레이에서 확인된 것만 쓴다(CheckPreset 과 시험이 지킨다).
 		static const std::vector<Preset> presets = {
-			{ "normal", "기본 (표의 항목 모두 끔)", "치트 표의 항목을 모두 끈다(탐색기의 잠금과 배율 7개는 그대로)", {} },
+			{ "normal", "기본", "치트 표의 항목을 모두 끈다(탐색기의 잠금과 배율 7개는 그대로)", {} },		// 단추의 너비에 들어가는 이름(긴 이름은 잘렸다)
 			{ "easy", "쉬움", "조금 빠르게 만들고 배고픔이 없다", {
 				{ "production_time", 0.5 }, { "worker_performance", 2 }, { "storage_capacity", 2 }, { "hire_cost", 0.5 }, { "no_hunger", 0 } } },
 			{ "sandbox", "샌드박스", "짓고 만드는 데 걸림돌이 없다", {
