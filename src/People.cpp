@@ -57,6 +57,7 @@ namespace
 	std::string g_Selected;							// 고른 사람의 uuid
 	std::map<std::string, std::string> g_Names;		// uuid → 화면의 이름(get_name 은 사람마다 한 번만 부른다)
 	double g_NextScan = 0, g_NextDetail = 0;
+	std::string g_DetailLogged;						// 읽기 함수를 부른다고 로그에 남긴 사람(사람마다 한 번만 남긴다)
 
 	// 창의 입력
 	bool g_ShowAll = false;				// 주민과 손님도 목록에 보인다
@@ -163,6 +164,7 @@ namespace
 		{
 			const char* object = character ? "o_character" : "o_dummy";
 			const int count = NlAccess::InstanceCount(object);
+			bool announced = false;		// 이 훑기에서 이 종류에 get_name 을 부른다고 남겼는가
 			for (int n = 0; n < count; n++)
 			{
 				PersonRow row;
@@ -183,6 +185,11 @@ namespace
 					// SoulBasic.get_name(): 게임이 인자 없이 불러 화면의 이름("Barra")을 받는 것을 기록했다. 처음 본 사람에게 한 번만 부른다.
 					RValue name;
 					std::string why;
+					if (!announced)
+					{
+						announced = true;
+						Log(std::string("people call get_name() on new ") + object + " (first: " + std::to_string(n) + " " + row.Uuid + ")");		// 부르기 전에 남긴다
+					}
 					if (CallNoArgs(Base(row) + ".__soul.get_name", name, why) && name.IsString())
 						known = g_Names.emplace(row.Uuid, name.ToString()).first;
 				}
@@ -264,6 +271,11 @@ namespace
 
 		// 게임이 인자 없이 부르는 것을 기록한 읽기 함수들: get_age() -> 나이, get_pain() -> 통증, Minds.get_total_modify() -> 생각의 합.
 		const std::string base = Base(Row) + ".__soul";
+		if (g_DetailLogged != Row.Uuid)
+		{
+			g_DetailLogged = Row.Uuid;
+			Log("people call get_age(), get_pain(), get_total_modify() on " + Base(Row) + " " + Row.Uuid);		// 사람마다 한 번만 남긴다
+		}
 		CallNumber(base + ".get_age", Out.Age);
 		CallNumber(base + ".get_pain", Out.Pain);
 		CallNumber(base + ".__minds.get_total_modify", Out.MindSum);
@@ -786,7 +798,7 @@ namespace
 					continue;
 				if (shown++ >= 12)
 				{
-					ImGui::TextDisabled("… 더 있습니다. 이름을 더 적어 주세요.");
+					ImGui::TextDisabled("더 있습니다. 이름을 더 적어 주세요.");
 					break;
 				}
 				ImGui::PushID(name.c_str());
@@ -799,7 +811,7 @@ namespace
 			if (!shown)
 				ImGui::TextDisabled("그런 이름의 특성이 없습니다(게임의 영문 이름입니다. 예: brave, gifted).");
 		}
-		ImGui::TextDisabled("특성은 게임의 이름 그대로입니다. 상태(human, kid, dead …)를 떼면 게임이 어떻게 받는지는 재지 않았습니다.");
+		ImGui::TextDisabled("특성은 게임의 이름 그대로입니다. 상태(human, kid, dead 같은 것)를 떼면 게임이 어떻게 받는지는 재지 않았습니다.");
 	}
 
 	size_t CountPlayers(bool Characters)
@@ -951,6 +963,8 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 	Detail one;
 	if (!row || !ReadDetail(*row, one))
 		return { "no such person" };
+	g_Selected = row->Uuid;		// 인물 패널도 그 사람을 고른다(page person 뒤 shot 으로 창을 볼 수 있게)
+	g_Now.One = one;
 
 	std::vector<std::string> lines;
 	lines.push_back(row->Name + "  " + (row->Character ? "character" : "dummy") + ":" + std::to_string(row->Index) + "  faction " + row->Faction);

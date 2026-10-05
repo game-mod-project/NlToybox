@@ -26,5 +26,6 @@ namespace NlPeople
 	// 원격 명령(창 없이 같은 길을 태운다). 게임 스레드에서 부른다. 돌려주는 것: 답의 줄들.
 	std::vector<std::string> Do(const NlCore::PersonCommand& Command);
 	std::vector<std::string> List(bool All);
+	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);
 }
