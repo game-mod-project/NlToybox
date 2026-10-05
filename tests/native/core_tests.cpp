@@ -2,6 +2,7 @@
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
 #include "core/AskPath.hpp"
+#include "core/CheatState.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Request.hpp"
@@ -14,8 +15,10 @@
 #include <fstream>
 #include <limits>
 #include <map>
+#include <set>
 #include <sstream>
 #include <string>
+#include <vector>
 
 using namespace NlCore;
 
@@ -328,6 +331,63 @@ int main(int argc, char** argv)
 		CHECK_STR(FormatAskPath(ParentPath(ParentPath(ParentPath(path)))), "inst:o_debug");	// 단계가 없으면 그대로다
 		CHECK_STR(FormatAskPath(ChildPath(ParentPath(path), { '@', "k.x", 0 })), "inst:o_debug.a@{k.x}");
 		CHECK_STR(FormatAskPath(ChildPath(ParseAskPath("global"), { '.', "v", 0 })), "global.v");
+	});
+
+	Test("Shortest 는 다시 읽으면 같은 수가 되는 가장 짧은 글을 쓴다", [] {
+		CHECK_STR(Shortest(0.83), "0.83");
+		CHECK_STR(Shortest(3), "3");
+		CHECK_STR(Shortest(-4), "-4");
+		CHECK_STR(Shortest(0.1 + 0.2), "0.30000000000000004");
+		CHECK_STR(Shortest(std::numeric_limits<double>::quiet_NaN()), "nan");
+		CHECK_STR(Shortest(-std::numeric_limits<double>::infinity()), "-inf");
+		for (const double value : { 36550.20449999981, 1e20, -0.000123, 57.4 })
+		{
+			double again = 0;
+			CHECK(ParseNumber(Shortest(value), again) && again == value);
+		}
+	});
+
+	Test("치트 상태: 읽고 쓰면 같다", [] {
+		CheatState state;
+		state.On = { "instant_build", "no_dodge" };
+		state.Numbers = { { "rest_decrease", 0 }, { "piety_decrease", 0.83 } };
+		state.Pins = { "inst:o_time_controller.time_warp", "map:128@{messenger_cost }" };
+		state.Locks = { { "inst:o_character:2.starving_hours", 0 }, { "global.a.b[3]", -4.5 } };
+
+		const std::string text = FormatCheatState(state);
+		std::istringstream in(text);
+		const CheatState again = ParseCheatState(in);
+		CHECK(again.On == state.On && again.Numbers == state.Numbers && again.Pins == state.Pins);
+		CHECK(again.Locks.size() == 2 && again.Locks[0].Path == "inst:o_character:2.starving_hours" && again.Locks[0].Value == 0
+			&& again.Locks[1].Path == "global.a.b[3]" && again.Locks[1].Value == -4.5);
+		CHECK_STR(FormatCheatState(again), text);
+	});
+
+	Test("치트 상태: 읽을 수 없는 줄은 버린다", [] {
+		std::istringstream in(
+			"# 주석\n"
+			"\n"
+			"on\n"								// 이름이 없다
+			"on a b\n"							// 이름에 공백
+			"num x=abc\n"						// 수가 아니다
+			"num x=nan\n"						// 유한하지 않다
+			"num =3\n"							// 이름이 없다
+			"pin o_debug.x\n"					// 뿌리를 모른다
+			"pin global\n"						// 단계가 없다
+			"lock inst:o_debug.x\n"				// 값이 없다
+			"lock inst:o_debug.x=1e999\n"		// 유한하지 않다
+			"what inst:o_debug.x=1\n"			// 모르는 낱말
+			"  on  good  \n"
+			"num n = 2.5\n"
+			"pin inst:o_debug.x\n"
+			"pin inst:o_debug.x\n"				// 같은 주소는 한 번만
+			"lock map:1@{a=b}=7\n"				// 마지막 '=' 에서 가른다
+			"lock map:1@{a=b}=8\n");			// 같은 주소는 뒤의 것이 이긴다
+		const CheatState state = ParseCheatState(in);
+		CHECK(state.On == std::set<std::string>{ "good" });
+		CHECK(state.Numbers.size() == 1 && state.Numbers.at("n") == 2.5);
+		CHECK(state.Pins == std::vector<std::string>{ "inst:o_debug.x" });
+		CHECK(state.Locks.size() == 1 && state.Locks[0].Path == "map:1@{a=b}" && state.Locks[0].Value == 8);
 	});
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.

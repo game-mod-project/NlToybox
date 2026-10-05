@@ -81,6 +81,15 @@ namespace NlCore
 		return Dotted(buf);
 	}
 
+	std::string Shortest(double Value)
+	{
+		if (!std::isfinite(Value))
+			return Value != Value ? "nan" : (Value > 0 ? "inf" : "-inf");
+		char buf[40];
+		const std::to_chars_result result = std::to_chars(buf, buf + sizeof(buf), Value);
+		return std::string(buf, result.ptr);
+	}
+
 	bool ParseNumber(const std::string& Text, double& Out)
 	{
 		if (Text.empty())

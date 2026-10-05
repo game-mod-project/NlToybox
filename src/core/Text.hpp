@@ -16,6 +16,9 @@ namespace NlCore
 	// 소수 Digits 자리로 쓴다. 로그의 시각에 쓴다.
 	std::string Fixed(double Value, int Digits);
 
+	// 다시 읽으면 같은 수가 되는 가장 짧은 글("0.83", "3", "-4"). 유한하지 않으면 "nan" / "inf" / "-inf".
+	std::string Shortest(double Value);
+
 	// 글 전체가 수일 때만 참.
 	bool ParseNumber(const std::string& Text, double& Out);
 
