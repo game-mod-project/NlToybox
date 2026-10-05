@@ -4,7 +4,7 @@
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
 #include "core/Hooks.hpp"
-#include "core/SpeedControl.hpp"
+#include "core/Rate.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -17,6 +17,8 @@
 using NlCore::Area;
 using NlCore::Cheat;
 using NlCore::CheatKind;
+using NlCore::HasNumber;
+using NlCore::IsHook;
 using NlCore::Shortest;
 
 namespace
@@ -30,6 +32,7 @@ namespace
 		bool HasBase = false;
 		double Base = 0;			// Number 의 처음 본 값
 		bool Applied = false;		// Hook: 바꾸기를 걸었다
+		double AppliedNumber = 0;	// HookScale: 걸어 둔 배율
 		std::string HookName;		// Hook: 훅을 건 스크립트의 이름(끌 때 쓴다)
 		// 아래는 GameTick 이 채우는 스냅샷
 		bool Found = false;
@@ -57,28 +60,28 @@ namespace
 			g_Log(Line);
 	}
 
-	// 게임 속도(core/SpeedControl). 후보의 이름은 덤프의 o_time_controller 에서 봤다. 어느 것이 속도를 정하는지는 모른다:
-	// 처음 누를 때 차례로 써 보고 __game_time 의 흐름으로 고른다(스펙 §9). 읽고 쓰는 일은 틱에서만 일어난다.
-	NlCore::SpeedControl& Speed()
+	// 게임 시간의 흐름을 재서 보여 준다(건 배속이 먹었는지 눈으로 본다. 배속 1 에서 실제 1초에 약 60 이었다. research/08).
+	// 창이 열려 있는 동안만 잰다. 배속은 게임의 함수로 건다(위의 k_SetWarp).
+	constexpr const char* k_GameTime = "inst:o_time_controller.__game_time";
+	constexpr const char* k_TimeWarp = "inst:o_time_controller.time_warp";
+	NlCore::Rate g_Flow(1.0);
+	bool g_TimeFound = false;		// 아래는 GameTick 이 채우는 스냅샷
+	double g_FlowNow = 0, g_WarpNow = 0;
+
+	void MeasureFlow(double Now, bool Visible)
 	{
-		static NlCore::SpeedControl control(
-			NlCore::SpeedPaths{
-				"inst:o_time_controller.__game_time",
-				"inst:o_time_controller.time_warp",
-				{
-					{ "time_warp_new", "inst:o_time_controller.time_warp_new", "", "" },
-					{ "time_warp", "inst:o_time_controller.time_warp", "", "" },
-					{ "__debug_custom_wrap", "inst:o_time_controller.__debug_custom_wrap", "", "" },
-					{ "time_speed_variants[time_speed_index]", "", "inst:o_time_controller.time_speed_variants",
-						"inst:o_time_controller.time_speed_index" },
-				},
-			},
-			NlCore::SpeedIo{
-				[](const std::string& path, double& out) { return NlAccess::ReadNumber(path, out); },
-				[](const std::string& path, double value, std::string& why) { return NlAccess::WriteNumber(path, value, why); },
-				[](const std::string& line) { Log(line); },
-			});
-		return control;
+		double time = 0;
+		g_TimeFound = Visible && NlAccess::ReadNumber(k_GameTime, time);
+		if (!g_TimeFound)
+		{
+			g_Flow.Reset();
+			g_FlowNow = 0;
+			return;
+		}
+		g_Flow.Add(Now, time);
+		g_FlowNow = g_Flow.Ready() ? g_Flow.PerSecond() : 0;
+		if (!NlAccess::ReadNumber(k_TimeWarp, g_WarpNow))
+			g_WarpNow = 0;
 	}
 
 	// ---- 게임 스레드 ----
@@ -88,27 +91,34 @@ namespace
 	// 켠 것과 실제로 걸린 것을 틱마다 견준다: 원격의 unoverride 가 바꾸기를 꺼도 체크가 켜져 있으면 다시 건다(core/Hooks).
 	void ApplyHook(Item& It)
 	{
+		// HookScale: 돌려주는 수에 창에서 정한 배율을 곱한다. 배율이 바뀌면 같은 훅에 새 배율을 다시 건다.
+		const bool scale = It.Def->Kind == CheatKind::HookScale;
 		const bool live = It.Applied && NlRecorder::Overriding(It.HookName);
-		switch (NlCore::ChooseHookStep(It.On, It.Applied, live))
+		const bool current = NlCore::HookCurrent(It.On, It.Applied, scale, It.AppliedNumber, It.Number);
+		switch (NlCore::ChooseHookStep(It.On, current, live))
 		{
 		case NlCore::HookStep::Apply:
 		{
-			const bool again = It.Applied;
+			const bool again = current;		// 걸어 둔 그대로인데 꺼져 있었다
 			NlRecorder::Forced value;
-			value.Kind = 'b';
-			value.Number = It.Def->On;
+			value.Kind = scale ? 'x' : 'b';
+			value.Number = scale ? It.Number : It.Def->On;
+			value.Whole = scale && It.Def->Off != 0;
 			std::string name, why;
 			if (NlRecorder::Override(It.Def->Path, value, name, why))
 			{
 				It.Applied = true;
+				It.AppliedNumber = It.Number;
 				It.HookName = name;
-				It.Note = "걸었습니다";
+				It.Note = scale ? "배율 " + Shortest(It.Number) + " 을 걸었습니다" : "걸었습니다";
 				It.Logged.clear();
-				Log(std::string("cheat ") + It.Def->Id + ": overriding " + name + (again ? " again (it was turned off elsewhere)" : ""));
+				Log(std::string("cheat ") + It.Def->Id + ": overriding " + name + (scale ? " x" + Shortest(It.Number) : "")
+					+ (again ? " again (it was turned off elsewhere)" : ""));
 			}
 			else
 			{
-				It.Applied = false;
+				// 배율을 바꿔 다시 걸다 실패했으면 앞 배율의 바꾸기가 살아 있다. 걸었다는 표시를 남겨 다음 틱에 다시 걸고, 끄면 끌 수 있게 한다.
+				It.Applied = NlCore::AppliedAfterFailure(live);
 				const bool in_game = NlAccess::InGame();
 				It.Note = in_game ? "걸지 못했습니다: " + why : "게임을 시작하면 적용";
 				const std::string line = std::string("cheat ") + It.Def->Id + ": cannot override: " + why;
@@ -135,14 +145,14 @@ namespace
 
 	void Apply(Item& It, bool Visible)
 	{
-		if (It.Def->Kind == CheatKind::Hook)
+		if (IsHook(It.Def->Kind))
 		{
 			ApplyHook(It);
 			return;
 		}
-		if (It.Def->Kind == CheatKind::Custom)
+		if (It.Def->Kind == CheatKind::Custom || It.Def->Kind == CheatKind::CustomScale)
 		{
-			It.Restore = false;		// 모듈의 코드가 IsOn 을 보고 한다(src/Build.cpp)
+			It.Restore = false;		// 모듈의 코드가 IsOn·Factor 를 보고 한다(src/Build.cpp, src/Production.cpp)
 			return;
 		}
 		if (!It.On && !It.Restore && !Visible)
@@ -264,6 +274,43 @@ namespace
 		else
 			ImGui::TextDisabled("게임을 시작하면 보입니다");
 	}
+
+	// 배율 항목(HookScale, CustomScale): 체크로 켜고 끄고, 수는 Enter 로 넣는다. 1 이 원래 값이다.
+	void DrawScale(Item& It)
+	{
+		bool on = It.On;
+		if (ImGui::Checkbox("##on", &on))
+		{
+			if (on)
+			{
+				if (!(It.Number > 0))
+					It.Number = It.Def->On;
+				It.On = true;
+				It.Restore = false;
+				g_Changed = g_Dirty = true;
+			}
+			else
+				TurnOff(It);
+		}
+		ImGui::SameLine();
+		double value = It.Number > 0 ? It.Number : It.Def->On;
+		ImGui::SetNextItemWidth(90);
+		if (ImGui::InputDouble("##v", &value, 0, 0, "%.4g", ImGuiInputTextFlags_EnterReturnsTrue))
+		{
+			It.Number = std::clamp(value, It.Def->Min, It.Def->Max);
+			It.On = true;
+			It.Restore = false;
+			g_Changed = g_Dirty = true;
+		}
+		ImGui::SameLine();
+		ImGui::TextUnformatted(It.Def->Label);
+		DrawHelp(*It.Def);
+		ImGui::SameLine();
+		if (It.On)
+			ImGui::TextDisabled("%s", It.Note.c_str());
+		else
+			ImGui::TextDisabled("%s ~ %s", Shortest(It.Def->Min).c_str(), Shortest(It.Def->Max).c_str());
+	}
 }
 
 void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
@@ -277,7 +324,7 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 	{
 		Item item;
 		item.Def = &cheat;
-		if (cheat.Kind != CheatKind::Number)
+		if (!HasNumber(cheat.Kind))
 			item.On = State.On.count(cheat.Id) > 0;
 		else if (const auto it = State.Numbers.find(cheat.Id); it != State.Numbers.end())
 		{
@@ -285,7 +332,7 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 			item.Number = it->second;
 		}
 		if (item.On)
-			loaded += std::string(" ") + cheat.Id + (cheat.Kind == CheatKind::Number ? "=" + Shortest(item.Number) : "");
+			loaded += std::string(" ") + cheat.Id + (HasNumber(cheat.Kind) ? "=" + Shortest(item.Number) : "");
 		g_Items.push_back(std::move(item));
 	}
 	g_Dirty = true;
@@ -295,7 +342,7 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 void NlCheats::GameTick(double Now, bool Visible)
 {
 	std::lock_guard lock(g_Mutex);
-	Speed().Tick(Now, Visible);		// 흐름을 재서 보여 준다. 배속은 아래에서 게임의 함수로 건다
+	MeasureFlow(Now, Visible);		// 흐름을 재서 보여 준다. 배속은 아래에서 게임의 함수로 건다
 
 	if (g_WarpAsked > 0)
 	{
@@ -330,6 +377,8 @@ void NlCheats::DrawArea(Area Where)
 		ImGui::PushID(item.Def->Id);
 		if (item.Def->Kind == CheatKind::Number)
 			DrawNumber(item);
+		else if (HasNumber(item.Def->Kind))
+			DrawScale(item);		// HookScale, CustomScale: 체크와 배율
 		else
 			DrawToggle(item);		// Toggle, Hook, Custom 은 모두 체크 하나다
 		ImGui::PopID();
@@ -355,21 +404,20 @@ void NlCheats::DrawArea(Area Where)
 void NlCheats::DrawTime()
 {
 	std::lock_guard lock(g_Mutex);
-	NlCore::SpeedControl& speed = Speed();
 	ImGui::TextWrapped("배속을 누르면 게임의 함수로 게임 속도를 겁니다. 게임 화면에서, 일시정지를 푼 채로 누르세요. "
 		"게임의 속도 단추를 누르면 게임의 배속으로 돌아갑니다.");
 	ImGui::Spacing();
 
-	if (!speed.TimeFound())
+	if (!g_TimeFound)
 		ImGui::TextDisabled("시간 컨트롤러(o_time_controller)가 아직 없습니다.");
 	else
 	{
-		ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", speed.Flow());		// 배속 1 에서 약 60 이었다(research/08)
+		ImGui::Text("게임 시간의 흐름: 실제 1초에 %.1f", g_FlowNow);		// 배속 1 에서 약 60 이었다(research/08)
 		ImGui::SameLine();
-		ImGui::TextDisabled("time_warp %s", Shortest(speed.Warp()).c_str());
+		ImGui::TextDisabled("time_warp %s", Shortest(g_WarpNow).c_str());
 	}
 
-	ImGui::BeginDisabled(!speed.TimeFound());
+	ImGui::BeginDisabled(!g_TimeFound);
 	for (const double factor : k_Factors)
 	{
 		const std::string label = "x" + Shortest(factor);
@@ -405,7 +453,7 @@ bool NlCheats::TakeChanges(std::set<std::string>& On, std::map<std::string, doub
 	{
 		if (!item.On)
 			continue;
-		if (item.Def->Kind != CheatKind::Number)
+		if (!HasNumber(item.Def->Kind))
 			On.insert(item.Def->Id);
 		else
 			Numbers[item.Def->Id] = item.Number;
@@ -435,10 +483,14 @@ bool NlCheats::Set(const std::string& Id, bool On)
 	std::lock_guard lock(g_Mutex);
 	for (Item& item : g_Items)
 	{
-		if (Id != item.Def->Id || item.Def->Kind == CheatKind::Number)
+		if (Id != item.Def->Id)
 			continue;
+		if (On && item.Def->Kind == CheatKind::Number)
+			return false;			// 써 넣을 값이 있어야 한다(SetNumber)
 		if (On && !item.On)
 		{
+			if (HasNumber(item.Def->Kind) && !(item.Number > 0))
+				item.Number = item.Def->On;		// 배율 항목: 표가 내놓는 배율
 			item.On = true;
 			item.Restore = false;
 			g_Changed = g_Dirty = true;
@@ -450,11 +502,39 @@ bool NlCheats::Set(const std::string& Id, bool On)
 	return false;
 }
 
+bool NlCheats::SetNumber(const std::string& Id, double Value)
+{
+	std::lock_guard lock(g_Mutex);
+	for (Item& item : g_Items)
+	{
+		if (Id != item.Def->Id || !HasNumber(item.Def->Kind) || !std::isfinite(Value))
+			continue;
+		item.Number = std::clamp(Value, item.Def->Min, item.Def->Max);
+		item.On = true;
+		item.Restore = false;
+		g_Changed = g_Dirty = true;
+		return true;
+	}
+	return false;
+}
+
+bool NlCheats::Factor(const std::string& Id, double& Out)
+{
+	std::lock_guard lock(g_Mutex);
+	for (const Item& item : g_Items)
+		if (Id == item.Def->Id && HasNumber(item.Def->Kind) && item.On)
+		{
+			Out = item.Number;
+			return true;
+		}
+	return false;
+}
+
 int NlCheats::ActiveCount()
 {
 	std::lock_guard lock(g_Mutex);
 	const auto on = std::count_if(g_Items.begin(), g_Items.end(), [](const Item& item) { return item.On; });
-	return static_cast<int>(on) + (Speed().Wanted() > 0 || Speed().Busy() ? 1 : 0);
+	return static_cast<int>(on);
 }
 
 void NlCheats::ReleaseAll()
@@ -463,6 +543,4 @@ void NlCheats::ReleaseAll()
 	for (Item& item : g_Items)
 		if (item.On)
 			TurnOff(item);
-	if (Speed().Wanted() > 0 || Speed().Busy())
-		Speed().Release();
 }

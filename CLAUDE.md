@@ -77,6 +77,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 배율은 `src/Tweaks.cpp`가 실행 중인 게임의 값에 써 넣는다(데이터 파일을 읽은 ds_map, `global.__gameplay_vars`, 지식의 구조체).
   대상은 번호가 아니라 키 이름으로 찾고, 처음 본 값을 바탕으로 기억해 배율을 곱한다. **써 넣은 값이 남는 것까지만 확인했다.**
   게임이 그 값을 따르는지는 항목마다 플레이해 봐야 안다. 배율은 `mods\Aurie\NlToyBox.settings.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
+  이 배율 7개는 제 영역의 패널 아래에 그린다(`core/CheatTable`의 `KnobPlaces`. 왼쪽 목록의 "배율" 영역은 없앴다).
 - 치트 메뉴(`src/Menu.cpp`)는 왼쪽 목록의 영역마다 패널을 그린다. 스펙은 `docs/superpowers/specs/2026-10-05-cheat-menu-design.md`.
   - 게임의 값은 주소(`src/core/AskPath`) 하나로 가리킨다: `global.a.b[3]`, `inst:o_debug.is_x`, `inst:o_building:1.generic`, `map:150@key#0`.
     읽고 쓰는 것은 `src/Access.cpp`가 한다. 없는 것을 만들지 않고, 쓴 뒤에는 다시 읽어 확인한다.
@@ -87,8 +88,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 켠 치트와 즐겨찾기·잠금은 `mods\Aurie\NlToyBox.cheats.txt`에 저장된다(사용자의 설정이다. 도구가 지우지 않는다).
     파일에서 불러온 잠금은 꺼진 채로 시작한다(`inst:<오브젝트>:<n>`의 n 이 실행마다 다른 인스턴스일 수 있다).
   - 게임 속도는 게임의 함수로 건다: `inst:o_time_controller.__set_warp(배속)`(`research/08`. 24 로 불러 흐름이 약 24배가 되는 것을 쟀다).
-    `set_time_speed(번호)`는 게임의 단추가 쓰는 길이고 일시정지를 푼다. `src/core/SpeedControl`은 흐름을 재서 보여 주는 데만 쓴다
-    (후보 값을 써 보던 시험 부분은 창에서 뺐다. 정리는 3나-2).
+    `set_time_speed(번호)`는 게임의 단추가 쓰는 길이고 일시정지를 푼다. 사용자가 게임의 속도 단추를 누르면 건 배속은 바로 풀린다.
+    흐름은 `src/Cheats.cpp`가 `core/Rate`로 재서 보여 준다(후보 값을 써 보던 속도 시험은 3나-3 에서 지웠다).
   - 표의 항목이 없어도 제 패널이 있는 영역은 `AreaInfo::Panel`을 참으로 둔다. 아니면 왼쪽 목록에서 꺼진다(경제가 그랬다. `research/08`).
 - 경제 패널(`src/Economy.cpp`)은 금화와 영지 창고의 자원을 게임의 함수로 바꾼다(`research/07`, `08`. 화면까지 확인했다).
   - 금화: `gml_Script_budget_money_change(변화량)`. 자원: `…__province.__warehouse.change(자원 번호, 변화량)`(정적 메서드. `NlAccess::CallMethod`가 창고에 묶어 부른다).
@@ -101,6 +102,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.
   - 바꾼 값은 결과 자리(`Result`)에 두고 그것을 돌려준다. 원래 함수를 건너뛰는 것(`skip`)은 들어올 때의 `Result`가 `undefined`인 것을 표본에서 본 함수에만.
   - 자주 불리는 함수(`is_under_upgrade`: 초당 수천 번)에는 기록을 걸어 두지 않는다.
+  - **수를 돌려주는 함수에는 배율을 곱할 수 있다**(`override <대상> x:<배율> [whole]`, 치트 표의 `HookScale`. `research/10`). 게임의 자료를 쓰지 않으므로
+    세이브에 남는 것이 없고 되돌릴 값도 필요 없다. 0 이하의 값과 수가 아닌 값은 그대로 지나간다(`NlCore::ScaleResult`). 가격처럼 정수여야 하는 값에는 `whole`.
+  - **함수 하나를 바꾼 뒤에는 그 값을 쓰는 다른 길도 따르는지 본다.** 창고 용량을 돌려주는 함수만 바꾸자 HUD 는 바뀌었지만 자정의 부패 처리는 원래 용량으로 깎았다.
+    그럴 때는 그 함수가 읽는 자료(창고 종류의 용량)를 고친다.
   - 치트 표의 `Hook` 항목은 켠 것과 실제로 걸린 것을 틱마다 견준다(`NlCore::ChooseHookStep`). 원격 `unoverride`로 꺼도 체크가 켜져 있으면 다시 걸린다.
     끌 때는 `cheat <Id> off`. 걸다 실패한 함수에는 그 실행에서 다시 걸지 않는다(`NlCore::PickHookSlot`. 실패한 자리는 다시 쓰지 않는다).
   - **확인 전(`Verified = false`)의 `Hook`·`Custom` 항목은 켠 채 저장돼 있어도 꺼진 채로 시작한다**(`KeepKnown`). 창을 열지도 않았는데 판정이 바뀌거나 값이 고쳐 쓰이지 않게.
@@ -109,6 +114,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   전역 탐색으로는 보이지 않는다(`find … in=ds`). 건설비는 `…__construction_cost.levels[등급]`(`money`, `resources.__array_of_resource_quantity[39]`)이고
   업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`가 0 으로 쓰고 `core/CostBook`의 값으로 되돌린다.
   함수가 돌려준 구조체 안은 `NlAccess::Follow`로 보고 `NlAccess::SetNumber`로 쓴다(주소의 뿌리가 없다. 쓴 뒤 다시 읽어 확인한다).
+  - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Production.cpp`에 일(`Job`) 하나를 더한다: 대상을 넘기는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목.
+    한 자리에 쓸 값은 `NlCore::PlanValue`가 정한다(처음 본 값이 바탕. 써 둔 값을 다시 봐도 두 번 곱하지 않는다). 열쇠는 번호가 아니라 이름으로 삼는다.
+  - 창고 종류의 용량은 `inst:o_data.__building_warehouse_data.__generic_warehouses.<종류>.__capacity_in_categories.<갈래>.capacity`, 조리법은 건물 종류의
+    `__production.__map_of_production`(ds_map: 만드는 자원 → 재료의 배열과 만들어지는 수)이다(`research/10`).
+  - **세이브 파일(`%LOCALAPPDATA%\Strategy\saves\*.norland`)은 머리(버전, 이름) 뒤가 평문 JSON 이다.** 고쳐 쓰는 자료가 세이브에 남는지는 그 열쇠가 파일에 있는지로 본다(읽기만 한다).
+    기본 가격·창고 종류의 용량·조리법·생산 비용·건설비의 열쇠는 없었다(시장 깊이와 포화도는 있다).
   - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
@@ -117,7 +128,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
-  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`, `record`·`records`, `call`·`method`.
+  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
+  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`, `cheat <Id> on|off|<수>`.
   잰 것은 `research/07-remote.md`.
   - 게임 화면의 값을 찾는 일은 사용자에게 넘기지 않는다. 실행 묶음을 켜고 `ask.ps1`로 찾는다. 사용자는 새 게임을 시작해 두기만 한다.
   - **게임 스크립트는 `gml_Script_` 이름으로만 부르고 훅을 건다.** 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(`NlCore::ScriptRoutineName`).
@@ -133,6 +145,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `NlAccess::CallMethod`가 그것을 가진 구조체나 인스턴스(주소의 부모)에 묶어 부른다(`method`, `method_call`). 묶을 곳이 없으면 부르지 않는다.
     부르기 전에 `about <주소>`로 무엇이 어떻게 불릴지 본다.
   - 한 번 건 훅은 떼지 않는다(`src/Recorder.cpp`. 한 실행에 64개까지). 훅 안에서는 빌트인을 부르지 않는다.
+    후보 40개에 한꺼번에 기록을 걸면 한 실행에 자리가 바닥난다(`no free hook slot`). 고른 것에만 건다. 이미 건 함수에 `record`를 다시 보내면 표본만 새로 받는다(자리를 더 쓰지 않는다).
+  - 게임이 인자 없이 부르는 것을 기록한 함수는 `method`로 직접 불러 그 자리에서 결과를 볼 수 있다(부패 처리 `spoilage_process`를 불러 용량이 먹는지 봤다).
   - 묻는 파일은 이름을 바꿔 집은 것만 실행한다(`NlCore::TakeRemoteRequest`). 같은 요청을 두 번 실행하지 않는다.
   - 실행 묶음이 죽으면 `*.kept`와 `NlToyBox.session.txt`(켤 때 없던 설정 파일의 표식)가 남는다. `session.ps1 -Action stop`이 되돌린다.
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.

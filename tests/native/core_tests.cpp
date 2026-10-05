@@ -16,8 +16,6 @@
 #include "core/Request.hpp"
 #include "core/Retry.hpp"
 #include "core/Schedule.hpp"
-#include "core/SpeedControl.hpp"
-#include "core/SpeedTrial.hpp"
 #include "core/Text.hpp"
 
 #include <cmath>
@@ -73,137 +71,6 @@ namespace
 		return ParseRequest(in);
 	}
 
-	// 가짜 게임: 손잡이 넷 가운데 Live 번이 속도를 정한다(값이 0 보다 클 때. 아니면 배율 1). 흐름 = 57.4 × 배율.
-	struct FakeGame
-	{
-		double Values[4] = { 1, 1, -4, 1 };
-		int Live = 0;					// -1 이면 아무 손잡이도 듣지 않는다
-		bool Overwrites = false;		// 쓰지 않는 틱마다 게임이 Live 손잡이를 Reset 으로 되돌린다
-		double Reset = 1;
-		bool Unreadable[4] = {};
-		int PauseAtTick = -1;			// 이 틱부터 흐름이 0 이다
-
-		double Flow(int Tick) const
-		{
-			if (PauseAtTick >= 0 && Tick >= PauseAtTick)
-				return 0;
-			return 57.4 * (Live >= 0 && Values[Live] > 0 ? Values[Live] : 1);
-		}
-	};
-
-	// 시험을 끝까지 돌린다(0.1초 간격). 바깥이 할 일을 가짜 게임에 그대로 한다.
-	void RunTrial(SpeedTrial& Trial, FakeGame& Game, double Warp = 1)
-	{
-		if (!Trial.Start(Warp))
-			return;
-		double now = 10;
-		for (int tick = 1; tick <= 400 && Trial.Running(); tick++)
-		{
-			now += 0.1;
-			const int candidate = Trial.Candidate();
-			const SpeedStep step = Trial.Tick(now, !Game.Unreadable[candidate], Game.Values[candidate], Game.Flow(tick));
-			if (step.What != SpeedStep::Kind::None)
-				Game.Values[step.Candidate] = step.Value;
-			else if (Game.Overwrites && Game.Live >= 0)
-				Game.Values[Game.Live] = Game.Reset;
-		}
-	}
-
-	// 가짜 세계: 주소 → 값. 게임 시간 "t" 는 Advance 가 흘린다. 속도는 Live 주소의 값이 정한다(0 보다 클 때. 아니면 1).
-	struct FakeWorld
-	{
-		std::map<std::string, double> Values;
-		std::string Live = "new";			// "variants" 면 variants[index]. "none" 이면 아무 값도 듣지 않는다
-		bool Paused = false;
-		double OverwriteEvery = 0;			// 0 보다 크면 게임이 이 간격으로 Live 의 값을 1 로 되돌린다
-		double SinceOverwrite = 0;
-		int Writes = 0;
-		std::vector<std::string> Lines;
-
-		FakeWorld() { Create(); }
-
-		// 시간 컨트롤러가 (다시) 만들어졌다.
-		void Create()
-		{
-			Values = { { "t", 1000 }, { "warp", 1 }, { "new", 1 }, { "custom", -4 }, { "index", 0 },
-				{ "variants[0]", 1 }, { "variants[1]", 3 }, { "variants[2]", 6 }, { "variants[3]", 12 } };
-		}
-
-		std::string LiveKey() const
-		{
-			if (Live != "variants")
-				return Live;
-			const auto index = Values.find("index");
-			return index == Values.end() ? "none" : "variants[" + Shortest(index->second) + "]";
-		}
-
-		void Advance(double Seconds)
-		{
-			const auto live = Values.find(LiveKey());
-			const double factor = live != Values.end() && live->second > 0 ? live->second : 1;
-			if (!Paused && Values.count("t"))
-				Values["t"] += 57.4 * factor * Seconds;
-			SinceOverwrite += Seconds;
-			if (OverwriteEvery > 0 && SinceOverwrite >= OverwriteEvery && live != Values.end())
-			{
-				SinceOverwrite = 0;
-				live->second = 1;
-			}
-		}
-
-		SpeedIo Io()
-		{
-			return {
-				[this](const std::string& path, double& out) {
-					const auto it = Values.find(path);
-					if (it == Values.end())
-						return false;
-					out = it->second;
-					return true;
-				},
-				[this](const std::string& path, double value, std::string& why) {
-					const auto it = Values.find(path);
-					if (it == Values.end())
-					{
-						why = "no such value";
-						return false;
-					}
-					it->second = value;
-					Writes++;
-					return true;
-				},
-				[this](const std::string& line) { Lines.push_back(line); },
-			};
-		}
-	};
-
-	SpeedPaths FakePaths()
-	{
-		return { "t", "warp", { { "new", "new", "", "" }, { "warp", "warp", "", "" }, { "custom", "custom", "", "" },
-			{ "variants", "", "variants", "index" } } };
-	}
-
-	// 세계를 Seconds 초 흘린다(5ms 간격). 그 사이 속도 조절의 틱을 돌린다.
-	void RunWorld(FakeWorld& World, SpeedControl& Control, double& Now, double Seconds, bool Watching = true)
-	{
-		const int steps = static_cast<int>(Seconds / 0.005 + 0.5);
-		for (int i = 0; i < steps; i++)
-		{
-			Now += 0.005;
-			World.Advance(0.005);
-			Control.Tick(Now, Watching);
-		}
-	}
-
-	// 가짜 세계의 손잡이들이 처음 값 그대로인가.
-	bool Untouched(const FakeWorld& World)
-	{
-		FakeWorld fresh;
-		for (const char* key : { "warp", "new", "custom", "variants[0]", "variants[1]", "variants[2]", "variants[3]" })
-			if (World.Values.at(key) != fresh.Values.at(key))
-				return false;
-		return true;
-	}
 }
 
 int main(int argc, char** argv)
@@ -629,6 +496,13 @@ int main(int argc, char** argv)
 		CHECK(!book.Remember("altar", 1, 3, std::numeric_limits<double>::infinity()));
 		CHECK(book.Remember("hut_6x10", 2, 32, 5) && book.Remember("hut_6x10", 2, 1, 10));
 		CHECK(book.Size() == 3);
+		// 배율을 곱할 때는 지금 값이 아니라 처음 본 값(바탕)에 곱한다.
+		double base = 0;
+		CHECK(book.Find("hut_6x10", 2, 32, base) && base == 5);
+		size_t index = 99;
+		CHECK(book.Find("hut_6x10", 2, 1, base, &index) && base == 10 && index == 2 && book.Entries()[index].Slot == 1);
+		base = 5;
+		CHECK(!book.Find("hut_6x10", 2, 33, base) && !book.Find("altar", 1, 2, base) && base == 5);
 
 		book.Forget({ 1, 0, 1 });							// 되돌린 자리만 잊는다. 못 되돌린 자리는 남아 다음에 다시 되돌린다
 		CHECK(book.Size() == 1 && book.Entries()[0].Building == "hut_6x10" && book.Entries()[0].Slot == 32 && book.Entries()[0].Value == 5);
@@ -638,6 +512,33 @@ int main(int argc, char** argv)
 		CHECK(book.Size() == 1);
 		book.Forget({ 1 });
 		CHECK(book.Empty());
+	});
+
+	Test("자료의 배율: 처음 본 값에 곱하고, 다시 훑어도 두 번 곱하지 않는다", [] {
+		CostBook book;
+		double wanted = -1;
+		size_t index = 99;
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 300, 10, false, wanted, index) && wanted == 3000 && index == 0);
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 3000, 10, false, wanted, index) && wanted == 3000);		// 써 둔 값을 다시 봤다. 쓸 것이 없다
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 3000, 2, false, wanted, index) && wanted == 600);			// 켠 채 배율을 바꿨다: 바탕에 곱한다
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 300, 2, false, wanted, index) && wanted == 600);			// 게임이 자료를 다시 만들었다(같은 열쇠, 원래 값)
+		CHECK(PlanValue(book, "storage.raw", 0, -1, 600, 1, false, wanted, index) && wanted == 300 && index == 0);	// 끄면 바탕으로 되돌린다
+		CHECK(book.Size() == 1);
+
+		// 되돌리는 중에 처음 보는 자리는 건드린 적이 없다. 0 이거나 유한하지 않은 값은 장부가 받지 않는다(쓰지 않는다).
+		CHECK(!PlanValue(book, "hall.raw", 0, -1, 300, 1, false, wanted, index));
+		CHECK(!PlanValue(book, "default.raw", 0, -1, 0, 10, false, wanted, index));
+		CHECK(!PlanValue(book, "x.y", 0, -1, std::numeric_limits<double>::infinity(), 10, false, wanted, index));
+		CHECK(book.Size() == 1);
+
+		// 0 으로 쓰는 항목(생산 재료 없음). 0 이 된 자리도 장부로 알아보고, 끄면 되살린다.
+		CHECK(PlanValue(book, "workshop", 14, 4, 1, 0, true, wanted, index) && wanted == 0 && index == 1);
+		CHECK(PlanValue(book, "workshop", 14, 4, 0, 0, true, wanted, index) && wanted == 0 && index == 1);
+		CHECK(PlanValue(book, "workshop", 14, 4, 0, 1, true, wanted, index) && wanted == 1 && index == 1);
+
+		// 정수는 정수로 남는다(만들어지는 수 1 에 2.5 를 곱하면 3. 0 이 되지 않는다).
+		CHECK(PlanValue(book, "mine", 4, -1, 1, 2.5, false, wanted, index) && wanted == 3);
+		CHECK(PlanValue(book, "mine", 4, -1, 3, 0.1, false, wanted, index) && wanted == 1);
 	});
 
 	Test("다시 해 보기: 실패가 이어지면 간격을 두 배씩 늘리고 성공하면 처음으로 돌아간다", [] {
@@ -665,6 +566,35 @@ int main(int argc, char** argv)
 		CHECK(ChooseHookStep(false, true, false) == HookStep::Remove);		// 걸었다는 표시를 지운다
 		CHECK(ChooseHookStep(false, false, false) == HookStep::None);
 		CHECK(ChooseHookStep(false, false, true) == HookStep::None);		// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
+	});
+
+	Test("훅 항목: 배율이 바뀌면 다시 걸고, 다시 걸다 실패해도 앞서 건 것을 끌 수 있다", [] {
+		CHECK(HookCurrent(true, true, false, 0, 0));					// 고정값 훅: 걸었으면 그대로다
+		CHECK(HookCurrent(true, true, true, 0.5, 0.5));
+		CHECK(!HookCurrent(true, true, true, 0.5, 0.3));				// 배율이 바뀌었다. 다시 건다
+		CHECK(!HookCurrent(true, false, true, 0.5, 0.5));
+		CHECK(HookCurrent(false, true, true, 0.5, 0.3));				// 끄는 중에는 배율을 견주지 않는다(걸어 둔 것을 끈다)
+
+		// 0.5 로 걸어 둔 채 0.3 으로 바꿨는데 다시 걸기에 실패했다(메뉴로 나가 주소가 풀리지 않는다). 앞서 건 바꾸기는 살아 있다.
+		bool applied = true;
+		const bool live = true;
+		CHECK(ChooseHookStep(true, HookCurrent(true, applied, true, 0.5, 0.3), live) == HookStep::Apply);
+		applied = AppliedAfterFailure(live);
+		CHECK(applied);		// "걸었다"로 남는다. 그래야 끌 때 그 바꾸기를 이름으로 끈다(주인 없는 바꾸기가 남지 않는다)
+		CHECK(ChooseHookStep(false, HookCurrent(false, applied, true, 0.5, 0.3), live) == HookStep::Remove);
+		CHECK(!AppliedAfterFailure(false));								// 살아 있는 것이 없으면 걸지 않은 것이다
+	});
+
+	Test("훅의 배율: 원래 값에 곱하고, 정수로 남길지 고른다", [] {
+		CHECK(ScaleResult(8, 0.1, true) == 1);					// 가격: 정수는 정수로 남고 0 이 되지 않는다
+		CHECK(ScaleResult(100, 0.1, true) == 10 && ScaleResult(3600, 0.1, true) == 360 && ScaleResult(250, 100, true) == 25000);
+		CHECK(ScaleResult(1, 5, false) == 5 && ScaleResult(1.2, 5, false) == 6);
+		CHECK(ScaleResult(1, 0.5, false) == 0.5 && ScaleResult(1, 0.5, true) == 1);		// 계수는 그대로 곱한다. 정수로 남기면 1 아래로 내려가지 않는다
+		// 0 이하의 값은 곱하지 않는다: "없음"을 0 이나 음수로 돌려주는 함수의 표식을 깨지 않는다.
+		CHECK(ScaleResult(0, 10, true) == 0 && ScaleResult(-4, 2, true) == -4 && ScaleResult(-1, 0.5, false) == -1);
+		const double nan = std::numeric_limits<double>::quiet_NaN();
+		CHECK(ScaleResult(5, nan, true) == 5 && ScaleResult(5, 0, true) == 5 && ScaleResult(5, -1, false) == 5);		// 쓸 수 없는 배율이면 원래 값 그대로
+		CHECK(ScaleResult(5, std::numeric_limits<double>::infinity(), false) == 5);
 	});
 
 	Test("훅의 자리: 걸린 대상은 그 자리, 걸다 실패한 대상에는 새 자리를 주지 않는다", [] {
@@ -731,21 +661,37 @@ int main(int argc, char** argv)
 		for (const Cheat& cheat : Cheats())
 		{
 			const AskPath path = ParseAskPath(cheat.Path);
-			if (!path.Error.empty() || path.Steps.empty())
+			if ((!path.Error.empty() || path.Steps.empty()) && !(IsHook(cheat.Kind) && std::string(cheat.Path).rfind("gml_Script_", 0) == 0))
 			{
 				std::printf("  FAIL %s: %s (%s)\n", cheat.Id, cheat.Path, path.Error.c_str());
 				g_Failed++;
 			}
-			CHECK(path.Root == "global" || path.Root == "inst");		// 표에는 ds 번호를 적지 않는다
+			// 표에는 ds 번호를 적지 않는다. 훅 항목은 이름 있는 스크립트를 이름으로 적을 수 있다(그 이름은 이 게임 버전의 것이다).
+			const bool script = IsHook(cheat.Kind) && std::string(cheat.Path).rfind("gml_Script_", 0) == 0;
+			CHECK(script || path.Root == "global" || path.Root == "inst");
 			CHECK(ids.insert(cheat.Id).second);
 			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
 			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
-			if (cheat.Kind == CheatKind::Number)
+			if (cheat.Kind == CheatKind::HookScale || cheat.Kind == CheatKind::CustomScale)		// On: 창이 처음 내놓는 배율. 0 보다 크고 범위 안이다
+				CHECK(cheat.Min > 0 && cheat.On >= cheat.Min && cheat.On <= cheat.Max && cheat.On != 1);
+			if (HasNumber(cheat.Kind))
 				CHECK(cheat.Min < cheat.Max);
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 34);
+		CHECK(Cheats().size() == 42);
+		// 3나-3: 거래·생산·창고 용량(research/10). 게임의 함수가 돌려주는 수에 배율을 곱하는 훅(HookScale)과, 모듈이 자료를 돌며 배율을 쓰는 항목(CustomScale).
+		for (const char* id : { "buy_price", "sell_price", "market_depth", "production_time", "worker_performance" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::HookScale);
+		for (const char* id : { "storage_capacity", "production_amount" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale);
+		CHECK(FindCheat("production_free") && FindCheat("production_free")->Kind == CheatKind::Custom);
+		CHECK(FindCheat("buy_price") && FindCheat("buy_price")->Where == Area::Economy && FindCheat("buy_price")->Max <= 1);		// 싸게 산다
+		CHECK(FindCheat("sell_price") && FindCheat("sell_price")->Min >= 1);														// 비싸게 판다
+		CHECK(FindCheat("production_time") && FindCheat("production_time")->Where == Area::Build && FindCheat("production_time")->Max <= 1);
+		CHECK(HasNumber(CheatKind::Number) && HasNumber(CheatKind::HookScale) && HasNumber(CheatKind::CustomScale));
+		CHECK(!HasNumber(CheatKind::Hook) && !HasNumber(CheatKind::Toggle) && !HasNumber(CheatKind::Custom));
+		CHECK(IsHook(CheatKind::Hook) && IsHook(CheatKind::HookScale) && !IsHook(CheatKind::Custom) && !IsHook(CheatKind::CustomScale) && !IsHook(CheatKind::Number));
 		// 건설 조건과 건설비(research/09). 조건은 게임의 함수가 돌려주는 값을 바꾸는 훅이고, 비용은 모듈이 건물 종류를 돌며 0 으로 쓴다.
 		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
 		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
@@ -771,17 +717,36 @@ int main(int argc, char** argv)
 			CHECK(&GetArea(area.Id) == &area);
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
-		CHECK(Areas().size() == 17);
+		CHECK(Areas().size() == 16);
 		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
 		for (const AreaInfo& area : Areas())
 		{
-			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time || area.Id == Area::Tweaks;
+			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time;
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
+		CHECK(FindArea("tweaks") == nullptr);		// "배율" 영역은 없어졌다. 배율 7개는 제 영역의 패널에 그린다(아래)
 		CHECK_STR(GetArea(Area::Time).Key, "time");
 		for (const Cheat& cheat : Cheats())
 			CHECK(FindArea(GetArea(cheat.Where).Key) != nullptr);
+	});
+
+	Test("치트 표: 배율 7개는 제 영역에 놓인다", [] {
+		// 이름은 NlToyBox.settings.txt 의 것 그대로다(사용자의 설정 파일이 그대로 읽힌다).
+		const std::map<std::string, Area> want = {
+			{ "building_cost", Area::Build }, { "start_resources", Area::Economy }, { "book_exp", Area::Knowledge }, { "bribe_cost", Area::Diplomacy },
+			{ "free_lord_stay", Area::Lord }, { "church_capacity", Area::Religion }, { "tavern_capacity", Area::People },
+		};
+		CHECK(KnobPlaces().size() == want.size());
+		for (const KnobPlace& place : KnobPlaces())
+		{
+			const auto it = want.find(place.Id);
+			CHECK(it != want.end());
+			if (it != want.end())
+				CHECK(it->second == place.Where && KnobArea(place.Id) == place.Where);
+		}
+		CHECK(HasKnobs(Area::Build) && HasKnobs(Area::Knowledge) && HasKnobs(Area::Lord) && !HasKnobs(Area::Explorer) && !HasKnobs(Area::Time) && !HasKnobs(Area::Army));
+		CHECK(KnobArea("no_such_knob") == Area::Explorer);		// 모르는 이름: 어느 영역의 패널에도 그리지 않는다(탐색기에는 배율이 없다)
 	});
 
 	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {
@@ -805,6 +770,26 @@ int main(int argc, char** argv)
 		// 확인한 훅·모듈 항목은 남고(build_any, build_free, instant_upgrade) 확인 전의 것(build_marks)은 빠진다.
 		// 값을 쓰는 스위치(Toggle: build_all)는 확인 전이어도 그대로다.
 		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free", "instant_upgrade", "build_all" }));
+
+		// 수가 있는 훅·모듈 항목(배율)은 Numbers 에 든다. 수는 범위 안으로 당기고, 확인 전의 것은 버린다(꺼진 채로 시작한다).
+		CheatState scales;
+		scales.On = { "production_time", "storage_capacity" };				// 수가 있는 항목은 On 에 들지 않는다
+		scales.Numbers = { { "production_time", 0.0000001 }, { "storage_capacity", 5000000 }, { "rest_decrease", 3 }, { "build_any", 1 } };
+		const CheatState kept_scales = KeepKnown(scales);
+		CHECK(kept_scales.On.empty());
+		CHECK(kept_scales.Numbers.count("rest_decrease") == 1 && kept_scales.Numbers.count("build_any") == 0);
+		// 창고 용량 배율은 플레이에서 확인했다(research/10): 남고, 범위의 끝(Max)으로 당겨진다.
+		CHECK(FindCheat("storage_capacity")->Verified && kept_scales.Numbers.count("storage_capacity") == 1
+			&& kept_scales.Numbers.at("storage_capacity") == FindCheat("storage_capacity")->Max);
+		for (const char* id : { "production_time", "storage_capacity" })
+		{
+			const Cheat* cheat = FindCheat(id);
+			CHECK(cheat != nullptr);
+			if (cheat)
+				CHECK(kept_scales.Numbers.count(id) == (cheat->Verified ? 1u : 0u));
+			if (cheat && cheat->Verified)
+				CHECK(kept_scales.Numbers.at(id) >= cheat->Min && kept_scales.Numbers.at(id) <= cheat->Max);
+		}
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
@@ -846,248 +831,6 @@ int main(int argc, char** argv)
 		CHECK(!RateMatches(57.4, 0, 2));
 		CHECK(!RateMatches(0, 100, 2));					// 누르기 전에 멈춰 있었다
 		CHECK(RateMatches(57.4, 14.35, 0.25));
-	});
-
-	Test("속도 시험: 첫 후보가 들으면 고르고, 쓰기를 멈춰도 남으면 한 번 쓰기다", [] {
-		FakeGame game;
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.Sticky());
-		CHECK(trial.SavedOld() == 1 && trial.ProbeWarp() == 2 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
-		CHECK(trial.Attempts().size() == 1 && trial.Attempts()[0].Matched);
-	});
-
-	Test("속도 시험: 듣지 않는 후보는 원래 값으로 되돌리고 다음으로 간다", [] {
-		FakeGame game;
-		game.Live = 2;					// __debug_custom_wrap 의 자리. 원래 값은 -4 다
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 2 && trial.SavedOld() == -4);
-		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[3] == 1);
-		CHECK(trial.Attempts().size() == 3 && !trial.Attempts()[0].Matched && !trial.Attempts()[1].Matched && trial.Attempts()[2].Matched);
-		CHECK(trial.Attempts()[0].Readable && trial.Attempts()[0].Old == 1);
-	});
-
-	Test("속도 시험: 게임이 값을 되돌리면 계속 쓰기다", [] {
-		FakeGame game;
-		game.Live = 1;
-		game.Overwrites = true;
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1 && !trial.Sticky());
-	});
-
-	Test("속도 시험: 아무 후보도 듣지 않으면 실패하고 모두 원래 값이다", [] {
-		FakeGame game;
-		game.Live = -1;
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Failed && trial.Candidate() == -1 && !trial.Running());
-		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[2] == -4 && game.Values[3] == 1);
-		CHECK(trial.Attempts().size() == 4);
-	});
-
-	Test("속도 시험: 읽을 수 없는 후보는 건드리지 않는다", [] {
-		FakeGame game;
-		game.Live = 1;
-		game.Unreadable[0] = true;
-		game.Values[0] = 123;			// 건드렸다면 바뀐다
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 1);
-		CHECK(game.Values[0] == 123 && !trial.Attempts()[0].Readable && !trial.Attempts()[0].Matched);
-	});
-
-	Test("속도 시험: 지금 속도가 1 이 아니어도 고른다", [] {
-		FakeGame game;
-		game.Values[0] = 2;				// 게임이 2배속이다
-		game.Values[1] = 2;
-		SpeedTrial trial(4);
-		RunTrial(trial, game, 2);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0 && trial.SavedOld() == 2);
-		CHECK(trial.ProbeWarp() == 4 && std::abs(trial.UnitRate() - 57.4) < 1e-9);
-	});
-
-	Test("속도 시험: 시험 중에 멈추면 그만두고 원래 값을 되돌린다", [] {
-		FakeGame game;
-		game.PauseAtTick = 25;			// 첫 후보를 쓰는 도중에 일시정지(기준을 재는 1.2초가 지난 뒤)
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Aborted && !trial.Running());
-		CHECK(game.Values[0] == 1 && trial.Attempts().empty());
-
-		game.PauseAtTick = -1;			// 풀고 다시 누르면 된다
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Done && trial.Candidate() == 0);
-	});
-
-	Test("속도 시험: 기준은 시작한 뒤에 잰다. 그동안 멈춰 있으면 아무것도 쓰지 않고 그만둔다", [] {
-		FakeGame game;
-		game.PauseAtTick = 0;			// 처음부터 멈춰 있다
-		SpeedTrial trial(4);
-		RunTrial(trial, game);
-		CHECK(trial.State() == SpeedTrial::Phase::Aborted && trial.Attempts().empty());
-		CHECK(game.Values[0] == 1 && game.Values[1] == 1 && game.Values[2] == -4 && game.Values[3] == 1);
-
-		SpeedTrial fresh(4);
-		CHECK(fresh.UnitRate() == 0);				// 재기 전에는 기준이 없다
-	});
-
-	Test("속도 시험: 배율이 0 이하이면 시작하지 않고, 그만두면 처음으로 돌아간다", [] {
-		SpeedTrial trial(4);
-		CHECK(!trial.Start(0) && !trial.Start(-1) && trial.State() == SpeedTrial::Phase::Idle);
-		CHECK(trial.Start(1) && trial.Running() && !trial.Start(1));		// 시험 중에는 다시 시작하지 않는다
-		trial.Cancel();
-		CHECK(!trial.Running() && trial.State() == SpeedTrial::Phase::Idle && trial.Candidate() == -1);
-		CHECK(trial.Start(1));
-	});
-
-	Test("속도: 첫 손잡이가 들으면 고르고 누른 배율을 건다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		RunWorld(world, control, now, 1);
-		control.Press(5);
-		RunWorld(world, control, now, 8);
-		CHECK(control.Chosen() && control.Sticky() && !control.Busy() && control.Wanted() == 5);
-		CHECK_STR(control.ChosenLabel(), "new");
-		CHECK(world.Values["new"] == 5 && world.Values["warp"] == 1 && world.Values["custom"] == -4 && world.Values["variants[0]"] == 1);
-		CHECK(std::abs(control.UnitRate() - 57.4) < 1 && std::abs(control.Flow() - 57.4 * 5) < 10);
-	});
-
-	Test("속도: 일시정지를 푼 직후에 눌러도 고른다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		world.Paused = true;
-		RunWorld(world, control, now, 3);
-		world.Paused = false;			// 흐름의 창에는 멈춰 있던 표본이 남아 있다
-		control.Press(5);
-		RunWorld(world, control, now, 8);
-		CHECK(control.Chosen() && control.Wanted() == 5 && world.Values["new"] == 5);
-		CHECK(std::abs(control.UnitRate() - 57.4) < 1);
-	});
-
-	Test("속도: 창을 닫아 두었다가 열고 바로 눌러도 고른다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		RunWorld(world, control, now, 1);
-		world.Paused = true;
-		RunWorld(world, control, now, 30, false);		// 창이 닫혀 있다: 흐름을 재지 않는다
-		world.Paused = false;
-		RunWorld(world, control, now, 0.2);
-		control.Press(2);
-		RunWorld(world, control, now, 8);
-		CHECK(control.Chosen() && control.Wanted() == 2 && world.Values["new"] == 2);
-		CHECK(std::abs(control.UnitRate() - 57.4) < 1);
-	});
-
-	Test("속도: 멈춰 있으면 아무것도 쓰지 않고 알린다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		world.Paused = true;
-		world.Values["warp"] = 0;		// 메뉴: 배율이 0 이다
-		control.Press(5);
-		RunWorld(world, control, now, 2);
-		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && world.Writes == 0 && !control.Note().empty());
-
-		world.Values["warp"] = 1;		// 게임 화면의 일시정지: 배율은 1 인데 시간이 흐르지 않는다
-		control.Press(5);
-		RunWorld(world, control, now, 3);
-		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && world.Writes == 0 && !control.Note().empty());
-	});
-
-	Test("속도: 게임에 맡기면 원래 값으로 되돌리고, 다시 누르면 시험 없이 건다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 8);
-		control.Release();
-		RunWorld(world, control, now, 0.5);
-		CHECK(control.Wanted() == 0 && Untouched(world) && control.Chosen());
-
-		control.Press(2);
-		RunWorld(world, control, now, 0.3);
-		CHECK(!control.Busy() && control.Wanted() == 2 && world.Values["new"] == 2);
-	});
-
-	Test("속도: 자리가 바뀌는 손잡이는 쓴 자리를 되돌리고 새 자리에 건다", [] {
-		FakeWorld world;
-		world.Live = "variants";
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 12);
-		CHECK(control.Chosen() && world.Values["variants[0]"] == 5);
-		CHECK_STR(control.ChosenLabel(), "variants");
-		CHECK(world.Values["new"] == 1 && world.Values["warp"] == 1 && world.Values["custom"] == -4);		// 앞의 셋은 되돌렸다
-
-		world.Values["index"] = 2;		// 사용자가 게임의 속도 단추를 눌렀다
-		RunWorld(world, control, now, 0.5);
-		CHECK(world.Values["variants[0]"] == 1 && world.Values["variants[2]"] == 5);
-
-		control.Release();
-		RunWorld(world, control, now, 0.5);
-		CHECK(Untouched(world));
-	});
-
-	Test("속도: 시험 중에 끄면 그만두고 되돌린다. 나중에 걸리지 않는다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 2);
-		CHECK(control.Busy() && world.Values["new"] == 2);		// 첫 후보에 시험 값을 쓰는 중이다
-		control.Release();
-		RunWorld(world, control, now, 0.5);
-		CHECK(!control.Busy() && control.Wanted() == 0 && Untouched(world));
-		RunWorld(world, control, now, 10);
-		CHECK(control.Wanted() == 0 && Untouched(world) && !control.Chosen());
-	});
-
-	Test("속도: 시간 컨트롤러가 사라졌다 돌아오면 다시 건다", [] {
-		FakeWorld world;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 8);
-		CHECK(world.Values["new"] == 5);
-
-		world.Values.clear();			// 새 게임을 만드는 중: 컨트롤러가 없다
-		RunWorld(world, control, now, 1);
-		CHECK(!control.TimeFound() && control.Wanted() == 5);
-		world.Create();
-		RunWorld(world, control, now, 1);
-		CHECK(control.TimeFound() && world.Values["new"] == 5 && control.Wanted() == 5);
-
-		control.Release();				// 돌아온 뒤의 원래 값(1)으로 되돌린다
-		RunWorld(world, control, now, 0.5);
-		CHECK(Untouched(world));
-	});
-
-	Test("속도: 게임이 값을 되돌리면 계속 써 넣는다", [] {
-		FakeWorld world;
-		world.OverwriteEvery = 0.1;
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 9);
-		CHECK(control.Chosen() && !control.Sticky() && control.Wanted() == 5);
-		RunWorld(world, control, now, 2);
-		CHECK(control.Flow() > 57.4 * 4);		// 0.1초마다 되돌려져도 대부분의 시간은 x5 다
-	});
-
-	Test("속도: 아무 손잡이도 듣지 않으면 실패하고 모두 원래 값이다", [] {
-		FakeWorld world;
-		world.Live = "none";
-		SpeedControl control(FakePaths(), world.Io());
-		double now = 0;
-		control.Press(5);
-		RunWorld(world, control, now, 14);
-		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && Untouched(world) && !control.Note().empty());
 	});
 
 	Test("원격 명령: 줄을 읽는다", [] {
@@ -1151,6 +894,29 @@ int main(int argc, char** argv)
 				g_Failed++;
 			}
 		}
+	});
+
+	Test("원격 명령: 반환값에 배율을 곱하는 훅의 줄을 읽는다", [] {
+		const RemoteCommand half = ParseRemoteLine("override gml_Script_x x:0.5");
+		CHECK(half.Error.empty() && half.Target == "gml_Script_x" && half.Args.size() == 1 && half.Args[0].Kind == 'x' && half.Args[0].Number == 0.5
+			&& half.Options.count("whole") == 0);
+		const RemoteCommand whole = ParseRemoteLine("override inst:o_a.get_price x:10 whole");
+		CHECK(whole.Error.empty() && whole.Args.size() == 1 && whole.Args[0].Kind == 'x' && whole.Args[0].Number == 10 && whole.Options.count("whole") == 1);
+		// 배율은 0 보다 큰 유한한 수다. 원래 값이 있어야 곱하므로 skip 과 함께 쓰지 않는다. whole 은 배율에만 붙는다.
+		for (const char* line : { "override gml_Script_x x:0", "override gml_Script_x x:-2", "override gml_Script_x x:abc", "override gml_Script_x x:inf",
+			"override gml_Script_x x:nan", "override gml_Script_x x:2 skip", "override gml_Script_x n:2 whole", "override gml_Script_x x:2 whole extra" })
+			CHECK(!ParseRemoteLine(line).Error.empty());
+	});
+
+	Test("원격 명령: 수가 있는 치트는 수로 켠다", [] {
+		const RemoteCommand set = ParseRemoteLine("cheat production_time 0.1");
+		CHECK(set.Error.empty() && set.Target == "production_time" && set.Number == 1 && set.Args.size() == 1 && set.Args[0].Kind == 'n' && set.Args[0].Number == 0.1);
+		CHECK(ParseRemoteLine("cheat production_time off").Error.empty() && ParseRemoteLine("cheat production_time off").Number == 0);
+		const RemoteCommand on = ParseRemoteLine("cheat production_time on");			// 수 없이 켜면 표가 내놓는 배율로 켠다
+		CHECK(on.Error.empty() && on.Number == 1 && on.Args.empty());
+		CHECK(!ParseRemoteLine("cheat build_any 0.5").Error.empty());					// 수가 없는 항목에 수를 주지 않는다
+		CHECK(!ParseRemoteLine("cheat production_time abc").Error.empty() && !ParseRemoteLine("cheat production_time nan").Error.empty());
+		CHECK(ParseRemoteLine("cheat rest_decrease 0").Error.empty() && ParseRemoteLine("cheat rest_decrease 0").Args.size() == 1);		// 수 항목(Number)도 수로 켠다
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {

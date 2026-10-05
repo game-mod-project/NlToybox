@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Build.hpp"
+#include "Production.hpp"
 #include "Cheats.hpp"
 #include "Economy.hpp"
 #include "Explorer.hpp"
@@ -120,7 +121,7 @@ namespace
 	// 그 영역에 보여 줄 것이 있는가. 없는 영역은 목록에서 흐리게 보인다.
 	bool HasContent(Area Where)
 	{
-		return NlCore::GetArea(Where).Panel || NlCheats::HasItems(Where);
+		return NlCore::GetArea(Where).Panel || NlCheats::HasItems(Where) || NlCore::HasKnobs(Where);
 	}
 }
 
@@ -157,6 +158,7 @@ void NlMenu::GameTick()
 	NlCheats::GameTick(now, visible);
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
+	NlProduction::GameTick(now);
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;
@@ -219,16 +221,20 @@ void NlMenu::Draw()
 	{
 	case Area::Explorer: NlExplorer::Draw(); break;
 	case Area::Time: NlCheats::DrawTime(); break;
-	case Area::Tweaks: NlTweaks::Draw(); break;
 	case Area::Economy:
-		NlEconomy::Draw();
-		if (NlCheats::HasItems(page))		// 표의 경제 항목은 지금 없다(잰 뒤에 넣는다)
-		{
-			ImGui::Separator();
+		// 표의 항목(거래, 창고 용량)과 배율을 먼저 그린다. 자원의 표가 길어 그 아래에 두면 보이지 않는다.
+		if (NlCheats::HasItems(page))
 			NlCheats::DrawArea(page);
-		}
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlEconomy::Draw();
 		break;
-	default: NlCheats::DrawArea(page); break;
+	default:
+		// 표의 항목이 없고 배율만 있는 영역(지식, 영주)에서는 "N단계에서 채웁니다"를 적지 않는다.
+		if (NlCheats::HasItems(page) || !NlCore::HasKnobs(page))
+			NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		break;
 	}
 	ImGui::EndChild();
 }

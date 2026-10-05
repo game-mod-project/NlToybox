@@ -23,8 +23,6 @@ add_library(nlcore STATIC
   src/core/Text.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
-  src/core/SpeedControl.cpp
-  src/core/SpeedTrial.cpp
 )
 set_target_properties(nlcore PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_compile_options(nlcore PUBLIC /std:c++latest /W3 /utf-8)
@@ -45,6 +43,7 @@ add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Access.cpp
   src/Build.cpp
+  src/Production.cpp
   src/Cheats.cpp
   src/Dump.cpp
   src/Economy.cpp

@@ -228,10 +228,24 @@ namespace NlCore
 		else if (verb == "override")
 		{
 			// override <스크립트 이름|메서드의 주소> <n:수|b:0|1|u> [skip]
+			// override <스크립트 이름|메서드의 주소> x:<배율> [whole]      원래 함수가 돌려준 수에 곱한다. whole: 정수는 정수로 남긴다
 			RemoteArg value;
+			if (count >= 3 && tokens[2].rfind("x:", 0) == 0)
+			{
+				value.Kind = 'x';
+				if (count > 4 || !ParseNumber(tokens[2].substr(2), value.Number) || !std::isfinite(value.Number) || !(value.Number > 0))
+					return fail("override x: needs a finite factor above 0");
+				if (count == 4 && tokens[3] != "whole")
+					return fail("override x: takes only 'whole' after the factor");
+				command.Target = tokens[1];
+				command.Args.push_back(value);
+				if (count == 4)
+					command.Options["whole"] = "1";
+				return command;
+			}
 			if (count < 3 || count > 4 || !ParseArg(tokens[2], value) || (value.Kind != 'n' && value.Kind != 'b' && value.Kind != 'u')
 				|| (value.Kind == 'n' && !std::isfinite(value.Number)))
-				return fail("override needs a target and a value (n:<finite number>, b:0|1 or u)");
+				return fail("override needs a target and a value (n:<finite number>, b:0|1, u or x:<factor>)");
 			if (count == 4 && tokens[3] != "skip")
 				return fail("override takes only 'skip' after the value");
 			command.Target = tokens[1];
@@ -266,11 +280,23 @@ namespace NlCore
 		}
 		else if (verb == "cheat")
 		{
-			// cheat <치트의 Id> on|off
-			if (count != 3 || !FindCheat(tokens[1]) || (tokens[2] != "on" && tokens[2] != "off"))
-				return fail("cheat needs the id of a cheat and on or off");
+			// cheat <치트의 Id> on|off          수가 있는 항목을 on 으로 켜면 표가 내놓는 수로 켠다
+			// cheat <치트의 Id> <수>            수가 있는 항목(값, 배율)을 그 수로 켠다
+			const Cheat* cheat = count == 3 ? FindCheat(tokens[1]) : nullptr;
+			if (!cheat)
+				return fail("cheat needs the id of a cheat and on, off or a number");
 			command.Target = tokens[1];
-			command.Number = tokens[2] == "on" ? 1 : 0;
+			if (tokens[2] == "on" || tokens[2] == "off")
+				command.Number = tokens[2] == "on" ? 1 : 0;
+			else
+			{
+				RemoteArg value;
+				value.Kind = 'n';
+				if (!HasNumber(cheat->Kind) || !ParseNumber(tokens[2], value.Number) || !std::isfinite(value.Number))
+					return fail(HasNumber(cheat->Kind) ? "cheat needs on, off or a finite number" : "cheat " + tokens[1] + " takes only on or off");
+				command.Number = 1;
+				command.Args.push_back(value);
+			}
 		}
 		else if (verb == "page")
 		{
