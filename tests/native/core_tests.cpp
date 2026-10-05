@@ -2,11 +2,14 @@
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
 #include "core/AskPath.hpp"
+#include "core/Binding.hpp"
+#include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
+#include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
 #include "core/Schedule.hpp"
 #include "core/SpeedControl.hpp"
@@ -483,6 +486,16 @@ int main(int argc, char** argv)
 		}
 	});
 
+	Test("ScriptRoutineName 은 접두 없는 이름에 gml_Script_ 를 붙인다", [] {
+		// 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(research/07). 부르거나 훅을 걸 이름은 하나뿐이어야 한다.
+		CHECK_STR(ScriptRoutineName("budget_money_get"), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("gml_Script_budget_money_get"), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("  budget_money_get "), "gml_Script_budget_money_get");
+		CHECK_STR(ScriptRoutineName("gml_Script_"), "");
+		CHECK_STR(ScriptRoutineName(""), "");
+		CHECK_STR(ScriptRoutineName("a b"), "");
+	});
+
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
 		state.On = { "instant_build", "no_dodge" };
@@ -859,6 +872,129 @@ int main(int argc, char** argv)
 		RunWorld(world, control, now, 14);
 		CHECK(!control.Busy() && !control.Chosen() && control.Wanted() == 0 && Untouched(world) && !control.Note().empty());
 	});
+
+	Test("원격 명령: 줄을 읽는다", [] {
+		CHECK(ParseRemoteLine("").Verb.empty() && ParseRemoteLine("# 주석").Verb.empty() && ParseRemoteLine("# 주석").Error.empty());
+		const RemoteCommand ask = ParseRemoteLine("  ask inst:o_debug.is_x ");
+		CHECK(ask.Error.empty() && ask.Verb == "ask" && ask.Target == "inst:o_debug.is_x");
+		const RemoteCommand list = ParseRemoteLine("list inst:o_production_manager.ppm_map_of_process as=map max=50");
+		CHECK(list.Error.empty() && list.Options.at("as") == "map" && OptionNumber(list, "max", 400) == 50 && OptionNumber(list, "depth", 2) == 2);
+		const RemoteCommand tree = ParseRemoteLine("tree map:128@{messenger_cost } depth=3");
+		CHECK(tree.Error.empty() && tree.Target == "map:128@{messenger_cost }" && OptionNumber(tree, "depth", 2) == 3);
+		const RemoteCommand find = ParseRemoteLine("find name=gold value=3000 in=global,inst");
+		CHECK(find.Error.empty() && find.Options.at("name") == "gold" && OptionNumber(find, "value", 0) == 3000 && find.Options.at("in") == "global,inst");
+		const RemoteCommand refine = ParseRemoteLine("refine value=2950");
+		CHECK(refine.Error.empty() && refine.Number == 2950);
+		const RemoteCommand write = ParseRemoteLine("write map:1@{a=b}=-4.5");
+		CHECK(write.Error.empty() && write.Target == "map:1@{a=b}" && write.Number == -4.5);
+		CHECK(ParseRemoteLine("poke inst:o_debug.x=1").Verb == "poke" && ParseRemoteLine("state").Error.empty());
+		CHECK(ParseRemoteLine("record gml_Script_budget_money_get").Target == "gml_Script_budget_money_get");
+		CHECK(ParseRemoteLine("records").Error.empty() && ParseRemoteLine("unrecord all").Target == "all");
+		CHECK(ParseRemoteLine("shot hud-1").Target == "hud-1" && ParseRemoteLine("window close").Target == "close");
+		const RemoteCommand about = ParseRemoteLine("about inst:o_game_map_controller.__province.__warehouse.change");
+		CHECK(about.Error.empty() && about.Verb == "about" && about.Target == "inst:o_game_map_controller.__province.__warehouse.change");
+	});
+
+	Test("원격 명령: 부르는 인자를 읽는다", [] {
+		const RemoteCommand call = ParseRemoteLine("call gml_Script_x n:-3.5 s:wood s:{two words} b:1 u p:inst:o_building:1");
+		CHECK(call.Error.empty() && call.Target == "gml_Script_x" && call.Args.size() == 6);
+		CHECK(call.Args[0].Kind == 'n' && call.Args[0].Number == -3.5 && call.Args[1].Kind == 's' && call.Args[1].Text == "wood");
+		CHECK(call.Args[2].Text == "two words" && call.Args[3].Kind == 'b' && call.Args[3].Number == 1 && call.Args[4].Kind == 'u');
+		CHECK(call.Args[5].Kind == 'p' && call.Args[5].Text == "inst:o_building:1");
+		const RemoteCommand method = ParseRemoteLine("method inst:o_building.get_level");
+		CHECK(method.Error.empty() && method.Target == "inst:o_building.get_level" && method.Args.empty());
+	});
+
+	Test("원격 명령: 읽을 수 없으면 오류를 낸다", [] {
+		for (const char* line : { "dance", "ask", "ask o_debug.x", "ask global.a global.b", "list", "list global.a max", "find", "find value=abc",
+			"refine", "refine value=x", "write inst:o_debug.x", "write inst:o_debug=3", "write inst:o_debug.x=abc", "poke global=1",
+			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
+			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y" })
+		{
+			if (ParseRemoteLine(line).Error.empty())
+			{
+				std::printf("  FAIL accepted: %s\n", line);
+				g_Failed++;
+			}
+		}
+	});
+
+
+	Test("원격 요청 파일: 이름을 바꿔 집은 것만 읽는다", [] {
+		namespace fs = std::filesystem;
+		const fs::path dir = fs::temp_directory_path() / "nltoybox-remote-test";
+		fs::remove_all(dir);
+		fs::create_directories(dir);
+		const fs::path ask = dir / "ask.txt", taken = dir / "ask.taken";
+		std::vector<std::string> lines = { "stale" };
+
+		CHECK(!TakeRemoteRequest(ask, taken, lines) && lines.empty());		// 없으면 아무것도 하지 않는다
+
+		{ std::ofstream(ask) << "id 1\ncall gml_Script_x n:1\n"; }
+		CHECK(TakeRemoteRequest(ask, taken, lines) && lines.size() == 2 && lines[1] == "call gml_Script_x n:1");
+		CHECK(!fs::exists(ask) && !fs::exists(taken));
+		CHECK(!TakeRemoteRequest(ask, taken, lines) && lines.empty());		// 같은 요청을 두 번 주지 않는다
+
+		// 다른 프로그램이 파일을 잡고 있어 이름을 바꿀 수 없으면 읽지도 않는다(읽고 못 지우면 같은 호출이 되풀이된다).
+		{
+			std::ofstream held(ask);
+			held << "id 2\nstate\n";
+			held.flush();
+			CHECK(!TakeRemoteRequest(ask, taken, lines) && lines.empty() && fs::exists(ask));
+		}
+		CHECK(TakeRemoteRequest(ask, taken, lines) && lines.size() == 2 && lines[0] == "id 2");
+
+		// 앞의 요청이 실행 도중 끊겨 남은 것은 다시 주지 않는다.
+		{ std::ofstream(taken) << "id 3\ncall gml_Script_dangerous\n"; }
+		{ std::ofstream(ask) << "id 4\nstate\n"; }
+		CHECK(TakeRemoteRequest(ask, taken, lines) && lines.size() == 2 && lines[0] == "id 4");
+
+		// 모듈이 뜰 때 남아 있던 요청은 버린다(죽은 도구가 남긴 호출이 다음 실행에서 불리지 않게).
+		{ std::ofstream(ask) << "id 5\n"; }
+		{ std::ofstream(taken) << "id 6\n"; }
+		DropStaleRemoteRequest(ask, taken);
+		CHECK(!fs::exists(ask) && !fs::exists(taken));
+		fs::remove_all(dir);
+	});
+
+	Test("메서드 묶기: 묶인 곳이 없으면 가진 구조체에 묶고, 가진 것이 구조체가 아니면 부르지 않는다", [] {
+		for (const OwnerKind owner : { OwnerKind::Global, OwnerKind::Struct, OwnerKind::Instance, OwnerKind::Other })
+			CHECK(ChooseBinding(true, owner) == Binding::AsIs);
+		CHECK(ChooseBinding(false, OwnerKind::Struct) == Binding::ToOwner && ChooseBinding(false, OwnerKind::Instance) == Binding::ToOwner);
+		// 전역, 배열의 원소, ds 의 값: 그대로 부르면 self 가 전역이 되어 본문이 엉뚱한 곳을 읽고 쓴다.
+		CHECK(ChooseBinding(false, OwnerKind::Global) == Binding::Refuse && ChooseBinding(false, OwnerKind::Other) == Binding::Refuse);
+	});
+
+	Test("호출 기록: 처음 몇 개와 처음 보는 꼴만 글로 남긴다", [] {
+		const int one[] = { 0 }, two[] = { 0, 1 };
+		CHECK(ShapeKey(one, 1) != ShapeKey(two, 2) && ShapeKey(one, 1) == ShapeKey(one, 1) && ShapeKey(nullptr, 0) != ShapeKey(one, 1));
+		CallLog log(2, 10);
+		const uint64_t a = ShapeKey(one, 1), b = ShapeKey(two, 2);
+		CHECK(log.Note(a) == 1);
+		log.Sample(1, a, "(number)", "(50)", "undefined");
+		CHECK(log.Note(a) == 2);
+		log.Sample(2, a, "(number)", "(60)", "undefined");
+		CHECK(log.Note(a) == 0 && log.Note(a) == 0);				// 셋째부터는 세기만 한다
+		CHECK(log.Note(b) == 5);									// 처음 보는 꼴은 남긴다
+		log.Sample(5, b, "(number, string)", "(-20, \"tax\")", "1");
+		CHECK(log.Calls() == 5 && log.ShapeCount() == 2);
+		CHECK_STR(log.Format("  "), "  calls 5, shapes 2\n  shape (number) x4\n  shape (number, string) x1\n"
+			"  #1 (50) -> undefined\n  #2 (60) -> undefined\n  #5 (-20, \"tax\") -> 1\n");
+		log.Clear();
+		CHECK(log.Calls() == 0 && log.Note(a) == 1);
+	});
+
+	Test("호출 기록: 글로 남기는 수에 한도가 있다", [] {
+		CallLog log(100, 3);
+		const int kind[] = { 0 };
+		const uint64_t key = ShapeKey(kind, 1);
+		for (int i = 0; i < 10; i++)
+			if (const size_t index = log.Note(key))
+				log.Sample(index, key, "(number)", "(1)", "undefined");
+		CHECK(log.Calls() == 10);
+		CHECK(log.Format("").find("#3 ") != std::string::npos && log.Format("").find("#4 ") == std::string::npos);
+	});
+
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

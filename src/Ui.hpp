@@ -40,4 +40,10 @@ namespace NlUi
 
 	// 모드창이 준비된 뒤의 초. 아직 준비되지 않았으면 음수.
 	double SecondsSinceReady();
+
+	// 다음에 그려지는 프레임을 그 파일(BMP)로 뜬다. 창이 닫혀 있어도 뜬다. 끝나면 로그에 "ui shot saved <파일 이름>"을 적는다.
+	void RequestShot(const std::filesystem::path& File);
+
+	// 모드창을 열거나 닫는다(F8 과 같다).
+	void SetVisible(bool Visible);
 }

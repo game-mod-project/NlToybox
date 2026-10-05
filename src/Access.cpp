@@ -601,3 +601,96 @@ bool NlAccess::InGame()
 {
 	return InstanceCount("o_character") > 0 && InstanceCount("o_main_menu") == 0;
 }
+
+namespace
+{
+	// 메서드, 그것에 대해 아는 것, 그것을 가진 것(주소의 부모)을 얻는다.
+	bool ResolveMethod(const AskPath& Path, RValue& Method, RValue& Owner, NlAccess::MethodInfo& Info, std::string& Why)
+	{
+		if (!NlAccess::Read(Path, Method, Why))
+			return false;
+		if (!Truthy("is_method", { Method }))
+		{
+			Why = "not a method";
+			return false;
+		}
+
+		// script_get_name 은 메서드도 받는다(research/07 에서 이름이 나왔다). 안 되면 method_get_index 를 거친다.
+		RValue name, index;
+		Info.Script.clear();
+		if (NlGame::Call("script_get_name", { Method }, name) && name.IsString())
+			Info.Script = name.ToString();
+		if (Info.Script.empty() && NlGame::Call("method_get_index", { Method }, index)
+			&& NlGame::Call("script_get_name", { index }, name) && name.IsString())
+			Info.Script = name.ToString();
+
+		// method_get_self: 묶인 인스턴스나 구조체. 없으면 undefined(매뉴얼).
+		RValue self;
+		Info.Bound = NlGame::Call("method_get_self", { Method }, self) && self.m_Kind != VALUE_UNDEFINED && self.m_Kind != VALUE_UNSET;
+
+		// 메서드에 닿은 마지막 단계가 멤버('.')일 때만 부모가 그것을 가진 것이다. 배열의 원소나 ds 의 값이면 가진 것을 모른다.
+		NlCore::OwnerKind owner = NlCore::OwnerKind::Other;
+		if (!Path.Steps.empty())
+		{
+			Holder kind = Holder::None;
+			if (!NlAccess::Open(NlCore::ParentPath(Path), Owner, kind, Why))
+				return false;
+			if (Path.Steps.back().Kind == '.')
+				owner = kind == Holder::Struct ? NlCore::OwnerKind::Struct : kind == Holder::Instance ? NlCore::OwnerKind::Instance
+					: kind == Holder::Global ? NlCore::OwnerKind::Global : NlCore::OwnerKind::Other;
+		}
+		Info.How = NlCore::ChooseBinding(Info.Bound, owner);
+		return true;
+	}
+}
+
+bool NlAccess::AboutMethod(const AskPath& Path, MethodInfo& Out, std::string& Why)
+{
+	RValue method, owner;		// 이 함수 안에서만 든다
+	return ResolveMethod(Path, method, owner, Out, Why);
+}
+
+bool NlAccess::CallMethod(const AskPath& Path, const std::vector<RValue>& Args, RValue& Result, std::string& Why)
+{
+	RValue method, owner;
+	MethodInfo info;
+	if (!ResolveMethod(Path, method, owner, info, Why))
+		return false;
+	if (info.How == NlCore::Binding::Refuse)
+	{
+		Why = "an unbound method whose owner is not a struct or an instance (it would run with self = global)";
+		return false;
+	}
+	if (info.How == NlCore::Binding::ToOwner)
+	{
+		// method(구조체나 인스턴스, 함수): 거기에 묶인 새 메서드(매뉴얼).
+		RValue bound;
+		if (!NlGame::Call("method", { owner, method }, bound) || !Truthy("is_method", { bound }))
+		{
+			Why = "could not bind the method to its owner";
+			return false;
+		}
+		method = bound;
+	}
+
+	// method_call(메서드, 인자의 배열). 인자가 있는 호출은 이 꼴로 됐다(research/07). 매뉴얼은 인자가 없으면 배열을 빼도 된다고 하지만,
+	// 배열 없이 부른 호출이 됐는지는 확인하지 못했다. 확인된 길 하나로 간다(빈 배열).
+	RValue args;
+	if (Args.empty())
+	{
+		if (!NlGame::Call("array_create", { RValue(0.0) }, args))
+		{
+			Why = "array_create failed";
+			return false;
+		}
+	}
+	else
+		args = RValue(Args);
+
+	if (!NlGame::Call("method_call", { method, args }, Result))
+	{
+		Why = "method_call failed";
+		return false;
+	}
+	return true;
+}

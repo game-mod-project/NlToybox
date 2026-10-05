@@ -12,10 +12,12 @@ endif()
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
   src/core/AskPath.cpp
+  src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
   src/core/Knobs.cpp
   src/core/Rate.cpp
+  src/core/RemoteCommand.cpp
   src/core/Text.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
@@ -46,6 +48,8 @@ add_library(nltoybox SHARED
   src/Finder.cpp
   src/Game.cpp
   src/Menu.cpp
+  src/Recorder.cpp
+  src/Remote.cpp
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp

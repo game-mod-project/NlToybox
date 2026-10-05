@@ -6,6 +6,7 @@
 $ErrorActionPreference = 'Stop'
 $tools = Split-Path -Parent $PSScriptRoot
 . (Join-Path $tools 'common.ps1')
+Assert-NlGameNotRunning      # session stop 과 check-load 의 시험은 게임을 프로세스 이름으로 끈다. 켜 둔 진짜 게임을 끄지 않는다
 
 $realGame = $script:NlDefaultGameDir
 $fake = Join-Path ([IO.Path]::GetTempPath()) 'nl-fakegame'
@@ -73,6 +74,73 @@ try {
             if (-not $hadMods -and (Test-Path -LiteralPath $modsDir)) { Remove-Item -LiteralPath $modsDir -Recurse -Force }
         }
     }
+
+    Test-Case 'ask 는 게임이 꺼져 있으면 묻지 않는다' {
+        $r = Invoke-Tool 'ask.ps1' "-Lines 'state'"
+        Assert-True ($r.Exit -ne 0 -and $r.Out -match '게임이 켜져 있지 않습니다') "거부해야 한다`n$($r.Out)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fake 'mods\Aurie\NlToyBox.ask.txt'))) '물음 파일을 남기지 않아야 한다'
+    }
+
+    Test-Case 'session 은 남은 설정 사본이 있으면 켜지 않고, stop 이 사용자의 설정을 되돌린다' {
+        $modsDir = Join-Path $fake 'mods'
+        $hadMods = Test-Path -LiteralPath $modsDir
+        $aurieDir = Join-Path $modsDir 'Aurie'
+        New-Item -ItemType Directory -Force -Path $aurieDir | Out-Null
+        $settingsFile = Join-Path $aurieDir 'NlToyBox.settings.txt'
+        try {
+            Set-Content -LiteralPath "$settingsFile.kept" -Value 'building_cost=0.50' -Encoding ascii     # 사용자의 것
+            Set-Content -LiteralPath $settingsFile -Value 'building_cost=3.00' -Encoding ascii           # 실행 묶음이 쓴 것
+            $r = Invoke-Tool 'session.ps1' '-Action start' $noLaunch
+            Assert-True ($r.Exit -ne 0 -and $r.Out -match '남긴 사본' -and $r.Out -notmatch 'LAUNCH-ATTEMPTED') "start 는 거부해야 한다`n$($r.Out)"
+            $r = Invoke-Tool 'session.ps1' '-Action stop -Name safety-test'
+            Assert-Equal $r.Exit 0 "stop 종료 코드`n$($r.Out)"
+            Assert-Equal (Get-Content -LiteralPath $settingsFile -Raw).Trim() 'building_cost=0.50' '사용자의 설정이 돌아와야 한다'
+            Assert-True (-not (Test-Path -LiteralPath "$settingsFile.kept")) '사본이 남지 않아야 한다'
+        }
+        finally {
+            if (-not $hadMods -and (Test-Path -LiteralPath $modsDir)) { Remove-Item -LiteralPath $modsDir -Recurse -Force }
+        }
+    }
+
+    Test-Case 'session stop 은 사용자에게 없던 설정 파일을 실행 묶음이 만들었으면 지운다' {
+        # 사용자에게 치트 상태 파일이 없던 채로 켜면 치울 것이 없어 *.kept 가 생기지 않는다. 실행 중 모드창에서 켠 치트가
+        # 파일로 남으면 다음 평소 플레이가 그것을 불러온다. start 가 "없었다"를 적어 두고 stop 이 그대로 되돌린다.
+        $modsDir = Join-Path $fake 'mods'
+        $hadMods = Test-Path -LiteralPath $modsDir
+        $aurieDir = Join-Path $modsDir 'Aurie'
+        New-Item -ItemType Directory -Force -Path $aurieDir | Out-Null
+        $settingsFile = Join-Path $aurieDir 'NlToyBox.settings.txt'
+        $cheatsFile = Join-Path $aurieDir 'NlToyBox.cheats.txt'
+        $marker = Join-Path $aurieDir 'NlToyBox.session.txt'
+        try {
+            # start 가 남긴 것처럼: 설정은 있었고(치워 둠), 치트 상태는 없었다.
+            Set-Content -LiteralPath $marker -Value 'absent NlToyBox.cheats.txt' -Encoding ascii
+            Set-Content -LiteralPath "$settingsFile.kept" -Value 'building_cost=0.50' -Encoding ascii     # 사용자의 것
+            Set-Content -LiteralPath $cheatsFile -Value 'on instant_build' -Encoding ascii                # 실행 묶음이 쓴 것
+            $r = Invoke-Tool 'session.ps1' '-Action start' $noLaunch
+            Assert-True ($r.Exit -ne 0 -and $r.Out -notmatch 'LAUNCH-ATTEMPTED') "남은 표식이 있으면 start 는 거부해야 한다`n$($r.Out)"
+            $r = Invoke-Tool 'session.ps1' '-Action stop -Name safety-test'
+            Assert-Equal $r.Exit 0 "stop 종료 코드`n$($r.Out)"
+            Assert-True (-not (Test-Path -LiteralPath $cheatsFile)) '실행 묶음이 만든 치트 상태 파일은 지워져야 한다'
+            Assert-Equal (Get-Content -LiteralPath $settingsFile -Raw).Trim() 'building_cost=0.50' '사용자의 설정이 돌아와야 한다'
+            Assert-True (-not (Test-Path -LiteralPath $marker)) '표식이 남지 않아야 한다'
+
+            # 표식이 없으면(평소의 stop) 사용자의 파일을 건드리지 않는다.
+            Set-Content -LiteralPath $cheatsFile -Value 'on no_dodge' -Encoding ascii
+            $r = Invoke-Tool 'session.ps1' '-Action stop -Name safety-test'
+            Assert-Equal (Get-Content -LiteralPath $cheatsFile -Raw).Trim() 'on no_dodge' '표식이 없으면 사용자의 파일을 지우지 않는다'
+
+            # 표식만 남아 있어도(앞선 실행이 stop 없이 끝났다) 다시 켜지 않는다: 그 뒤에 사용자가 만든 파일을 stop 이 지우게 된다.
+            Set-Content -LiteralPath $marker -Value 'absent NlToyBox.cheats.txt' -Encoding ascii
+            $r = Invoke-Tool 'session.ps1' '-Action start' $noLaunch
+            Assert-True ($r.Exit -ne 0 -and $r.Out -match '표식' -and $r.Out -notmatch 'LAUNCH-ATTEMPTED') "표식이 남아 있으면 start 는 거부해야 한다`n$($r.Out)"
+            Remove-Item -LiteralPath $marker -Force
+        }
+        finally {
+            if (-not $hadMods -and (Test-Path -LiteralPath $modsDir)) { Remove-Item -LiteralPath $modsDir -Recurse -Force }
+        }
+    }
+
 
     Test-Case 'setup 은 내용이 원본과 다른 기존 백업을 믿지 않고 다시 만든다' {
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null

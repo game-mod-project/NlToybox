@@ -3,6 +3,7 @@
 // 모든 함수는 게임 스레드의 틱에서만 부른다. RValue 는 부른 쪽의 함수 안에서만 든다.
 
 #include "core/AskPath.hpp"
+#include "core/Binding.hpp"
 
 #include <YYTK_Shared.hpp>
 
@@ -72,4 +73,19 @@ namespace NlAccess
 
 	// 게임 화면인가: o_main_menu 가 없고 o_character 가 있다(research/02. 새 게임에서 잰 것이다).
 	bool InGame();
+
+	struct MethodInfo
+	{
+		std::string Script;		// 메서드가 묶인 스크립트의 이름("gml_Script_…"). 못 얻으면 빈 글
+		bool Bound = false;		// 묶인 곳(self)이 있는가(method_get_self 가 undefined 가 아니다)
+		NlCore::Binding How = NlCore::Binding::Refuse;		// CallMethod 가 어떻게 부를지(core/Binding)
+	};
+
+	// 주소가 가리키는 메서드에 대해 아는 것. 부르지 않는다. 없거나 메서드가 아니면 거짓이고 Why 에 까닭.
+	bool AboutMethod(const NlCore::AskPath& Path, MethodInfo& Out, std::string& Why);
+
+	// 주소가 가리키는 메서드를 부른다. 묶인 곳이 없는 메서드는 그것을 가진 구조체나 인스턴스(주소의 부모)에 묶어 부른다.
+	// 묶인 곳도 없고 가진 것이 구조체나 인스턴스가 아니면 부르지 않는다(self 가 전역이 된다). 인자는 배열로 넘긴다(없어도 빈 배열).
+	// 인자의 수와 형은 부르는 쪽이 책임진다. 본 적 없는 꼴로 부르지 않는다(research/07).
+	bool CallMethod(const NlCore::AskPath& Path, const std::vector<YYTK::RValue>& Args, YYTK::RValue& Result, std::string& Why);
 }

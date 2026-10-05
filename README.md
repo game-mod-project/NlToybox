@@ -53,6 +53,17 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 
 `restore-game.ps1`과 `game-status.ps1`은 exe와 `mods\`만 본다. 데이터 파일의 상태는 `tools/overlay.ps1 status`로 본다.
 
+## 켜 둔 게임에 묻기 (개발용)
+
+    pwsh -File tools/session.ps1 -Action start
+    & tools\ask.ps1 -Lines 'state', 'call gml_Script_budget_money_get', 'shot hud'
+    pwsh -File tools/session.ps1 -Action stop -Name my-session
+
+게임을 켜 둔 채 값을 읽고, 쓰고, 이름·값으로 찾고, 화면을 뜨고, 스크립트의 호출을 기록하고, 게임의 함수를 부른다.
+명령은 `src/core/RemoteCommand.hpp`에 있다. 훅을 걸기 전에 그 함수가 잡히는 함수인지 센다:
+
+    py -3.14 tools/re/script_calls.py <Norland.exe> budget_money_change time_hour
+
 ## 상태 보기
 
     pwsh -File tools/game-status.ps1
@@ -67,4 +78,5 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 - `research/04-overlay-verify.md` — 프리셋의 값이 런타임에 올라오는지 잰 결과
 - `research/05-mod-window.md` — 게임 안의 모드창
 - `research/06-cheat-menu.md` — 치트 메뉴에서 잰 것
+- `research/07-remote.md` — 원격 질의와 호출 기록기, 게임 화면에서 찾은 자리와 함수(금화, 자원)
 - `CLAUDE.md` — 레포 규칙

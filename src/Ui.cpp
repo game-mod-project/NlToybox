@@ -14,6 +14,7 @@
 #include <cstdint>
 #include <cstdio>
 #include <fstream>
+#include <mutex>
 #include <sstream>
 #include <utility>
 #include <vector>
@@ -63,6 +64,8 @@ namespace
 	bool g_ShotDone = false;
 	std::vector<std::string> g_TestSets;
 	std::vector<std::pair<std::string, std::string>> g_TestExtra;	// 이 파일이 모르는 줄(키, 값). Menu 가 읽는다
+	std::mutex g_ShotMutex;
+	std::filesystem::path g_ShotRequest;		// 밖에서 청한 화면. 다음 프레임에 뜬다
 	long long g_MouseMessages = 0, g_KeyMessages = 0;		// 창이 열려 있는 동안 받은 입력 메시지의 수
 	long long g_YytkWndProcCalls = 0;						// YYToolkit 의 창 메시지 콜백이 온 횟수(오는지 보려고 센다)
 	WNDPROC g_OrigWndProc = nullptr;
@@ -214,7 +217,8 @@ namespace
 	}
 
 	// 지금 그려진 화면을 BMP 로 쓴다. 모드창이 제대로 그려졌는지 사람(또는 도구)이 보기 위한 것이다.
-	void Capture(ID3D11Texture2D* Back)
+	// File: 쓸 파일. Announce: 시험 설정의 화면이다(ui-check.ps1 이 "ui shot done" 줄을 기다린다).
+	void Capture(ID3D11Texture2D* Back, const std::filesystem::path& File, bool Announce)
 	{
 		D3D11_TEXTURE2D_DESC desc = {};
 		Back->GetDesc(&desc);
@@ -300,11 +304,16 @@ namespace
 		info.biBitCount = 32;
 		info.biCompression = BI_RGB;
 
-		std::ofstream out(g_Dir / "NlToyBox.ui.bmp", std::ios::binary | std::ios::trunc);
+		std::ofstream out(File, std::ios::binary | std::ios::trunc);
 		out.write(reinterpret_cast<const char*>(&file), sizeof(file));
 		out.write(reinterpret_cast<const char*>(&info), sizeof(info));
 		out.write(reinterpret_cast<const char*>(pixels.data()), static_cast<std::streamsize>(pixels.size()));
 		out.close();
+		if (!Announce)
+		{
+			Log("ui shot saved " + File.filename().string());
+			return;
+		}
 		Log("ui shot done " + std::to_string(width) + "x" + std::to_string(height) + " format "
 			+ std::to_string(static_cast<int>(desc.Format)) + " frames " + std::to_string(g_Frames)
 			+ (g_Visible ? " window open" : " window closed")
@@ -329,7 +338,12 @@ namespace
 		const bool hint = elapsed < k_HintSeconds;
 		const bool shot = g_ShotSeconds >= 0 && !g_ShotDone && elapsed >= g_ShotSeconds;
 		const bool visible = g_Visible;
-		if (!visible && !hint && !shot)
+		std::filesystem::path requested;
+		{
+			std::lock_guard lock(g_ShotMutex);
+			requested.swap(g_ShotRequest);
+		}
+		if (!visible && !hint && !shot && requested.empty())
 			return;
 
 		ID3D11Texture2D* back = nullptr;
@@ -402,8 +416,10 @@ namespace
 		if (shot)
 		{
 			g_ShotDone = true;
-			Capture(back);
+			Capture(back, g_Dir / "NlToyBox.ui.bmp", true);
 		}
+		if (!requested.empty())
+			Capture(back, requested, false);
 		view->Release();
 		back->Release();
 	}
@@ -526,6 +542,17 @@ void NlUi::GameTick()
 	}
 	g_Hooked = true;
 	Log("ui hook ok (try " + std::to_string(g_HookTries) + ")");
+}
+
+void NlUi::RequestShot(const std::filesystem::path& File)
+{
+	std::lock_guard lock(g_ShotMutex);
+	g_ShotRequest = File;
+}
+
+void NlUi::SetVisible(bool Visible)
+{
+	g_Visible = Visible;
 }
 
 void NlUi::WndProc(FWWndProc& Context)
