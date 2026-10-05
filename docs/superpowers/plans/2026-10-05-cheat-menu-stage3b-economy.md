@@ -19,7 +19,7 @@
 |---|---|---|
 | 금화 더하기·맞추기 | C: `budget_money_change` (화면에서 확인) | 넣는다 |
 | 자원 더하기·맞추기, 모든 자원 | C: `…__warehouse.change` (건물 창고에서 같은 함수를 확인. 영지 창고는 묶어 불러야 한다. 확인 전) | 넣는다. Task 4 에서 먼저 원격으로 확인 |
-| 창고 용량 | B: `…__cached_total_capacity_for_storage_type.<갈래>` (읽기만 했다) | 표에 수 항목으로 넣는다(`Verified = false`) |
+| 창고 용량 | B: `…__cached_total_capacity_for_storage_type.<갈래>` (읽기만 했다) | **미룬다**(코드 검토: 게임이 다시 채우는 캐시라 "원래대로"가 낡은 값을 쓴다). 패널은 읽어서 보이기만 한다. Task 4 에서 잰다 |
 | 거래 가격, 임금, 건설비, 생산 | 자리의 이름만 봤다. 어느 값이 쓰이는지 모른다 | **미룬다.** Task 4 의 실행에서 자리를 재고 3나-2 로 만든다 |
 | 기존 배율 7개를 표로 | — | **미룬다**(3나-2. 사용자에게 새로 되는 것이 없다) |
 | 즉시 건설 | A: `o_debug.is_instant_build_buildings` | 사용자가 플레이에서 봤다 → `Verified` |
@@ -34,10 +34,14 @@ Task 1~3 은 구현했다(커밋 `a8f06b6`, `04b7936`, Task 3 의 커밋). 독�
 - 브랜치: Task 1 앞에서 `git -C E:\NlToyBox switch -c feat/cheat-economy`(`feat/cheat-remote` 위에 쌓는다).
 - Task 1: `NlCore::Thousands`(`src/core/Text`)와 그 시험을 더했다. `Shortest`는 100000 을 `1e+05`로 쓴다. 창의 수는 `Thousands`, 로그의 수는 `Fixed(…, 0)`. 시험 65 → 69.
 - Task 2: `economy`의 `resource`에 상한(1000 미만)을 뒀다(`resource=1e300`이 정수로 바뀌지 않게). 원격 명령 `page <영역의 키>`를 더했다(`NlMenu::SetPage`). 패널의 화면을 뜨려면 영역을 골라야 한다.
-- Task 3: 치트 표의 수는 31 → 36 이다(`resources_edit_mode`를 빼고 `cap_*` 여섯을 더했다). 시험 파일의 그 줄을 고치고 `instant_build`의 `Verified`,
-  `resources_edit_mode`가 없는 것, `cap_*`를 확인하는 줄을 더했다. 갈래의 차례는 게임의 `__categories_names`를 따른다. 부르기 전의 로그를 호출마다 남기고,
+- Task 3: 치트 표의 수는 31 → 30 이다(`resources_edit_mode`를 뺐다. `cap_*` 여섯은 코드 검토 뒤에 다시 뺐다). 시험 파일의 그 줄을 고치고 `instant_build`의 `Verified`,
+  `resources_edit_mode`와 `cap_food`가 없는 것을 확인하는 줄을 더했다. 갈래의 차례는 게임의 `__categories_names`를 따른다. 부르기 전의 로그를 호출마다 남기고,
   `change`가 돌려준 적용된 변화량이 청한 것과 다르면 로그와 창에 알린다. 다시 읽지 못하면 쌓인 명령을 버린다. `Do`의 답에 자원의 앞뒤 수를 넣었다.
 - `NlAccess::CallMethod`는 묶인 곳도 묶을 곳도 없는 메서드를 부르지 않는다(`feat/cheat-remote`의 `083ed4f`).
+- 코드 검토(Critical 0, Important 8) 뒤: `PlanEconomy(Command, Gold, Counts, Free, Stocked)` — 넘기는 변화량은 언제나 유한한 정수다(`Settle`). 읽은 수가 수가 아니면 하지 않는다.
+  줄일 때는 예약되지 않은 수(`__no_reserve__`)까지만. 갈래에 없는 자원(0번)은 하나씩으로도 건드리지 않는다. 같은 자원을 두 번 하지 않는다.
+  청한 만큼 바뀌었는지는 함수의 반환값이 아니라 앞뒤의 수로 본다(`EconomyShortfall`). 금화의 입력 칸은 지금 금화로 채운다(0 인 채 "맞추기"를 누르면 금화가 사라진다).
+  읽지 못한 까닭을 가려서 보인다(게임 화면이 아니다 / 금화의 자리 / 창고의 자리). `economy gold_add|gold_set|all`은 `resource=`를 받지 않는다. 시험 69 → 70.
 
 ## Global Constraints
 
@@ -503,30 +507,33 @@ using NlCore::Thousands;
 
 namespace
 {
-	// 자리와 함수는 research/07 에서 잰 것이다(새 게임, 0.5588.9777.0).
+	// 자리와 함수는 research/07 에서 잰 것이다(새 게임, 0.5588.9777.0). 불러온 세이브에서 같은 자리인지는 재지 않았다.
 	constexpr const char* k_Gold = "inst:o_game_map_controller.__province.__budget.__budget.__no_reserve__";
-	constexpr const char* k_GoldChange = "gml_Script_budget_money_change";		// (변화량). 화면에서 확인했다
+	constexpr const char* k_GoldChange = "gml_Script_budget_money_change";		// (변화량). +100 으로 화면까지 확인했다
 	constexpr const char* k_Counts = "inst:o_game_map_controller.__province.__warehouse.__warehouse.__total__";
-	// (자원 번호, 변화량) → 적용된 변화량. 건물 창고에서 같은 함수가 (1, 5) -> 5 였다. 영지 창고에서는 아직 부르지 않았다.
+	constexpr const char* k_Free = "inst:o_game_map_controller.__province.__warehouse.__warehouse.__no_reserve__";	// 예약되지 않은 수
+	// (자원 번호, 변화량). 건물 창고에서 같은 함수가 (1, 5) -> 5, (1, -10) -> -10 이었다. 영지 창고에서는 아직 부르지 않았다.
 	// 묶인 곳이 없으면 CallMethod 가 창고(주소의 부모)에 묶어 부른다.
 	constexpr const char* k_Change = "inst:o_game_map_controller.__province.__warehouse.change";
 	constexpr const char* k_Captions = "global.__resource_caption";
 	constexpr const char* k_Categories = "inst:o_data.__resource_categories_data.__categories";
-	constexpr const char* k_CategoryNames = "inst:o_data.__resource_categories_data.__categories_names";	// 게임이 보여 주는 차례
+	constexpr const char* k_CategoryNames = "inst:o_data.__resource_categories_data.__categories_names";	// 갈래의 차례(게임이 둔 배열)
 	constexpr const char* k_Capacity = "inst:o_game_map_controller.__province.__warehouse.__cached_total_capacity_for_storage_type";
 
 	struct Group
 	{
 		std::string Key, Label;
-		double Capacity = -1;				// 갈래의 용량. 못 읽으면 음수
+		double Capacity = -1;				// 갈래의 용량(읽기만 한다). 못 읽으면 음수
 		std::vector<int> Resources;
 	};
 
 	struct Snapshot			// 틱이 채우고 Draw 가 읽는다. RValue 를 담지 않는다
 	{
 		bool Ready = false;
+		std::string Why;					// Ready 가 아닌 까닭
 		double Gold = 0;
 		std::vector<double> Counts;			// 자원 번호 → 영지 창고의 수
+		std::vector<double> Free;			// 자원 번호 → 예약되지 않은 수
 		std::vector<std::string> Labels;	// 자원 번호 → 창에 보일 이름
 		std::vector<Group> Groups;
 		std::vector<int> Stocked;			// 갈래에 든 자원 번호들
@@ -539,6 +546,7 @@ namespace
 	std::deque<EconomyCommand> g_Queue;	// 창이 쌓고 틱이 한다
 	double g_NextRead = 0;
 	double g_GoldInput = 0;				// 창의 입력 칸
+	bool g_GoldInputSet = false;		// 입력 칸을 지금 금화로 채웠는가(0 으로 맞추는 실수를 막는다)
 
 	void Log(const std::string& Line)
 	{
@@ -546,7 +554,7 @@ namespace
 			g_Log(Line);
 	}
 
-	// 로그에 쓰는 정수("+1000", "-5").
+	// 로그에 쓰는 정수("+1000", "-5"). 넘기는 변화량은 정수다(core/EconomyPlan).
 	std::string Signed(double Value)
 	{
 		return (Value >= 0 ? "+" : "") + Fixed(Value, 0);
@@ -560,6 +568,17 @@ namespace
 		std::string why;
 		Rows.clear();
 		return NlAccess::List(Path, Holder::None, 256, Rows, total, why);
+	}
+
+	bool ReadNumbers(const char* Path, std::vector<double>& Out)
+	{
+		std::vector<NlAccess::Row> rows;
+		Out.clear();
+		if (!ListRows(NlCore::ParseAskPath(Path), rows))
+			return false;
+		for (const NlAccess::Row& row : rows)
+			Out.push_back(row.IsNumber ? row.Number : 0);
+		return !Out.empty();
 	}
 
 	// 이름과 갈래. 게임마다 한 번 읽는다(자원의 수가 달라지면 다시).
@@ -598,41 +617,53 @@ namespace
 			+ std::to_string(g_Now.Stocked.size()) + " stocked");
 	}
 
-	// 지금 값을 읽는다. 게임 화면이 아니거나 자리가 없으면 거짓.
+	// 지금 값을 읽는다. 읽지 못하면 거짓이고 g_Now.Why 에 까닭(게임 화면이 아니다, 어느 자리가 없다).
 	bool Refresh()
 	{
 		double gold = 0;
-		std::vector<NlAccess::Row> rows;
-		if (!NlAccess::InGame() || !NlAccess::ReadNumber(k_Gold, gold) || !ListRows(NlCore::ParseAskPath(k_Counts), rows) || rows.empty())
+		std::vector<double> counts, free;
+		std::string why;
+		if (!NlAccess::InGame())
+			why = "게임 화면이 아닙니다";
+		else if (!NlAccess::ReadNumber(k_Gold, gold))
+			why = "금화의 자리를 읽지 못했습니다";
+		else if (!ReadNumbers(k_Counts, counts) || !ReadNumbers(k_Free, free) || free.size() != counts.size())
+			why = "영지 창고의 자리를 읽지 못했습니다";
+		if (!why.empty())
 		{
+			if (why != g_Now.Why && NlAccess::InGame())
+				Log("economy: cannot read (" + std::string(why == "금화의 자리를 읽지 못했습니다" ? "gold" : "warehouse") + ")");
 			g_Now.Ready = false;
+			g_Now.Why = why;
 			return false;
 		}
 
-		std::vector<double> counts;
-		for (const NlAccess::Row& row : rows)
-			counts.push_back(row.IsNumber ? row.Number : 0);
 		if (!g_Now.Ready || g_Now.Labels.size() != counts.size())
 			LoadTables(counts.size());
 
 		g_Now.Gold = gold;
 		g_Now.Counts = std::move(counts);
+		g_Now.Free = std::move(free);
 		for (Group& group : g_Now.Groups)
 			if (!NlAccess::ReadNumber(std::string(k_Capacity) + "." + group.Key, group.Capacity))
 				group.Capacity = -1;
 		g_Now.Ready = true;
+		g_Now.Why.clear();
 		return true;
 	}
 
-	// 명령 하나를 한다. Refresh 가 참을 돌려준 바로 뒤에 부른다. 돌려주는 글: 한 일.
-	std::string Run(const EconomyCommand& Command)
+	// 명령 하나를 하고 다시 읽는다. Refresh 가 참을 돌려준 바로 뒤에 부른다. 돌려주는 글: 한 일.
+	// 다시 읽지 못하면 g_Now.Ready 가 거짓이 된다(부른 쪽이 본다).
+	std::string Execute(const EconomyCommand& Command)
 	{
-		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanEconomy(Command, g_Now.Gold, g_Now.Counts, g_Now.Stocked);
+		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanEconomy(Command, g_Now.Gold, g_Now.Counts, g_Now.Free, g_Now.Stocked);
 		if (changes.empty())
 			return "바꿀 것이 없습니다";
 
+		const double gold = g_Now.Gold;
+		const std::vector<double> counts = g_Now.Counts;
 		const NlCore::AskPath change_method = NlCore::ParseAskPath(k_Change);
-		size_t done = 0, short_of = 0;
+		std::vector<NlCore::EconomyChange> done;
 		std::string why;
 		for (const NlCore::EconomyChange& change : changes)
 		{
@@ -650,21 +681,25 @@ namespace
 			{
 				Log("economy call warehouse.change(" + std::to_string(change.Resource) + ", " + Signed(change.Delta) + ")");
 				ok = NlAccess::CallMethod(change_method, { RValue(static_cast<double>(change.Resource)), RValue(change.Delta) }, result, why);
-				// change 는 적용된 변화량을 돌려준다(건물 창고에서 (1, 5) -> 5, (1, -10) -> -10). 다르면 다 들어가지 않은 것이다.
-				if (ok && NlGame::IsNumber(result) && result.ToDouble() != change.Delta)
-				{
-					short_of++;
-					Log("economy: resource " + std::to_string(change.Resource) + " asked " + Signed(change.Delta) + ", applied "
-						+ Signed(result.ToDouble()));
-				}
 			}
 			if (!ok)
 				break;			// 하나가 안 되면 나머지도 하지 않는다
-			done++;
+			done.push_back(change);
 		}
-		Log("economy: done " + std::to_string(done) + "/" + std::to_string(changes.size()) + (why.empty() ? "" : ": " + why));
-		return std::to_string(done) + "/" + std::to_string(changes.size()) + " 개를 바꿨습니다"
-			+ (short_of ? " (" + std::to_string(short_of) + " 개는 다 들어가지 않았습니다)" : "") + (why.empty() ? "" : " (" + why + ")");
+		Log("economy: called " + std::to_string(done.size()) + "/" + std::to_string(changes.size()) + (why.empty() ? "" : ": " + why));
+
+		std::string text = std::to_string(done.size()) + "/" + std::to_string(changes.size()) + " 개를 불렀습니다" + (why.empty() ? "" : " (" + why + ")");
+		if (!Refresh())
+			return text + "; 다시 읽지 못했습니다";
+
+		// 청한 만큼 바뀌었는지는 앞뒤의 수로 본다(함수의 반환값이 적용된 양인지는 모른다).
+		const std::vector<NlCore::EconomyShort> shorts = NlCore::EconomyShortfall(done, gold, counts, g_Now.Gold, g_Now.Counts);
+		for (const NlCore::EconomyShort& one : shorts)
+			Log("economy: " + (one.Resource < 0 ? std::string("gold") : "resource " + std::to_string(one.Resource)) + " asked "
+				+ Signed(one.Asked) + ", changed " + Signed(one.Applied));
+		if (!shorts.empty())
+			text += "; " + std::to_string(shorts.size()) + " 개는 청한 만큼 바뀌지 않았습니다(용량을 넘겼을 수 있습니다)";
+		return text;
 	}
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
@@ -685,13 +720,13 @@ std::string NlEconomy::Do(const EconomyCommand& Command)
 {
 	std::lock_guard lock(g_Mutex);
 	if (!Refresh())
-		return "게임 화면이 아닙니다";
+		return g_Now.Why;
 
 	const bool one = NlCore::NeedsResource(Command.Act) && Command.Resource >= 0 && static_cast<size_t>(Command.Resource) < g_Now.Counts.size();
 	const double gold = g_Now.Gold, count = one ? g_Now.Counts[Command.Resource] : 0;
-	g_Now.Last = Run(Command);
-	if (!Refresh())
-		return g_Now.Last + "; 다시 읽지 못했습니다";
+	g_Now.Last = Execute(Command);
+	if (!g_Now.Ready)
+		return g_Now.Last;
 
 	std::string line = g_Now.Last + "; gold " + Fixed(gold, 0) + " -> " + Fixed(g_Now.Gold, 0);
 	if (one && static_cast<size_t>(Command.Resource) < g_Now.Counts.size())
@@ -710,9 +745,9 @@ void NlEconomy::GameTick(double Now, bool Active)
 	{
 		if (!g_Queue.empty())
 		{
-			Log("economy: not in game, dropped " + std::to_string(g_Queue.size()) + " command(s)");
+			Log("economy: cannot read, dropped " + std::to_string(g_Queue.size()) + " command(s)");
 			g_Queue.clear();
-			g_Now.Last = "게임 화면이 아닙니다";
+			g_Now.Last = g_Now.Why;
 		}
 		return;
 	}
@@ -721,8 +756,8 @@ void NlEconomy::GameTick(double Now, bool Active)
 	{
 		const EconomyCommand command = g_Queue.front();
 		g_Queue.pop_front();
-		g_Now.Last = Run(command);
-		if (!Refresh())		// 다음 명령은 바뀐 수를 보고 푼다. 읽지 못하면 낡은 수로 하지 않는다
+		g_Now.Last = Execute(command);
+		if (!g_Now.Ready)		// 다음 명령은 바뀐 수를 보고 푼다. 읽지 못했으면 낡은 수로 하지 않는다
 		{
 			Log("economy: could not read back, dropped " + std::to_string(g_Queue.size()) + " command(s)");
 			g_Queue.clear();
@@ -736,10 +771,16 @@ void NlEconomy::Draw()
 	std::lock_guard lock(g_Mutex);
 	if (!g_Now.Ready)
 	{
-		ImGui::TextDisabled("게임을 시작하면 금화와 자원이 보입니다.");
-		if (!g_Now.Last.empty())
+		g_GoldInputSet = false;
+		ImGui::TextDisabled("%s", g_Now.Why.empty() ? "게임을 시작하면 금화와 자원이 보입니다." : g_Now.Why.c_str());
+		if (!g_Now.Last.empty() && g_Now.Last != g_Now.Why)
 			ImGui::TextDisabled("%s", g_Now.Last.c_str());
 		return;
+	}
+	if (!g_GoldInputSet)
+	{
+		g_GoldInput = g_Now.Gold;		// 빈 칸(0)인 채 "맞추기"를 누르면 금화가 모두 사라진다. 지금 금화로 채워 둔다
+		g_GoldInputSet = true;
 	}
 
 	ImGui::Text("금화 %s", Thousands(g_Now.Gold).c_str());
@@ -766,7 +807,7 @@ void NlEconomy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 자원 +1,000"))
 		Push(EconomyAct::AllAdd, -1, 1000);
-	ImGui::TextDisabled("게임의 함수로 더합니다. 용량을 넘기면 다 들어가지 않을 수 있습니다.");
+	ImGui::TextDisabled("게임의 함수로 더합니다. 용량을 넘기면 청한 만큼 바뀌지 않을 수 있습니다.");
 	if (!g_Now.Last.empty())
 		ImGui::TextDisabled("%s", g_Now.Last.c_str());
 
@@ -958,6 +999,19 @@ Expected: `about` → `self unbound`, `method would bind it to the owner`. 호�
 
 자원을 넣지 않게 되면: 금화(Step 4 의 앞 두 줄)만 확인하고, `Economy.cpp`에서 자원의 단추를 가린 채(다음 실행의 승인을 받아 다시 확인) 넣는다.
 
+줄이는 호출은 잰 적이 없다(금화는 `+100` 한 번, 영지 창고는 한 번도. 건물 창고의 `(1, -10) -> -10`뿐이다). 패널이 줄이기 전에 한 줄씩 먼저 잰다:
+
+```powershell
+& tools\ask.ps1 -Lines 'call gml_Script_budget_money_get'
+& tools\ask.ps1 -Lines 'call gml_Script_budget_money_change n:-1'
+& tools\ask.ps1 -Lines 'call gml_Script_budget_money_get', 'shot gold-minus1'
+& tools\ask.ps1 -Lines 'method inst:o_game_map_controller.__province.__warehouse.change n:28 n:-5'
+& tools\ask.ps1 -Lines 'ask inst:o_game_map_controller.__province.__warehouse.__warehouse.__total__[28]', 'ask inst:o_game_map_controller.__province.__warehouse.__warehouse.__no_reserve__[28]', 'records', 'shot carrot-minus5'
+```
+
+Expected: 금화가 1 줄고 화면이 따라온다. 당근이 5 줄고(두 배열 모두) 기록에 `(28, -5)`. 게임이 끝나거나 값이 음수가 되면 줄이는 길(`gold_set`의 낮추기, `set`, `0 으로`)을 넣지 않는다.
+재고보다 큰 음수는 보내지 않는다(패널이 예약되지 않은 수까지만 줄인다. `PlanEconomy`).
+
 - [ ] **Step 4: (게임 화면) 경제 명령의 길을 태운다**
 
 ```powershell
@@ -975,8 +1029,9 @@ Expected: 금화 5000 → 4000(줄이는 변화도 된다), 읽기 함수가 400
 & tools\ask.ps1 -Lines 'window open', 'page economy', 'shot economy-panel'
 ```
 
-화면에서 본다: 금화, 갈래 여섯(음식, 액체, 물자, 전쟁 물자, 약초·작물, 원자재)과 용량, 자원 38개의 이름과 수, 글이 깨지지 않는가.
-사용자에게 부탁한다: 모드창의 "경제"에서 **금화 +1,000** 한 번, **당근 +10** 한 번, 용량 칸 하나에 수를 넣고 Enter. 그 뒤:
+화면에서 본다: 금화, 갈래 여섯(음식, 액체, 물자, 전쟁 물자, 약초·작물, 원자재)과 용량, 자원 38개의 이름과 수, 글이 깨지지 않는가,
+금화의 입력 칸이 지금 금화로 채워져 있는가(0 이 아니다).
+사용자에게 부탁한다: 모드창의 "경제"에서 **금화 +1,000** 한 번, **당근 +10** 한 번. 그 뒤:
 
 ```powershell
 & tools\ask.ps1 -Lines 'call gml_Script_budget_money_get', 'ask inst:o_game_map_controller.__province.__warehouse.__warehouse.__total__[28]', 'shot economy-clicked'
@@ -1003,6 +1058,15 @@ Expected: 금화 5000, 당근 130. 로그에 `economy call budget_money_change(+
 건물의 `is_building_locked`를 `about`으로 본다. 여기서는 부르지 않는다.
 상단이 와 있으면 사용자에게 거래 창을 열어 달라고 하고 화면을 뜬 뒤, 위에서 본 가격의 자리 한 칸에 `write`로 눈에 띄는 수를 쓰고 다시 떠서 화면의 값이 바뀌는지 본다.
 
+창고 용량(표에서 뺐다. 여기서 잰다): 나무는 용량에 차 있다. `write …__cached_total_capacity_for_storage_type.raw=999` 뒤 화면을 뜨고(`원자재: n/999`로 보이는가),
+`economy add resource=1 amount=50`의 앞뒤를 Step 4 의 것과 견준다(용량을 올리면 더 들어가는가). 시간을 흘린 뒤 그 값을 다시 읽는다(게임이 다시 만드는가, 언제).
+
+즉시 건설만 켜고 본다: 사용자가 모드창의 "건설·생산"에서 **"건물 즉시 건설"만** 켜고(다른 둘은 끈 채) 건물 하나를 놓는다. 놓자마자 완성되는가
+(지난 실행에서는 스위치 셋이 함께 켜져 있었다). 아니면 표의 `Verified`를 거짓으로 되돌린다.
+
+저장하고 불러온다(맨 끝): 사용자가 게임을 저장하고 그 세이브를 불러온다. `state`, `call gml_Script_budget_money_get`, `economy gold_add amount=1`이 불러온 게임에서도 되는가
+(자리와 함수가 불러온 세이브에서 같은가. `research/07`의 "확인하지 못한 것"). 금화와 자원의 수가 저장 전과 같은가.
+
 - [ ] **Step 7: 끈다**
 
 ```powershell
@@ -1014,7 +1078,7 @@ Expected: `게임 종료: closed`, 사용자의 설정 파일이 켜기 전과 �
 - [ ] **Step 8: 잰 것을 적는다**
 
 `research/08-economy.md`(`research/07`의 꼴): 된 것(Step 1~5 의 답 그대로), 처음 잰 것(정적 메서드의 `method_get_self`, 인자 없는 `method`, 용량을 넘길 때, 화면이 따라오는가),
-3나-2 의 자리(Step 6), 확인하지 못한 것. 화면에서 효과를 본 표의 항목만 `Verified`를 참으로 바꾼다(용량 칸).
+3나-2 의 자리(Step 6), 확인하지 못한 것. `Verified`는 화면에서 효과를 본 항목만 참으로 둔다(즉시 건설을 따로 켜고 본 결과에 맞춘다).
 `CLAUDE.md`의 "모듈을 쓸 때"에 경제 패널의 규칙(금화와 자원은 함수로. 자리와 함수의 출처는 `research/07`·`08`)을 더하고, README 의 "게임 안의 치트 메뉴"에 경제 패널을 적는다.
 스펙 §10 의 3나를 3나-1(한 것)과 3나-2(남은 것: 거래, 임금, 건설비·건설 조건, 생산, 게임 속도의 함수, 배율 7개를 표로)로 나눈다.
 

@@ -32,13 +32,16 @@ namespace NlCore
 
 		constexpr double k_MaxAmount = 1e9;		// 이보다 큰 수는 잘못 친 것으로 본다
 
-		// 정수로 맞춘 변화량. 줄일 때 지금 수가 0 아래로 내려가지 않게 한다(이미 음수면 더 내리지 않는다).
-		double Bounded(double Current, double Delta)
+		// 게임의 함수에 넘길 변화량: 유한한 정수. 줄일 때는 줄일 수 있는 양(Free 의 정수 부분)을 넘지 않는다(Free 가 음수면 줄이지 않는다).
+		// 읽은 수가 수가 아니거나 변화량이 터무니없이 크면 0(하지 않는다).
+		double Settle(double Free, double Delta)
 		{
+			if (!std::isfinite(Free) || !std::isfinite(Delta))
+				return 0;
 			Delta = std::round(Delta);
-			if (Delta < 0 && Current + Delta < 0)
-				return std::min(0.0, -Current);
-			return Delta;
+			if (Delta < 0)
+				Delta = std::max(Delta, -std::floor(std::max(Free, 0.0)));
+			return std::fabs(Delta) > k_MaxAmount ? 0 : Delta;
 		}
 	}
 
@@ -89,41 +92,70 @@ namespace NlCore
 	}
 
 	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
-		const std::vector<int>& Stocked)
+		const std::vector<double>& Free, const std::vector<int>& Stocked)
 	{
 		std::vector<EconomyChange> changes;
 		if (!std::isfinite(Command.Amount) || std::fabs(Command.Amount) > k_MaxAmount)
 			return changes;
 
 		const auto add = [&](int resource, double delta) {
-			if (delta != 0)
-				changes.push_back({ resource, delta });
+			if (delta == 0)
+				return;
+			for (const EconomyChange& change : changes)
+				if (change.Resource == resource)
+					return;			// 같은 자원을 두 번 하지 않는다
+			changes.push_back({ resource, delta });
 		};
 		const auto valid = [&](int resource) { return resource >= 0 && static_cast<size_t>(resource) < Counts.size(); };
+		const auto stocked = [&](int resource) {
+			return valid(resource) && std::find(Stocked.begin(), Stocked.end(), resource) != Stocked.end();
+		};
+		// 줄일 수 있는 양: 예약되지 않은 수와 지금 수 가운데 작은 쪽.
+		const auto free_of = [&](int resource) {
+			const double count = Counts[resource];
+			return static_cast<size_t>(resource) < Free.size() ? std::min(Free[resource], count) : count;
+		};
 		const double target = std::max(0.0, std::round(Command.Amount));
 
 		switch (Command.Act)
 		{
 		case EconomyAct::GoldAdd:
-			add(-1, Bounded(Gold, Command.Amount));
+			add(-1, Settle(Gold, Command.Amount));
 			break;
 		case EconomyAct::GoldSet:
-			add(-1, target - Gold);
+			add(-1, Settle(Gold, target - Gold));
 			break;
 		case EconomyAct::ResourceAdd:
-			if (valid(Command.Resource))
-				add(Command.Resource, Bounded(Counts[Command.Resource], Command.Amount));
+			if (stocked(Command.Resource))
+				add(Command.Resource, Settle(free_of(Command.Resource), Command.Amount));
 			break;
 		case EconomyAct::ResourceSet:
-			if (valid(Command.Resource))
-				add(Command.Resource, target - Counts[Command.Resource]);
+			if (stocked(Command.Resource))
+				add(Command.Resource, Settle(free_of(Command.Resource), target - Counts[Command.Resource]));
 			break;
 		case EconomyAct::AllAdd:
 			for (const int resource : Stocked)
 				if (valid(resource))
-					add(resource, Bounded(Counts[resource], Command.Amount));
+					add(resource, Settle(free_of(resource), Command.Amount));
 			break;
 		}
 		return changes;
+	}
+
+	std::vector<EconomyShort> EconomyShortfall(const std::vector<EconomyChange>& Done, double GoldBefore, const std::vector<double>& Before,
+		double GoldAfter, const std::vector<double>& After)
+	{
+		std::vector<EconomyShort> shorts;
+		for (const EconomyChange& change : Done)
+		{
+			double applied = 0;
+			if (change.Resource < 0)
+				applied = GoldAfter - GoldBefore;
+			else if (static_cast<size_t>(change.Resource) < Before.size() && static_cast<size_t>(change.Resource) < After.size())
+				applied = After[change.Resource] - Before[change.Resource];
+			if (!(applied == change.Delta))
+				shorts.push_back({ change.Resource, change.Delta, applied });
+		}
+		return shorts;
 	}
 }

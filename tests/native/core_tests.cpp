@@ -524,7 +524,7 @@ int main(int argc, char** argv)
 		const std::vector<double> counts = { 0, 300, 0, 5 };
 		const std::vector<int> stocked = { 1, 2, 3 };
 		const auto one = [&](EconomyAct act, int resource, double amount, double gold = 3000) {
-			return PlanEconomy({ act, resource, amount }, gold, counts, stocked);
+			return PlanEconomy({ act, resource, amount }, gold, counts, counts, stocked);
 		};
 		// 금화: 더하기는 그대로, 맞추기는 차이만큼
 		const auto add = one(EconomyAct::GoldAdd, -1, 1000);
@@ -551,6 +551,38 @@ int main(int argc, char** argv)
 		// 수가 아니거나 터무니없으면 아무것도 하지 않는다
 		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::quiet_NaN()).empty());
 		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::infinity()).empty() && one(EconomyAct::AllAdd, -1, 1e12).empty());
+
+		// 지금 수가 정수가 아니어도 넘기는 변화량은 정수다. 줄여도 0 아래로 가지 않는다.
+		CHECK(one(EconomyAct::GoldSet, -1, 5000, 3000.5)[0].Delta == 2000);
+		const std::vector<double> half = { 0, 5.5 };
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, -10 }, 0, half, half, { 1 })[0].Delta == -5);
+		CHECK(PlanEconomy({ EconomyAct::ResourceSet, 1, 0 }, 0, half, half, { 1 })[0].Delta == -5);
+		// 읽은 수가 수가 아니면 부르지 않는다(NaN 을 게임의 함수에 넘기지 않는다).
+		const double nan = std::numeric_limits<double>::quiet_NaN();
+		CHECK(one(EconomyAct::GoldAdd, -1, 100, nan).empty() && one(EconomyAct::GoldSet, -1, 100, nan).empty());
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, 10 }, 0, { 0, nan }, { 0, nan }, { 1 }).empty());
+		// 맞추기의 차이가 터무니없이 크면 하지 않는다.
+		CHECK(one(EconomyAct::GoldSet, -1, 0, 3e9).empty());
+		// 갈래에 없는 자원(0번 rune)은 하나씩도 건드리지 않는다: 창고의 change 가 그런 자원에 무엇을 하는지 잰 적이 없다.
+		CHECK(one(EconomyAct::ResourceAdd, 0, 5).empty() && one(EconomyAct::ResourceSet, 0, 5).empty());
+		// 예약된 몫은 줄이지 않는다: 줄일 수 있는 양은 예약되지 않은 수까지다. 더하는 것은 그대로다.
+		const std::vector<double> total = { 0, 300 }, unreserved = { 0, 250 };
+		CHECK(PlanEconomy({ EconomyAct::ResourceSet, 1, 0 }, 0, total, unreserved, { 1 })[0].Delta == -250);
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, -1000 }, 0, total, unreserved, { 1 })[0].Delta == -250);
+		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, 10 }, 0, total, unreserved, { 1 })[0].Delta == 10);
+		// 같은 번호가 두 번 들어 있어도 한 번만 한다. 범위 밖 번호는 건너뛴다.
+		CHECK(PlanEconomy({ EconomyAct::AllAdd, -1, 5 }, 0, total, total, { 1, 1, 7 }).size() == 1);
+	});
+
+	Test("경제: 앞뒤의 수로 다 들어가지 않은 것을 가린다", [] {
+		// 함수의 반환값이 "적용된 양"인지는 모른다(본 반환은 둘 다 청한 수와 같았다). 앞뒤의 수를 견준다.
+		const std::vector<EconomyChange> done = { { -1, 1000 }, { 1, 50 }, { 2, 10 }, { 9, 5 } };
+		const auto shorts = EconomyShortfall(done, 3000, { 0, 300, 0 }, 4000, { 0, 300, 10 });
+		CHECK(shorts.size() == 2 && shorts[0].Resource == 1 && shorts[0].Asked == 50 && shorts[0].Applied == 0);
+		CHECK(shorts[1].Resource == 9);		// 뒤의 수를 읽지 못한 것을 다 들어갔다고 하지 않는다
+		const auto gold = EconomyShortfall({ { -1, 1000 } }, 3000, {}, 3600, {});
+		CHECK(gold.size() == 1 && gold[0].Resource == -1 && gold[0].Applied == 600);
+		CHECK(EconomyShortfall({ { -1, -500 }, { 1, -20 } }, 3000, { 0, 300 }, 2500, { 0, 280 }).empty());
 	});
 
 	Test("경제: 원격 명령의 낱말", [] {
@@ -625,13 +657,12 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.Min < cheat.Max);
 		}
-		CHECK(Cheats().size() == 36);
+		CHECK(Cheats().size() == 30);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
 		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
-		// 창고 용량: 갈래 여섯
-		for (const char* id : { "cap_food", "cap_liquid", "cap_resources", "cap_armory", "cap_herbs", "cap_raw" })
-			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Number && FindCheat(id)->Where == Area::Economy);
+		// 창고 용량은 넣지 않는다: 게임이 다시 채우는 캐시라 "원래대로"가 낡은 값을 써 넣는다. 자리를 잰 뒤(3나-2)에 넣는다.
+		CHECK(FindCheat("cap_food") == nullptr);
 	});
 
 	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {
@@ -991,7 +1022,8 @@ int main(int argc, char** argv)
 			"record", "record a b", "shot", "shot ../x", "window", "window maybe", "call", "call x n:abc", "call x q:1", "call x b:2",
 			"call x p:nowhere.x", "method global", "method o_x.y", "state now", "about", "about global.a global.b", "about o_x.y",
 			"economy", "economy gold", "economy gold_add", "economy gold_add amount=x", "economy add amount=5", "economy add resource=1.5 amount=5",
-			"economy set resource=-1 amount=5", "economy add resource=1e300 amount=5", "page", "page nowhere", "page economy now" })
+			"economy set resource=-1 amount=5", "economy add resource=1e300 amount=5", "economy all resource=3 amount=100",
+			"economy gold_add resource=1e300 amount=5", "page", "page nowhere", "page economy now" })
 		{
 			if (ParseRemoteLine(line).Error.empty())
 			{

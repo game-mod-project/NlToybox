@@ -232,6 +232,8 @@ namespace NlCore
 			if (NeedsResource(act) && (given == command.Options.end() || !ParseNumber(given->second, resource)
 				|| !(resource >= 0 && resource < 1000) || resource != std::floor(resource)))
 				return fail("economy " + tokens[1] + " needs resource=<index>");
+			if (!NeedsResource(act) && given != command.Options.end())
+				return fail("economy " + tokens[1] + " takes no resource");
 		}
 		else if (verb == "page")
 		{
