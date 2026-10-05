@@ -24,12 +24,25 @@ set_target_properties(nlcore_tests PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreade
 target_include_directories(nlcore_tests PRIVATE src)
 target_link_libraries(nlcore_tests PRIVATE nlcore)
 
+# 모드창은 Dear ImGui 로 그린다(서브모듈 external/imgui, MIT).
+set(IMGUI_ROOT "${CMAKE_SOURCE_DIR}/external/imgui")
+if(NOT EXISTS "${IMGUI_ROOT}/imgui.h")
+  message(FATAL_ERROR "external/imgui 가 비어 있습니다. git submodule update --init 을 먼저 실행하세요.")
+endif()
+
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Dump.cpp
   src/Finder.cpp
   src/Game.cpp
+  src/Ui.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
+  "${IMGUI_ROOT}/imgui.cpp"
+  "${IMGUI_ROOT}/imgui_draw.cpp"
+  "${IMGUI_ROOT}/imgui_tables.cpp"
+  "${IMGUI_ROOT}/imgui_widgets.cpp"
+  "${IMGUI_ROOT}/backends/imgui_impl_dx11.cpp"
+  "${IMGUI_ROOT}/backends/imgui_impl_win32.cpp"
 )
 
 set_target_properties(nltoybox PROPERTIES
@@ -41,8 +54,10 @@ set_target_properties(nltoybox PROPERTIES
 target_include_directories(nltoybox PRIVATE
   "${YYTK_SHARED}"
   "${YYTK_ROOT}/include"
+  "${IMGUI_ROOT}"
 )
 
 target_compile_options(nltoybox PRIVATE /std:c++latest /W3 /utf-8)
-target_compile_definitions(nltoybox PRIVATE UNICODE _UNICODE)
-target_link_libraries(nltoybox PRIVATE nlcore)
+# 게임패드로 모드창을 조작하지 않는다(XInput 을 끌어오지 않는다).
+target_compile_definitions(nltoybox PRIVATE UNICODE _UNICODE IMGUI_IMPL_WIN32_DISABLE_GAMEPAD)
+target_link_libraries(nltoybox PRIVATE nlcore d3d11 dxgi d3dcompiler)
