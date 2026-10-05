@@ -72,6 +72,20 @@
 - 이벤트의 자료: `inst:o_data.__game_director_events_data`: `__debug_forced_event`(undefined), `__events`·`__events_by_name`·`__groups`(ds_map), `__params`.
   지금 국면의 뽑기: `gm.__game_director.__current_phase.__events_weighted_random.__array_of_elements[8]` = 0, 200, 1, 60, 2, 80, 3, 70(번호와 무게가 번갈아 든 것으로 보인다. 추정).
 
+## 확인 실행 (모듈 0.14.1, 2026-10-06)
+
+실행 묶음 `stage6-session3`(답: `refs/runtime/stage6-session3.answer.txt`). 멈춘 채와 48분(게임 시간). 저장하지 않고 껐다. 적재 판정 통과. 게임 창과 마우스는 건드리지 않았다(백그라운드).
+
+| 한 것 | 본 것 |
+|---|---|
+| `world cooldowns_clear` | "이벤트 쿨다운 1개와 묶음 쿨다운 1개를 0 으로 썼습니다". `u_guest_dog_seller` 19 → 0, `GUEST` 2 → 0 |
+| 한 번 더 | "지울 쿨다운이 없습니다 (0 보다 큰 칸이 없습니다)" |
+| `world ambush` | 거부 |
+| `world bishop` | "주교가 왔습니다"(같은 틱에 `is_has_bishop()`이 참으로 읽혔다). `o_character` 5 → 6. 게임의 영주 줄에 주교가 올라왔다(`refs/ui/d1-religion2.png`) |
+| 한 번 더 | "주교가 이미 있습니다" |
+| `cheat no_enemies on` 뒤 48분 | `override -> false`, 40번 불렸다(표본은 원래도 false 였다). 끄자 바꾸기가 풀렸다. 효과는 보지 못했다 |
+| `person spawn_soldier amount=1`, `economy gold_add amount=10` | 25 → 26, 1901 → 1911 (앞 단계의 것이 그대로 된다) |
+
 ## 세이브에 남는 것 (세이브 파일을 읽기만 했다)
 
 - **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다.** "아덴" 세이브에서 `"events_cooldowns"` 1곳, `"__events_cooldowns"` 0곳. `"next_day_migrants_bonus"`도 밑줄 없이 1곳이다.

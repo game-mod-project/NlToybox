@@ -44,6 +44,14 @@
 
 - [ ] 독립 코드 검토 → Critical·Important 를 시험과 함께 고친다. 확인 실행. `research/14`, `CLAUDE.md`, `README.md`, 스펙. `git merge --no-ff` → `develop`.
 
+## 결과 (2026-10-06, 모듈 0.14.0 ~ 0.14.1)
+
+- Task 1: `research/14-world.md`. 조사 실행 둘이 모두 내가 부른 함수 때문에 GML 오류로 끝났다(충성도 함수를 인자 없이, 궁수 매복 디버그 함수). 그 전에 받은 것:
+  관리자와 메서드, 인자 수, 세력의 `get_relation_with`·`is_enemy_with`의 꼴, 이벤트 쿨다운이 써지는 것, 주교 부르기.
+- Task 2: 이벤트 쿨다운 지우기, 주교 부르기(`src/World.cpp`, 원격 `world`), 치트 표의 `no_enemies`(확인 전). 시험 85개.
+- Task 3: 독립 검토(Critical 0, Important 1) → 쿨다운 지우기의 보고를 고쳤다(0.14.1). 확인 실행 `stage6-session3`: 셋 모두 조사 때와 같이 됐다.
+- 하지 못한 것: 관계 설정, 동맹·전쟁·평화, 신앙·설교, 계절·날씨, 지도 공개, 이벤트 강제 실행, 싸움 붙이기(`start_ambush_wolves()`는 부르지 않았다).
+
 ## Self-Review
 
 - **스펙 대조**: §8 의 외교·종교·월드·이벤트 줄이 Task 1·2 에 있다. 잴 수 없는 것은 적고 넘긴다.
