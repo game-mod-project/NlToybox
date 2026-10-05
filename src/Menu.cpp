@@ -160,7 +160,7 @@ void NlMenu::GameTick()
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
 	NlProduction::GameTick(now);
-	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items));
+	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;
@@ -247,6 +247,12 @@ void NlMenu::Draw()
 		break;
 	case Area::Items:
 		NlPeople::DrawItems();
+		break;
+	case Area::Army:
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlPeople::DrawArmy();
 		break;
 	case Area::People:
 		// 표의 항목(욕구, 이주민)을 먼저, 그 아래에 지금 한 번 하는 단추들.

@@ -3,8 +3,11 @@
 
 #include "Knobs.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
+#include <utility>
 #include <vector>
 
 namespace NlCore
@@ -44,6 +47,34 @@ namespace NlCore
 	{
 		return Live;
 	}
+
+	// 바꾸기를 누구의 호출에 걸지. 'a': 모두. 'p': self 가 플레이어의 것일 때만. 'o': 플레이어의 것이 아닐 때만.
+	constexpr bool HookApplies(char Who, bool Mine)
+	{
+		return Who == 'p' ? Mine : Who == 'o' ? !Mine : true;
+	}
+
+	// 훅이 self 와 견줄 주소들(플레이어의 영혼). 틱이 통째로 갈아 끼우고 훅이 찾는다. 0 은 담지 않는다.
+	class SelfSet
+	{
+	public:
+		void Replace(std::vector<std::uintptr_t> Values)
+		{
+			std::sort(Values.begin(), Values.end());
+			Values.erase(std::unique(Values.begin(), Values.end()), Values.end());
+			if (!Values.empty() && Values.front() == 0)
+				Values.erase(Values.begin());
+			m_Sorted = std::move(Values);
+		}
+		bool Has(std::uintptr_t Value) const
+		{
+			return Value != 0 && std::binary_search(m_Sorted.begin(), m_Sorted.end(), Value);
+		}
+		size_t Size() const { return m_Sorted.size(); }
+
+	private:
+		std::vector<std::uintptr_t> m_Sorted;
+	};
 
 	struct HookSlot
 	{

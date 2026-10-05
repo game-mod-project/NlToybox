@@ -126,6 +126,58 @@ namespace NlCore
 		return std::find(Equipped.begin(), Equipped.end(), static_cast<double>(Index)) != Equipped.end();
 	}
 
+	namespace
+	{
+		struct SpawnInfo
+		{
+			SpawnKind Kind;
+			const char* Word;
+			const char* Method;
+			const char* Label;
+		};
+		// 메서드의 이름은 소환기의 statics 에서, 만들어지는 사람의 진영과 갈래는 불러서 봤다(research/13).
+		constexpr SpawnInfo k_Spawns[] = {
+			{ SpawnKind::Soldier, "soldier", "__spawn_soldier", "병사" },
+			{ SpawnKind::Knight, "knight", "__spawn_knight", "기사" },
+			{ SpawnKind::Peasant, "peasant", "__spawn_peasant", "주민" },
+			{ SpawnKind::Slave, "slave", "__spawn_slave", "노예" },
+			{ SpawnKind::Lord, "lord", "__spawn_lord", "영주" },
+		};
+		const SpawnInfo& SpawnOf(SpawnKind Kind)
+		{
+			for (const SpawnInfo& spawn : k_Spawns)
+				if (spawn.Kind == Kind)
+					return spawn;
+			return k_Spawns[0];
+		}
+	}
+
+	bool ParseSpawnKind(const std::string& Word, SpawnKind& Out)
+	{
+		for (const SpawnInfo& spawn : k_Spawns)
+			if (Word == spawn.Word)
+			{
+				Out = spawn.Kind;
+				return true;
+			}
+		return false;
+	}
+
+	const char* SpawnWord(SpawnKind Kind) { return SpawnOf(Kind).Word; }
+	const char* SpawnMethod(SpawnKind Kind) { return SpawnOf(Kind).Method; }
+	const char* SpawnLabel(SpawnKind Kind) { return SpawnOf(Kind).Label; }
+
+	bool SoldierBatch(double Asked, int& Count)
+	{
+		if (!std::isfinite(Asked))
+			return false;
+		const double whole = std::round(Asked);
+		if (whole < 1)
+			return false;
+		Count = static_cast<int>(std::min(whole, static_cast<double>(k_SoldierBatchMax)));
+		return true;
+	}
+
 	bool GiftDelta(double Current, double Asked, double& Delta)
 	{
 		if (!std::isfinite(Current) || !std::isfinite(Asked))

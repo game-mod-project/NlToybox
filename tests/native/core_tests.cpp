@@ -681,7 +681,13 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 49);
+		CHECK(Cheats().size() == 51);
+		// 아군 무적(research/13): 상처를 입히는 함수를 플레이어의 사람에게만 건너뛴다. 모듈의 코드가 건다(Custom). 가려지는 것은 아직 보지 못했다.
+		CHECK(FindCheat("ally_invincible") && FindCheat("ally_invincible")->Kind == CheatKind::Custom && FindCheat("ally_invincible")->Where == Area::Army
+			&& !FindCheat("ally_invincible")->Verified);
+		// 군대(research/13): 병사의 고용 값. SoulBasic.get_soldier_cost() 가 돌려주는 수에 곱한다. 고용 창의 값과 실제로 빠진 금화로 봤다(160 → 16).
+		CHECK(FindCheat("hire_cost") && FindCheat("hire_cost")->Kind == CheatKind::HookScale && FindCheat("hire_cost")->Where == Area::Army
+			&& FindCheat("hire_cost")->Verified && FindCheat("hire_cost")->Max <= 1 && FindCheat("hire_cost")->Off == 1);		// 값은 정수로 남긴다
 		// 5단계: 연구 시간(research/12). 도서관 관리자의 get_learn_time 이 돌려주는 수에 곱한다. 효과는 보지 못했다.
 		CHECK(FindCheat("research_time") && FindCheat("research_time")->Kind == CheatKind::HookScale && FindCheat("research_time")->Where == Area::Knowledge
 			&& !FindCheat("research_time")->Verified && FindCheat("research_time")->Max <= 1);
@@ -739,7 +745,8 @@ int main(int argc, char** argv)
 			// 인물·영주·인구는 제 패널(src/People.cpp)이 있다.
 			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time
 				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People
-				|| area.Id == Area::Knowledge || area.Id == Area::Items;		// 지식·아이템도 제 패널이 있다(src/People.cpp)
+				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/People.cpp)
+				|| area.Id == Area::Army;									// 군대: 병사를 만드는 단추
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
@@ -1437,6 +1444,53 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=500 amount=50").Error.empty());
 		CHECK(!ParseRemoteLine("person lords money_add amount=5").Error.empty());
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 money_add amount=0").Error.empty());
+	});
+
+	Test("훅: 누구의 호출에 걸지와 self 의 묶음", [] {
+		CHECK(HookApplies('a', true) && HookApplies('a', false));
+		CHECK(HookApplies('p', true) && !HookApplies('p', false));
+		CHECK(!HookApplies('o', true) && HookApplies('o', false));
+		SelfSet set;
+		CHECK(set.Size() == 0 && !set.Has(0x1000));
+		set.Replace({ 0x3000, 0x1000, 0, 0x2000, 0x1000 });		// 0 은 버리고 겹친 것은 하나로
+		CHECK(set.Size() == 3 && set.Has(0x1000) && set.Has(0x2000) && set.Has(0x3000));
+		CHECK(!set.Has(0) && !set.Has(0x1800) && !set.Has(0x4000));
+		set.Replace({});
+		CHECK(set.Size() == 0 && !set.Has(0x1000));
+	});
+
+	Test("군대: 디버그 소환기의 종류와 원격 명령", [] {
+		SpawnKind kind = SpawnKind::Soldier;
+		CHECK(ParseSpawnKind("knight", kind) && kind == SpawnKind::Knight);
+		CHECK(ParseSpawnKind("peasant", kind) && kind == SpawnKind::Peasant);
+		CHECK(ParseSpawnKind("slave", kind) && ParseSpawnKind("lord", kind) && ParseSpawnKind("soldier", kind));
+		CHECK(!ParseSpawnKind("bandit", kind) && !ParseSpawnKind("wolf", kind) && !ParseSpawnKind("", kind));		// 플레이어의 사람만 만든다
+		CHECK(std::string(SpawnMethod(SpawnKind::Soldier)) == "__spawn_soldier" && std::string(SpawnMethod(SpawnKind::Lord)) == "__spawn_lord");
+		CHECK(std::string(SpawnMethod(SpawnKind::Slave)) == "__spawn_slave");		// 소환기의 목록에는 "slaves" 지만 메서드는 __spawn_slave 다(research/13)
+		CHECK(std::string(SpawnWord(SpawnKind::Peasant)) == "peasant");
+
+		RemoteCommand c = ParseRemoteLine("person spawn knight");
+		CHECK(c.Error.empty() && c.Verb == "person" && c.Target == "spawn" && c.Options.at("kind") == "knight");
+		CHECK(!ParseRemoteLine("person spawn").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn bandit").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn knight 2").Error.empty());
+	});
+
+	Test("군대: 한 번에 만드는 병사의 수와 원격 명령", [] {
+		int count = 0;
+		CHECK(SoldierBatch(3, count) && count == 3);
+		CHECK(SoldierBatch(1, count) && count == 1);
+		CHECK(SoldierBatch(25, count) && count == 20);			// 한 번에 스무 명까지
+		CHECK(SoldierBatch(2.6, count) && count == 3);
+		CHECK(!SoldierBatch(0, count) && !SoldierBatch(-4, count) && !SoldierBatch(0.3, count));
+		CHECK(!SoldierBatch(std::numeric_limits<double>::quiet_NaN(), count) && !SoldierBatch(std::numeric_limits<double>::infinity(), count));
+
+		RemoteCommand c = ParseRemoteLine("person spawn_soldier amount=3");
+		CHECK(c.Error.empty() && c.Verb == "person" && c.Target == "spawn_soldier" && c.Number == 3);
+		CHECK(!ParseRemoteLine("person spawn_soldier").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn_soldier amount=0").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn_soldier amount=nan").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn_soldier amount=3 extra").Error.empty());
 	});
 
 	Test("인구: 켠 항목이 채워 둘 욕구의 번호", [] {

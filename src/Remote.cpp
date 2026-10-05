@@ -412,6 +412,22 @@ namespace
 		std::vector<std::string> lines;
 		if (C.Target == "list")
 			lines = NlPeople::List(C.Options.count("all") > 0);
+		else if (C.Target == "spawn")
+		{
+			NlCore::SpawnKind kind = NlCore::SpawnKind::Soldier;
+			if (!NlCore::ParseSpawnKind(C.Options.count("kind") ? C.Options.at("kind") : std::string(), kind))
+				lines = { "person spawn needs a kind" };
+			else
+			{
+				Say(std::string("  running person spawn ") + NlCore::SpawnWord(kind));		// 죽으면 여기까지 남는다
+				lines = NlPeople::SpawnHere(kind);
+			}
+		}
+		else if (C.Target == "spawn_soldier")
+		{
+			Say("  running person spawn_soldier");		// 죽으면 여기까지 남는다
+			lines = NlPeople::SpawnSoldiers(C.Number);
+		}
 		else if (C.Target == "show")
 			lines = NlPeople::Show(C.Options.count("who") ? C.Options.at("who") : std::string());
 		else

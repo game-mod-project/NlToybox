@@ -298,6 +298,28 @@ namespace NlCore
 				command.Options["who"] = tokens[2];
 				return command;
 			}
+			if (count >= 2 && tokens[1] == "spawn")
+			{
+				// person spawn <soldier|knight|peasant|slave|lord>: 게임의 디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다(research/13)
+				SpawnKind kind = SpawnKind::Soldier;
+				if (count != 3 || !ParseSpawnKind(tokens[2], kind))
+					return fail("person spawn needs soldier, knight, peasant, slave or lord");
+				command.Target = "spawn";
+				command.Options["kind"] = tokens[2];
+				return command;
+			}
+			if (count >= 2 && tokens[1] == "spawn_soldier")
+			{
+				// person spawn_soldier amount=<1..20>: 플레이어의 병사를 그만큼 만든다(게임의 디버그 함수. research/13)
+				int soldiers = 0;
+				if (count != 3 || !options(2))
+					return fail("person spawn_soldier needs amount=<1..20>");
+				const auto wanted = command.Options.find("amount");
+				if (wanted == command.Options.end() || !ParseNumber(wanted->second, command.Number) || !SoldierBatch(command.Number, soldiers))
+					return fail("person spawn_soldier needs amount=<1..20>");
+				command.Target = "spawn_soldier";
+				return command;
+			}
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
 				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, "
