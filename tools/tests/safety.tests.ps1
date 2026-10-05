@@ -74,6 +74,34 @@ try {
         }
     }
 
+    Test-Case 'ask 는 게임이 꺼져 있으면 묻지 않는다' {
+        $r = Invoke-Tool 'ask.ps1' "-Lines 'state'"
+        Assert-True ($r.Exit -ne 0 -and $r.Out -match '게임이 켜져 있지 않습니다') "거부해야 한다`n$($r.Out)"
+        Assert-True (-not (Test-Path -LiteralPath (Join-Path $fake 'mods\Aurie\NlToyBox.ask.txt'))) '물음 파일을 남기지 않아야 한다'
+    }
+
+    Test-Case 'session 은 남은 설정 사본이 있으면 켜지 않고, stop 이 사용자의 설정을 되돌린다' {
+        $modsDir = Join-Path $fake 'mods'
+        $hadMods = Test-Path -LiteralPath $modsDir
+        $aurieDir = Join-Path $modsDir 'Aurie'
+        New-Item -ItemType Directory -Force -Path $aurieDir | Out-Null
+        $settingsFile = Join-Path $aurieDir 'NlToyBox.settings.txt'
+        try {
+            Set-Content -LiteralPath "$settingsFile.kept" -Value 'building_cost=0.50' -Encoding ascii     # 사용자의 것
+            Set-Content -LiteralPath $settingsFile -Value 'building_cost=3.00' -Encoding ascii           # 실행 묶음이 쓴 것
+            $r = Invoke-Tool 'session.ps1' '-Action start' $noLaunch
+            Assert-True ($r.Exit -ne 0 -and $r.Out -match '남긴 사본' -and $r.Out -notmatch 'LAUNCH-ATTEMPTED') "start 는 거부해야 한다`n$($r.Out)"
+            $r = Invoke-Tool 'session.ps1' '-Action stop -Name safety-test'
+            Assert-Equal $r.Exit 0 "stop 종료 코드`n$($r.Out)"
+            Assert-Equal (Get-Content -LiteralPath $settingsFile -Raw).Trim() 'building_cost=0.50' '사용자의 설정이 돌아와야 한다'
+            Assert-True (-not (Test-Path -LiteralPath "$settingsFile.kept")) '사본이 남지 않아야 한다'
+        }
+        finally {
+            if (-not $hadMods -and (Test-Path -LiteralPath $modsDir)) { Remove-Item -LiteralPath $modsDir -Recurse -Force }
+        }
+    }
+
+
     Test-Case 'setup 은 내용이 원본과 다른 기존 백업을 믿지 않고 다시 만든다' {
         New-Item -ItemType Directory -Force -Path $backupDir | Out-Null
         [IO.File]::WriteAllBytes($backupPath, $garbage)      # 복사가 중간에 끊겨 남은 백업을 흉내 낸다
