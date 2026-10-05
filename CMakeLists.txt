@@ -44,6 +44,7 @@ add_library(nltoybox SHARED
   src/Explorer.cpp
   src/Finder.cpp
   src/Game.cpp
+  src/Menu.cpp
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp

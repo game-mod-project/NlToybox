@@ -31,4 +31,13 @@ namespace NlUi
 
 	// 시험용 설정의 "set=이름:배율" 줄들(이름:배율). 평소에는 비어 있다.
 	const std::vector<std::string>& TestSets();
+
+	// 시험용 설정의 그 밖의 줄: "Key=값" 들의 값. 평소에는 비어 있다(page, path, ask, poke 를 Menu 가 읽는다).
+	std::vector<std::string> TestValues(const std::string& Key);
+
+	// 시험용 설정이 정한, 화면을 뜨는 때(모드창이 준비된 뒤의 초). 뜨지 않으면 음수.
+	double ShotSeconds();
+
+	// 모드창이 준비된 뒤의 초. 아직 준비되지 않았으면 음수.
+	double SecondsSinceReady();
 }
