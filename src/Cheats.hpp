@@ -31,6 +31,13 @@ namespace NlCheats
 	// 켠 것이 바뀌었으면 상태 파일에 적을 것을 채우고 참을 돌려준다.
 	bool TakeChanges(std::set<std::string>& On, std::map<std::string, double>& Numbers);
 
+	// 그 항목이 켜져 있는가. 모듈의 코드가 하는 항목(Custom)이 본다.
+	bool IsOn(const std::string& Id);
+	// 그 항목 옆에 보일 글(한 일, 못 한 까닭). Custom 항목을 하는 코드가 적는다.
+	void SetNote(const std::string& Id, const std::string& Note);
+	// 항목을 켜고 끈다(모드창의 체크와 같다. 원격 명령 cheat). 수 항목이거나 없는 Id 면 거짓.
+	bool Set(const std::string& Id, bool On);
+
 	// 켜 둔 항목의 수(게임 속도를 걸었으면 하나 더).
 	int ActiveCount();
 	// 모두 끄고 원래 값으로 되돌린다.

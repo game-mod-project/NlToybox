@@ -1,6 +1,7 @@
 #include "Remote.hpp"
 
 #include "Access.hpp"
+#include "Cheats.hpp"
 #include "Economy.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
@@ -11,6 +12,7 @@
 #include "core/RemoteCommand.hpp"
 #include "core/Text.hpp"
 
+#include <algorithm>
 #include <chrono>
 #include <fstream>
 #include <vector>
@@ -273,6 +275,10 @@ namespace
 		}
 		const NlAccess::Row row = NlAccess::Describe({}, value);
 		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		// 구조체를 만든 생성자의 이름(instanceof. 매뉴얼). 생성자로 만든 것이 아니면 "struct" 따위가 나온다.
+		RValue made_by;
+		if (value.IsStruct() && NlGame::Call("instanceof", { value }, made_by) && made_by.IsString())
+			Say("  instanceof " + made_by.ToString());
 		NlAccess::MethodInfo info;
 		if (NlAccess::AboutMethod(path, info, why))
 		{
@@ -282,6 +288,105 @@ namespace
 				: info.How == NlCore::Binding::ToOwner ? "bind it to the owner (the parent of the path) and call"
 				: "refuse: unbound, and the owner is not a struct or an instance"));
 		}
+	}
+
+	// 값의 자식들을 깊이 MaxDepth 까지(주소 없이 값에서 바로). ref(다른 인스턴스)로는 넘어가지 않는다.
+	void TreeValue(const RValue& Value, int Depth, int MaxDepth, size_t& Budget, const std::string& Indent)
+	{
+		const Holder kind = NlAccess::Classify(Value);
+		if (kind != Holder::Struct && kind != Holder::Array)
+			return;
+		NlAccess::ForEachChild(Value, kind, [&](const NlCore::PathStep& step, const RValue& child) {
+			if (Budget == 0)
+				return false;
+			Budget--;
+			const NlAccess::Row row = NlAccess::Describe(step, child);
+			Say(Indent + RowText(row));
+			if (row.IsContainer && row.Type != "ref" && Depth + 1 < MaxDepth)
+				TreeValue(child, Depth + 1, MaxDepth, Budget, Indent + "  ");
+			return true;
+		});
+	}
+
+	// 인자 없는 스크립트를 부르고 돌려준 값을 늘어놓는다. 돌려준 값은 이 틱 안에서만 든다.
+	void DoTreeCall(const RemoteCommand& C)
+	{
+		const std::string name = NlCore::ScriptRoutineName(C.Target);
+		Say("  calling " + name + " with 0 arguments");		// 죽으면 여기까지 남는다
+		Log("remote treecall " + name);
+		RValue result;
+		if (!NlGame::CallScript(name, {}, result))
+		{
+			Say("  : no such script: " + C.Target);
+			return;
+		}
+		SayResult(result);
+		// 자기를 가리키는 구조체가 있어도 깊이와 수로 멈춘다(되부름이 스택을 넘기지 않게 깊이에 상한을 둔다).
+		size_t budget = static_cast<size_t>(std::clamp(NlCore::OptionNumber(C, "max", 300), 1.0, 5000.0));
+		TreeValue(result, 0, static_cast<int>(std::clamp(NlCore::OptionNumber(C, "depth", 2), 1.0, 8.0)), budget, "    ");
+		if (budget == 0)
+			Say("    (max reached)");
+	}
+
+	// 구조체의 정적 메서드들의 이름. list 에는 구조체 자신의 변수만 나온다. 정적 구조체는 static_get 으로 얻고,
+	// 정적 구조체의 static_get 은 부모 생성자의 정적 구조체다. 뿌리의 것은 undefined 다(매뉴얼).
+	void DoStatics(const RemoteCommand& C)
+	{
+		RValue node;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(C.Target), node, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		// static_get 과 instanceof 는 구조체(메서드 포함)에만 부른다. 그 밖의 값에 대한 동작은 매뉴얼에 없다.
+		if (!node.IsStruct())
+		{
+			Say("  : not a struct");
+			return;
+		}
+		RValue made_by;
+		if (NlGame::Call("instanceof", { node }, made_by) && made_by.IsString())
+			Say("  instanceof " + made_by.ToString());
+
+		size_t budget = static_cast<size_t>(std::clamp(NlCore::OptionNumber(C, "max", 400), 1.0, 5000.0));
+		for (int level = 0; level < 8; level++)
+		{
+			RValue next;
+			if (!NlGame::Call("static_get", { node }, next) || !next.IsStruct())
+				break;
+			Say("  # static " + std::to_string(level));
+			bool cut = false;
+			const double count = NlAccess::ForEachChild(next, Holder::Struct, [&](const NlCore::PathStep& step, const RValue& child) {
+				if (budget == 0)
+				{
+					cut = true;
+					return false;
+				}
+				budget--;
+				Say("    " + RowText(NlAccess::Describe(step, child)));
+				return true;
+			});
+			if (cut)
+				Say("    (max reached)");
+			else if (count <= 0)
+				Say("    (nothing)");
+			node = next;
+		}
+	}
+
+	// 함수가 돌려주는 값을 바꾼다(NlRecorder::Override).
+	void DoOverride(const RemoteCommand& C)
+	{
+		NlRecorder::Forced value;
+		value.Kind = C.Args.empty() ? 'u' : C.Args[0].Kind;
+		value.Number = C.Args.empty() ? 0 : C.Args[0].Number;
+		value.Skip = C.Options.count("skip") > 0;
+		std::string name, why;
+		if (NlRecorder::Override(C.Target, value, name, why))
+			Say("  overriding " + name);
+		else
+			Say("  : " + why);
 	}
 
 	// 경제 패널과 같은 길로 금화·자원을 바꾼다(NlEconomy::Do).
@@ -324,6 +429,8 @@ namespace
 			DoAbout(C);
 		else if (C.Verb == "economy")
 			DoEconomy(C);
+		else if (C.Verb == "cheat")
+			Say(NlCheats::Set(C.Target, C.Number != 0) ? "  cheat " + C.Target + (C.Number != 0 ? " on" : " off") : "  : not a switch: " + C.Target);
 		else if (C.Verb == "page")
 			Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
 		else if (C.Verb == "list")
@@ -346,6 +453,17 @@ namespace
 				Say("  recording " + name);
 			else
 				Say("  : " + why);
+		}
+		else if (C.Verb == "statics")
+			DoStatics(C);
+		else if (C.Verb == "treecall")
+			DoTreeCall(C);
+		else if (C.Verb == "override")
+			DoOverride(C);
+		else if (C.Verb == "unoverride")
+		{
+			const int stopped = NlRecorder::Unoverride(C.Target);
+			Say(stopped > 0 ? "  stopped " + std::to_string(stopped) : "  : nothing is overridden under that name");
 		}
 		else if (C.Verb == "unrecord")
 			Say("  stopped " + std::to_string(NlRecorder::Unwatch(C.Target)));

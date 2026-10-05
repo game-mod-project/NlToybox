@@ -268,6 +268,55 @@ bool NlAccess::Open(const AskPath& Path, RValue& Out, Holder& Kind, std::string&
 	return true;
 }
 
+bool NlAccess::Follow(const RValue& From, const std::vector<PathStep>& Steps, RValue& Out, std::string& Why)
+{
+	Cursor at{ Classify(From), From };
+	for (const PathStep& step : Steps)
+	{
+		Cursor next;
+		if (!Step(at, step, next, Why))
+			return false;
+		at = next;
+	}
+	Out = at.Value;
+	return true;
+}
+
+bool NlAccess::SetNumber(const RValue& In, const PathStep& S, double Number, std::string& Why)
+{
+	const Cursor parent{ Classify(In), In };
+	Cursor old;
+	if (!Step(parent, S, old, Why))
+		return false;			// 없는 것을 만들지 않는다
+	if (!NlGame::IsNumber(old.Value))
+	{
+		Why = "not a number (" + old.Value.GetKindName() + ")";
+		return false;
+	}
+
+	const RValue value = NumberLike(old.Value, Number);
+	RValue ignored;
+	if (S.Kind == '.' && In.IsStruct())
+		NlGame::Call("variable_struct_set", { In, Str(S.Name), value }, ignored);
+	else if (S.Kind == '[' && In.IsArray())
+		NlGame::Call("array_set", { In, RValue(S.Index), value }, ignored);
+	else
+	{
+		Why = "can only set a struct member or an array element";
+		return false;
+	}
+
+	Cursor again;
+	if (!Step(parent, S, again, Why))
+		return false;
+	if (!Same(again.Value, value))
+	{
+		Why = "did not stick";
+		return false;
+	}
+	return true;
+}
+
 bool NlAccess::Read(const AskPath& Path, RValue& Out, std::string& Why)
 {
 	Holder ignored = Holder::None;

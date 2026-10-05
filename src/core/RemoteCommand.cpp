@@ -156,7 +156,7 @@ namespace NlCore
 			if (count != 1)
 				return fail("state takes nothing");
 		}
-		else if (verb == "ask" || verb == "about" || verb == "list" || verb == "tree")
+		else if (verb == "ask" || verb == "about" || verb == "list" || verb == "tree" || verb == "statics")
 		{
 			if (count < 2 || !GoodPath(tokens[1], false))
 				return fail(verb + " needs a path");
@@ -216,6 +216,35 @@ namespace NlCore
 				return fail("window needs open or close");
 			command.Target = tokens[1];
 		}
+		else if (verb == "treecall")
+		{
+			// treecall <인자 없는 스크립트의 이름> [depth=N] [max=N]
+			if (count < 2 || tokens[1].find('=') != std::string::npos)
+				return fail("treecall needs a script name");
+			command.Target = tokens[1];
+			if (!options(2))
+				return command;
+		}
+		else if (verb == "override")
+		{
+			// override <스크립트 이름|메서드의 주소> <n:수|b:0|1|u> [skip]
+			RemoteArg value;
+			if (count < 3 || count > 4 || !ParseArg(tokens[2], value) || (value.Kind != 'n' && value.Kind != 'b' && value.Kind != 'u')
+				|| (value.Kind == 'n' && !std::isfinite(value.Number)))
+				return fail("override needs a target and a value (n:<finite number>, b:0|1 or u)");
+			if (count == 4 && tokens[3] != "skip")
+				return fail("override takes only 'skip' after the value");
+			command.Target = tokens[1];
+			command.Args.push_back(value);
+			if (count == 4)
+				command.Options["skip"] = "1";
+		}
+		else if (verb == "unoverride")
+		{
+			if (count != 2)
+				return fail("unoverride needs one name or 'all'");
+			command.Target = tokens[1];
+		}
 		else if (verb == "economy")
 		{
 			EconomyAct act = EconomyAct::GoldAdd;
@@ -234,6 +263,14 @@ namespace NlCore
 				return fail("economy " + tokens[1] + " needs resource=<index>");
 			if (!NeedsResource(act) && given != command.Options.end())
 				return fail("economy " + tokens[1] + " takes no resource");
+		}
+		else if (verb == "cheat")
+		{
+			// cheat <치트의 Id> on|off
+			if (count != 3 || !FindCheat(tokens[1]) || (tokens[2] != "on" && tokens[2] != "off"))
+				return fail("cheat needs the id of a cheat and on or off");
+			command.Target = tokens[1];
+			command.Number = tokens[2] == "on" ? 1 : 0;
 		}
 		else if (verb == "page")
 		{

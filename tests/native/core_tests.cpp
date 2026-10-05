@@ -6,12 +6,15 @@
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
+#include "core/CostBook.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
+#include "core/Retry.hpp"
 #include "core/Schedule.hpp"
 #include "core/SpeedControl.hpp"
 #include "core/SpeedTrial.hpp"
@@ -597,6 +600,89 @@ int main(int argc, char** argv)
 	});
 
 
+	Test("건설비 장부: 처음 본 값을 기억하고 0 은 기억하지 않는다", [] {
+		CostBook book;
+		CHECK(book.Empty());
+		book.Remember("altar", 1, 1, 30);
+		book.Remember("altar", 1, -1, 0);			// 0 인 자리는 바꿀 것이 없다
+		book.Remember("hut_6x10", 2, 32, 5);
+		book.Remember("altar", 1, 1, 0);			// 0 으로 쓴 뒤 다시 보면 0 이 보인다. 처음 본 30 을 지킨다
+		book.Remember("altar", 1, 1, 99);			// 이미 기억한 자리는 바꾸지 않는다
+		CHECK(book.Size() == 2 && !book.Empty());
+		CHECK(book.Entries()[0].Building == "altar" && book.Entries()[0].Level == 1 && book.Entries()[0].Slot == 1 && book.Entries()[0].Value == 30);
+		CHECK(book.Entries()[1].Building == "hut_6x10" && book.Entries()[1].Slot == 32 && book.Entries()[1].Value == 5);
+		book.Remember("altar", 2, 1, 7);			// 등급이 다르면 다른 자리다
+		book.Remember("altar", 1, -1, 12);			// 금화(-1)도 한 자리다
+		CHECK(book.Size() == 4);
+		book.Clear();
+		CHECK(book.Empty() && book.Entries().empty());
+		book.Remember("altar", 1, 1, std::numeric_limits<double>::quiet_NaN());		// 수가 아니면 기억하지 않는다
+		CHECK(book.Empty());
+	});
+
+	Test("건설비 장부: 되돌릴 값이 있는 자리인지 알려 주고, 되돌린 자리만 잊는다", [] {
+		CostBook book;
+		CHECK(book.Remember("altar", 1, 1, 30));			// 새로 기억했다. 0 으로 써도 된다
+		CHECK(book.Remember("altar", 1, 1, 0));				// 이미 기억한 자리다
+		CHECK(!book.Remember("altar", 1, 2, 0));			// 0 인 자리: 쓸 것이 없다
+		// 유한하지 않은 값은 되돌릴 수 없다. 그런 자리는 0 으로 쓰지도 않는다(건물 데이터에 inf 가 있다: __limit. research/09).
+		CHECK(!book.Remember("altar", 1, 3, std::numeric_limits<double>::infinity()));
+		CHECK(book.Remember("hut_6x10", 2, 32, 5) && book.Remember("hut_6x10", 2, 1, 10));
+		CHECK(book.Size() == 3);
+
+		book.Forget({ 1, 0, 1 });							// 되돌린 자리만 잊는다. 못 되돌린 자리는 남아 다음에 다시 되돌린다
+		CHECK(book.Size() == 1 && book.Entries()[0].Building == "hut_6x10" && book.Entries()[0].Slot == 32 && book.Entries()[0].Value == 5);
+		book.Forget({ 1, 1 });								// 수가 맞지 않으면 아무것도 잊지 않는다
+		CHECK(book.Size() == 1);
+		book.Forget({ 0 });
+		CHECK(book.Size() == 1);
+		book.Forget({ 1 });
+		CHECK(book.Empty());
+	});
+
+	Test("다시 해 보기: 실패가 이어지면 간격을 두 배씩 늘리고 성공하면 처음으로 돌아간다", [] {
+		Retry retry(2, 60);
+		CHECK(retry.Due(0) && retry.Failures() == 0);
+		retry.Failed(10);
+		CHECK(!retry.Due(11.9) && retry.Due(12) && retry.Failures() == 1);
+		retry.Failed(12);
+		CHECK(!retry.Due(15.9) && retry.Due(16) && retry.Failures() == 2);
+		for (int i = 0; i < 10; i++)
+			retry.Failed(100);
+		CHECK(!retry.Due(159.9) && retry.Due(160));			// 가장 긴 간격(60초)을 넘지 않는다
+		retry.Succeeded();
+		CHECK(retry.Due(100) && retry.Failures() == 0);
+		retry.Failed(200);
+		CHECK(!retry.Due(201.9) && retry.Due(202));			// 다시 처음 간격부터
+	});
+
+	Test("훅 항목: 켠 것과 실제로 걸린 것이 어긋나면 다시 건다", [] {
+		CHECK(ChooseHookStep(true, false, false) == HookStep::Apply);
+		CHECK(ChooseHookStep(true, true, true) == HookStep::None);
+		CHECK(ChooseHookStep(true, true, false) == HookStep::Apply);		// 다른 곳(원격 unoverride all)이 껐다. 체크가 켜져 있으면 다시 건다
+		CHECK(ChooseHookStep(true, false, true) == HookStep::Apply);		// 원격이 걸어 둔 것을 이 항목의 값으로 맞춘다
+		CHECK(ChooseHookStep(false, true, true) == HookStep::Remove);
+		CHECK(ChooseHookStep(false, true, false) == HookStep::Remove);		// 걸었다는 표시를 지운다
+		CHECK(ChooseHookStep(false, false, false) == HookStep::None);
+		CHECK(ChooseHookStep(false, false, true) == HookStep::None);		// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
+	});
+
+	Test("훅의 자리: 걸린 대상은 그 자리, 걸다 실패한 대상에는 새 자리를 주지 않는다", [] {
+		const int a = 0, b = 0, c = 0, d = 0;
+		std::vector<HookSlot> slots(3);
+		int index = -9;
+		CHECK(PickHookSlot(slots, &a, index) == SlotPick::Free && index == 0);
+		slots[0] = { true, false, &a };
+		slots[1] = { true, true, &b };						// 훅을 걸다 실패했다
+		CHECK(PickHookSlot(slots, &a, index) == SlotPick::Existing && index == 0);
+		// 같은 대상을 0.5초마다 다시 걸면 자리 64개가 32초에 없어진다. 실패한 대상은 그 실행에서 다시 걸지 않는다.
+		CHECK(PickHookSlot(slots, &b, index) == SlotPick::Failed && index == 1);
+		CHECK(PickHookSlot(slots, &c, index) == SlotPick::Free && index == 2);
+		slots[2] = { true, false, &c };
+		CHECK(PickHookSlot(slots, &d, index) == SlotPick::Full && index == -1);
+		CHECK(PickHookSlot(slots, &c, index) == SlotPick::Existing && index == 2);
+	});
+
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
 		state.On = { "instant_build", "no_dodge" };
@@ -654,12 +740,21 @@ int main(int argc, char** argv)
 			CHECK(ids.insert(cheat.Id).second);
 			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
 			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
-			if (cheat.Kind == CheatKind::Toggle)
-				CHECK(cheat.On != cheat.Off);
-			else
+			if (cheat.Kind == CheatKind::Number)
 				CHECK(cheat.Min < cheat.Max);
+			else
+				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 30);
+		CHECK(Cheats().size() == 34);
+		// 건설 조건과 건설비(research/09). 조건은 게임의 함수가 돌려주는 값을 바꾸는 훅이고, 비용은 모듈이 건물 종류를 돌며 0 으로 쓴다.
+		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
+		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
+		CHECK(FindCheat("build_free") && FindCheat("build_free")->Kind == CheatKind::Custom && FindCheat("build_free")->Where == Area::Build);
+		// 비용 없음은 플레이에서 봤다(research/09: 돼지 농장을 짓고 올려도 나무가 줄지 않았다. 켠 채 저장한 세이브를 불러와도 비용은 원래 값이었다).
+		CHECK(FindCheat("build_free")->Verified);
+		// 즉시 업그레이드: 업그레이드 중인 건물에 게임의 build_instantly() 를 부른다(모듈의 코드가 한다). 사용자가 누른 주택 세 채가 바로 올랐다.
+		CHECK(FindCheat("instant_upgrade") && FindCheat("instant_upgrade")->Kind == CheatKind::Custom && FindCheat("instant_upgrade")->Where == Area::Build);
+		CHECK(FindCheat("instant_upgrade")->Verified);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
 		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
@@ -700,6 +795,16 @@ int main(int argc, char** argv)
 		CHECK(kept.Numbers.size() == 1 && kept.Numbers.at("rest_decrease") == FindCheat("rest_decrease")->Max);
 		CHECK(kept.Pins == state.Pins && kept.Locks.size() == 1);
 		CHECK(FindCheat("nope") == nullptr && FindCheat("instant_build")->Kind == CheatKind::Toggle);
+		// 훅과 모듈 항목은 효과를 확인한 것만 켠 채로 시작한다(수 항목은 On 에서 빠진다).
+		// 확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다: 창을 열지도 않았는데 게임의 판정이 바뀌거나(build_marks 는 지식 창도 쓰는 함수다)
+		// 건설비가 0 으로 쓰여 세이브에 굳는 일(build_free. 세이브에 들어가는지 재지 않았다)이 없게.
+		CheatState hooks;
+		hooks.On = { "build_any", "build_free", "build_marks", "instant_upgrade", "rest_decrease", "build_all" };
+		const CheatState kept_hooks = KeepKnown(hooks);
+		CHECK(FindCheat("build_any")->Verified && !FindCheat("build_marks")->Verified);
+		// 확인한 훅·모듈 항목은 남고(build_any, build_free, instant_upgrade) 확인 전의 것(build_marks)은 빠진다.
+		// 값을 쓰는 스위치(Toggle: build_all)는 확인 전이어도 그대로다.
+		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free", "instant_upgrade", "build_all" }));
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
@@ -1012,6 +1117,40 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("economy all amount=100").Error.empty());
 		const RemoteCommand page = ParseRemoteLine("page economy");
 		CHECK(page.Error.empty() && page.Verb == "page" && page.Target == "economy");
+		const RemoteCommand cheat = ParseRemoteLine("cheat build_free on");
+		CHECK(cheat.Error.empty() && cheat.Verb == "cheat" && cheat.Target == "build_free" && cheat.Number == 1);
+		CHECK(ParseRemoteLine("cheat build_free off").Number == 0 && ParseRemoteLine("cheat build_free off").Error.empty());
+		CHECK(!ParseRemoteLine("cheat").Error.empty() && !ParseRemoteLine("cheat build_free").Error.empty()
+			&& !ParseRemoteLine("cheat build_free maybe").Error.empty() && !ParseRemoteLine("cheat no_such_cheat on").Error.empty());
+		const RemoteCommand statics = ParseRemoteLine("statics inst:o_building.generic max=200");
+		CHECK(statics.Error.empty() && statics.Verb == "statics" && statics.Target == "inst:o_building.generic" && OptionNumber(statics, "max", 400) == 200);
+	});
+
+	Test("원격 명령: 반환값을 바꾸는 훅의 줄을 읽는다", [] {
+		const RemoteCommand yes = ParseRemoteLine("override inst:o_building.is_building_locked b:0");
+		CHECK(yes.Error.empty() && yes.Verb == "override" && yes.Target == "inst:o_building.is_building_locked");
+		CHECK(yes.Args.size() == 1 && yes.Args[0].Kind == 'b' && yes.Args[0].Number == 0 && !yes.Options.count("skip"));
+		const RemoteCommand skip = ParseRemoteLine("override gml_Script_x n:-1.5 skip");
+		CHECK(skip.Error.empty() && skip.Args[0].Kind == 'n' && skip.Args[0].Number == -1.5 && skip.Options.count("skip") == 1);
+		const RemoteCommand treecall = ParseRemoteLine("treecall building_generic_get_array_of_all_buildings depth=3 max=50");
+		CHECK(treecall.Error.empty() && treecall.Verb == "treecall" && treecall.Target == "building_generic_get_array_of_all_buildings");
+		CHECK(OptionNumber(treecall, "depth", 2) == 3 && OptionNumber(treecall, "max", 300) == 50);
+		CHECK(!ParseRemoteLine("treecall").Error.empty() && !ParseRemoteLine("treecall a b").Error.empty());
+		const RemoteCommand undefined = ParseRemoteLine("override gml_Script_x u");
+		CHECK(undefined.Args.size() == 1 && undefined.Args[0].Kind == 'u');
+		CHECK(ParseRemoteLine("unoverride all").Target == "all" && ParseRemoteLine("unoverride gml_Script_x").Error.empty());
+		// 바꿀 값은 수, 불리언, undefined 뿐이다. 글이나 주소의 값으로 바꾸지 않는다(훅 안에서 만들 수 없다).
+		for (const char* line : { "override", "override gml_Script_x", "override gml_Script_x s:yes", "override gml_Script_x p:global.a",
+			"override gml_Script_x n:1 always", "override gml_Script_x n:1 skip extra", "override gml_Script_x n:abc", "unoverride", "unoverride a b",
+			"override gml_Script_x n:nan", "override gml_Script_x n:inf", "override gml_Script_x n:-inf",
+			"statics", "statics o_x.y" })
+		{
+			if (ParseRemoteLine(line).Error.empty())
+			{
+				std::printf("  FAIL accepted: %s\n", line);
+				g_Failed++;
+			}
+		}
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {

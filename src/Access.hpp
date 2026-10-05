@@ -43,6 +43,13 @@ namespace NlAccess
 	// 있는 자리에만 쓴다. 쓴 뒤 뿌리부터 다시 읽어 그 값인지 본다. 아니면 거짓이고 Why 는 "did not stick".
 	bool Write(const NlCore::AskPath& Path, const YYTK::RValue& Value, std::string& Why);
 
+	// 값에서 단계들을 따라간다(주소의 뿌리 없이). 게임의 함수가 돌려준 구조체 안을 볼 때 쓴다. 없으면 거짓.
+	bool Follow(const YYTK::RValue& From, const std::vector<NlCore::PathStep>& Steps, YYTK::RValue& Out, std::string& Why);
+
+	// 값(구조체나 배열) 안의 수 하나를 바꾼다(주소의 뿌리 없이. Follow 의 쓰기 짝). 수인 자리에만 쓰고, 형은 원래 값의 것을 따르고,
+	// 쓴 뒤 같은 값에서 다시 읽어 남았는지 본다. 아니면 거짓이고 Why 는 "did not stick".
+	bool SetNumber(const YYTK::RValue& In, const NlCore::PathStep& Step, double Number, std::string& Why);
+
 	// 수(불리언 포함)로 읽고 쓴다. 수가 아닌 값은 수로 덮어쓰지 않는다. 형은 원래 값의 것을 따른다.
 	bool ReadNumber(const std::string& Path, double& Out);
 	bool WriteNumber(const std::string& Path, double Number, std::string& Why);

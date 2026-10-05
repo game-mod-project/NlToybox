@@ -4,11 +4,14 @@
 #include "Game.hpp"
 #include "core/AskPath.hpp"
 #include "core/CallLog.hpp"
+#include "core/Hooks.hpp"
 #include "core/Text.hpp"
 
 #include <array>
+#include <cstring>
 #include <mutex>
 #include <utility>
+#include <vector>
 
 using namespace Aurie;
 using namespace YYTK;
@@ -22,11 +25,15 @@ namespace
 	struct Slot
 	{
 		bool Used = false;
+		bool Failed = false;					// 훅을 걸다 실패했다. Target 은 걸려던 함수로 남긴다(같은 함수에 다시 걸지 않게)
 		bool Recording = false;
 		std::string Name;
 		PFUNC_YYGMLScript Target = nullptr;		// 훅을 건 함수
 		PFUNC_YYGMLScript Original = nullptr;	// 원래 함수로 가는 트램펄린
 		NlCore::CallLog Log;
+		// 돌려주는 값을 바꾼다(스펙 §3 의 수단 D). 게임 스레드만 읽고 쓴다.
+		bool Override = false;
+		NlRecorder::Forced Value;
 	};
 
 	AurieModule* g_Module = nullptr;
@@ -72,6 +79,8 @@ namespace
 			return "struct";
 		if (kind == VALUE_REF)
 			return "ref";
+		if (kind == VALUE_BOOL)
+			return Value.ToDouble() != 0 ? "true" : "false";
 		if (Value.IsNumberConvertible())
 			return NlCore::Shortest(Value.ToDouble());
 		return KindName(kind);
@@ -122,14 +131,54 @@ namespace
 			}
 		}
 
+		// 돌려줄 값을 바꾼다. 수, 불리언, undefined 뿐이다. 바꾼 값은 언제나 결과 자리(Result)에 두고 Result 를 돌려준다:
+		// 게임이 반환 참조를 읽든 Result 를 읽든(YYToolkit 의 CallGameScriptEx 는 Result 만 읽는다) 같은 값을 본다.
+		const bool forced = slot.Override;
+		const NlRecorder::Forced value = slot.Value;
+		const auto make = [&value]() {
+			return value.Kind == 'n' ? RValue(value.Number) : value.Kind == 'b' ? RValue(value.Number != 0) : RValue();
+		};
+		// 해제하지 않고 덮어쓴다. 원래 함수가 채우지 않은 Result 는 부른 쪽이 초기화했는지 알 수 없어서 해제하면 안 된다.
+		// 수·불리언·undefined 는 가진 것이 없으므로 그대로 옮겨 적어도 된다.
+		const auto write_raw = [&make](RValue& Target) {
+			const RValue made = make();
+			std::memcpy(static_cast<void*>(&Target), static_cast<const void*>(&made), sizeof(RValue));
+		};
+
+		if (forced && value.Skip)
+		{
+			// 원래 함수를 부르지 않는다. 들어올 때 Result 에 무엇이 있었는지 표본에 남긴다(부른 쪽이 초기화하는지 잰다).
+			const int came = static_cast<int>(Result.m_Kind) & k_KindMask;
+			write_raw(Result);
+			if (sample)
+			{
+				std::lock_guard lock(g_Mutex);
+				slot.Log.Sample(sample, key, std::move(shape), std::move(args),
+					std::string("(skipped, Result came as ") + (came == k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
+			}
+			return Result;
+		}
+
 		RValue& out = original(Self, Other, Result, Count, Args);
 
+		// 원래 함수가 결과 자리가 아닌 다른 값을 돌려주는 일이 있는지 표본에 남긴다(이 러너에서 재지 않은 것이다).
+		const bool same = &out == &Result;
+		std::string result = sample ? Brief(out) + (same ? "" : " [returned another value, not Result]") : std::string();
+		if (forced)
+		{
+			if (same)
+				Result = make();		// 원래 함수가 채운 값이다. 해제하고 바꾼다(러너의 해제·복사. 빌트인이 아니다)
+			else
+				write_raw(Result);		// 원래 함수가 Result 를 채웠는지 모른다. 해제하지 않는다
+			if (sample)
+				result += " => " + Brief(Result);
+		}
 		if (sample)
 		{
 			std::lock_guard lock(g_Mutex);
-			slot.Log.Sample(sample, key, std::move(shape), std::move(args), Brief(out));
+			slot.Log.Sample(sample, key, std::move(shape), std::move(args), std::move(result));
 		}
-		return out;
+		return forced ? Result : out;
 	}
 
 	// 훅마다 제 자리의 번호를 아는 함수가 있어야 한다(같은 함수를 여러 훅에 쓰면 어느 스크립트인지 모른다).
@@ -181,77 +230,151 @@ void NlRecorder::Init(AurieModule* Module, LogFn Log_)
 	g_Log = std::move(Log_);
 }
 
+namespace
+{
+	// 대상(스크립트의 이름이나 메서드의 주소)의 함수에 걸린 훅의 자리. 없으면 건다. 못 걸면 nullptr 이고 Why 에 까닭.
+	// g_Mutex 를 든 채로 부르지 않는다(러너를 부른다).
+	Slot* Acquire(const std::string& Target, std::string& Name, std::string& Why)
+	{
+		std::string given = Target;
+
+		// 주소이면 그 자리의 메서드가 묶인 스크립트의 이름을 묻는다.
+		const NlCore::AskPath path = NlCore::ParseAskPath(Target);
+		if (path.Error.empty() && !path.Steps.empty())
+		{
+			NlAccess::MethodInfo info;
+			if (!NlAccess::AboutMethod(path, info, Why))
+				return nullptr;
+			if (info.Script.empty())
+			{
+				Why = "the method has no script name: " + Target;
+				return nullptr;
+			}
+			given = info.Script;
+		}
+
+		PFUNC_YYGMLScript fn = nullptr;
+		if (!FindScript(given, Name, fn, Why))
+			return nullptr;
+
+		std::vector<NlCore::HookSlot> view(k_Slots);
+		for (int i = 0; i < k_Slots; i++)
+			view[i] = { g_Slots[i].Used, g_Slots[i].Failed, reinterpret_cast<const void*>(g_Slots[i].Target) };
+		int free_slot = -1;
+		switch (NlCore::PickHookSlot(view, reinterpret_cast<const void*>(fn), free_slot))
+		{
+		case NlCore::SlotPick::Existing:
+			return &g_Slots[free_slot];		// 이미 훅이 걸려 있다
+		case NlCore::SlotPick::Failed:
+			// 실패한 자리는 다시 쓰지 않는다. 같은 함수에 되풀이해 걸면(치트 표의 항목은 0.5초마다 다시 해 본다) 자리가 그만큼 없어진다.
+			Why = "the hook on " + Name + " failed earlier in this run";
+			return nullptr;
+		case NlCore::SlotPick::Full:
+			Why = "no free hook slot (" + std::to_string(k_Slots) + " in use)";
+			return nullptr;
+		case NlCore::SlotPick::Free:
+			break;
+		}
+
+		Slot& slot = g_Slots[free_slot];
+		slot.Name = Name;
+		slot.Target = fn;
+		slot.Original = nullptr;
+		slot.Recording = false;
+		slot.Override = false;
+		slot.Log.Clear();
+		const AurieStatus status = MmCreateHook(g_Module, "NlToyBox.rec." + std::to_string(free_slot), reinterpret_cast<PVOID>(fn),
+			reinterpret_cast<PVOID>(k_Detours[free_slot]), reinterpret_cast<PVOID*>(&slot.Original));
+		if (!AurieSuccess(status) || !slot.Original)
+		{
+			// 실패한 자리는 다시 쓰지 않는다: 같은 훅 이름("NlToyBox.rec.N")을 Aurie 에 두 번 주지 않는다(Aurie 가 실패한 이름을
+			// 표에 남기는지는 모른다. 소스가 레포에 없다). 자리는 넉넉하다.
+			slot.Used = true;
+			slot.Failed = true;
+			slot.Name = Name + " (hook failed)";
+			slot.Original = nullptr;
+			Why = AurieSuccess(status) ? "MmCreateHook gave no trampoline" : std::string("MmCreateHook ") + AurieStatusToString(status);
+			return nullptr;
+		}
+		slot.Used = true;
+		Log("hook " + Name + ": hooked (slot " + std::to_string(free_slot) + ")");
+		return &slot;
+	}
+
+	// 대상이 주소이면 그 자리의 메서드가 묶인 스크립트의 이름, 아니면 정식 스크립트 이름. 못 얻으면 빈 글.
+	std::string ScriptOf(const std::string& Target)
+	{
+		const NlCore::AskPath path = NlCore::ParseAskPath(Target);
+		if (path.Error.empty() && !path.Steps.empty())
+		{
+			NlAccess::MethodInfo info;
+			std::string why;
+			return NlAccess::AboutMethod(path, info, why) ? info.Script : std::string();
+		}
+		return NlCore::ScriptRoutineName(Target);
+	}
+
+	std::string ForcedText(const NlRecorder::Forced& Value)
+	{
+		const std::string text = Value.Kind == 'n' ? NlCore::Shortest(Value.Number) : Value.Kind == 'b' ? (Value.Number != 0 ? "true" : "false") : "undefined";
+		return text + (Value.Skip ? " (skip: the original is not called)" : "");
+	}
+}
+
 bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string& Why)
 {
-	std::string given = Target;
-
-	// 주소이면 그 자리의 메서드가 묶인 스크립트의 이름을 묻는다.
-	const NlCore::AskPath path = NlCore::ParseAskPath(Target);
-	if (path.Error.empty() && !path.Steps.empty())
-	{
-		NlAccess::MethodInfo info;
-		if (!NlAccess::AboutMethod(path, info, Why))
-			return false;
-		if (info.Script.empty())
-		{
-			Why = "the method has no script name: " + Target;
-			return false;
-		}
-		given = info.Script;
-	}
-
-	PFUNC_YYGMLScript fn = nullptr;
-	if (!FindScript(given, Name, fn, Why))
+	Slot* slot = Acquire(Target, Name, Why);
+	if (!slot)
 		return false;
 
+	// 기록을 비우고 다시 시작한다. 걸어 둔 바꾸기는 그대로 둔다.
 	std::lock_guard lock(g_Mutex);
-	int free_slot = -1;
-	for (int i = 0; i < k_Slots; i++)
-	{
-		if (g_Slots[i].Used && g_Slots[i].Target == fn)
-		{
-			// 이미 훅이 걸려 있다. 기록을 비우고 다시 시작한다.
-			g_Slots[i].Log.Clear();
-			g_Slots[i].Recording = true;
-			return true;
-		}
-		if (!g_Slots[i].Used && free_slot < 0)
-			free_slot = i;
-	}
-	if (free_slot < 0)
-	{
-		Why = "no free hook slot (" + std::to_string(k_Slots) + " in use)";
-		return false;
-	}
-
-	Slot& slot = g_Slots[free_slot];
-	slot.Name = Name;
-	slot.Target = fn;
-	slot.Original = nullptr;
-	slot.Log.Clear();
-	const AurieStatus status = MmCreateHook(g_Module, "NlToyBox.rec." + std::to_string(free_slot), reinterpret_cast<PVOID>(fn),
-		reinterpret_cast<PVOID>(k_Detours[free_slot]), reinterpret_cast<PVOID*>(&slot.Original));
-	if (!AurieSuccess(status) || !slot.Original)
-	{
-		// 실패한 자리는 다시 쓰지 않는다: 같은 훅 이름("NlToyBox.rec.N")을 Aurie 에 두 번 주지 않는다(Aurie 가 실패한 이름을
-		// 표에 남기는지는 모른다. 소스가 레포에 없다). 자리는 넉넉하다.
-		slot.Used = true;
-		slot.Recording = false;
-		slot.Name = Name + " (hook failed)";
-		slot.Target = nullptr;
-		slot.Original = nullptr;
-		Why = AurieSuccess(status) ? "MmCreateHook gave no trampoline" : std::string("MmCreateHook ") + AurieStatusToString(status);
-		return false;
-	}
-	slot.Used = true;
-	slot.Recording = true;
-	Log("record " + Name + ": hooked (slot " + std::to_string(free_slot) + ")");
+	slot->Log.Clear();
+	slot->Recording = true;
 	return true;
+}
+
+bool NlRecorder::Override(const std::string& Target, const Forced& Value, std::string& Name, std::string& Why)
+{
+	Slot* slot = Acquire(Target, Name, Why);
+	if (!slot)
+		return false;
+
+	slot->Value = Value;
+	slot->Override = true;
+	{
+		std::lock_guard lock(g_Mutex);
+		slot->Recording = true;		// 바꾼 호출이 보이게 기록도 한다(이미 하고 있으면 그대로 잇는다)
+	}
+	Log("override " + Name + " -> " + ForcedText(Value));
+	return true;
+}
+
+int NlRecorder::Unoverride(const std::string& Name)
+{
+	const std::string name = Name == "all" ? std::string() : ScriptOf(Name);
+	int stopped = 0;
+	for (Slot& slot : g_Slots)
+		if (slot.Used && slot.Override && (Name == "all" || slot.Name == name))
+		{
+			slot.Override = false;
+			stopped++;
+			Log("override " + slot.Name + ": off");
+		}
+	return stopped;
+}
+
+bool NlRecorder::Overriding(const std::string& Name)
+{
+	for (const Slot& slot : g_Slots)
+		if (slot.Used && slot.Override && slot.Name == Name)
+			return true;
+	return false;
 }
 
 int NlRecorder::Unwatch(const std::string& Name)
 {
-	const std::string name = NlCore::ScriptRoutineName(Name);
+	const std::string name = Name == "all" ? std::string() : ScriptOf(Name);
 	std::lock_guard lock(g_Mutex);
 	int stopped = 0;
 	for (Slot& slot : g_Slots)
@@ -265,11 +388,12 @@ int NlRecorder::Unwatch(const std::string& Name)
 
 std::string NlRecorder::Report(const std::string& Name)
 {
-	const std::string name = NlCore::ScriptRoutineName(Name);
+	const std::string name = Name.empty() ? std::string() : ScriptOf(Name);
 	std::lock_guard lock(g_Mutex);
 	std::string text;
 	for (const Slot& slot : g_Slots)
 		if (slot.Used && (Name.empty() || slot.Name == name))
-			text += slot.Name + (slot.Recording ? "" : " (stopped)") + "\n" + slot.Log.Format("  ");
+			text += slot.Name + (slot.Recording ? "" : " (stopped)") + "\n"
+				+ (slot.Override ? "  override -> " + ForcedText(slot.Value) + "\n" : "") + slot.Log.Format("  ");
 	return text;
 }

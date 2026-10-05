@@ -43,7 +43,7 @@ namespace NlCore
 
 	const std::vector<Cheat>& Cheats()
 	{
-		constexpr CheatKind T = CheatKind::Toggle, N = CheatKind::Number;
+		constexpr CheatKind T = CheatKind::Toggle, N = CheatKind::Number, H = CheatKind::Hook, C = CheatKind::Custom;
 
 		// 이름과 값은 새 게임 덤프(refs/runtime/stage0b-run2.late1.json 의 instances.o_debug.members)에서 봤다.
 		// Off 는 그 덤프의 값이다. 뜻은 변수 이름에서 읽은 것이고 효과는 아직 재지 않았다(Verified = false).
@@ -54,6 +54,28 @@ namespace NlCore
 
 			// 창고 용량(…__warehouse.__cached_total_capacity_for_storage_type.<갈래>)은 아직 넣지 않는다: 게임이 다시 채우는 캐시라
 			// "원래대로"가 낡은 값을 써 넣게 된다. 게임이 그 값을 언제 다시 만드는지 잰 뒤(3나-2)에 넣는다.
+
+			// 건설 조건(research/09). 건설 창이 건물마다 이 함수에 (건물 이름, 등급)을 묻는다: 제단은 true, 잠긴 창고·사원은 false 였다.
+			// true 로 바꾼 채 사용자가 잠겨 있던 창고·곡창·무기고를 지었다. 건설 창의 빨간 표시와 안내문은 남는다(아래 항목).
+			{ "build_any", Area::Build, "건설 조건 없이 짓기 (지식)", "inst:o_game_map_controller.__knowledge_manager.is_have_knowledge_to_upgrade_building",
+				H, 1, 0, 0, 0, true, "지식이 없어 잠긴 건물도 지을 수 있다. 건설 창의 빨간 표시는 그대로 남는다" },
+			// 건설 창이 잠긴 건물에 커서를 올릴 때 필요한 지식마다 이 함수를 부른다(false 가 나왔다). 지식 창도 이 함수를 쓴다.
+			// true 로 바꿨을 때 건설 창의 표시가 풀리는지는 화면으로 보지 못했다.
+			{ "build_marks", Area::Build, "건설 창의 잠금 표시 지우기", "inst:o_game_map_controller.__knowledge_manager.is_knowledge_unlocked",
+				H, 1, 0, 0, 0, false, "모든 지식을 해금된 것으로 답하게 한다. 지식 창에도 그렇게 보인다. 건설 창의 표시가 풀리는지는 확인 전" },
+			// 건설비와 업그레이드비(research/09). 건물 종류마다 등급별 비용(금화, 자원 39칸)이 있다. 모듈(src/Build.cpp)이 모두 0 으로 쓰고 끌 때 되돌린다.
+			// 업그레이드 단추가 "자원이 부족"으로 꺼지는 것도 이 비용이다(주택 2등급: 나무 10, 목재 5).
+			// 사용자가 플레이에서 봤다(2026-10-05): 목재가 0 인데 주택 11채의 업그레이드가 눌렸고, 돼지 농장(짓기 30 + 올리기 30 나무)을 짓고 올려도 나무가 줄지 않았다.
+			// 0 으로 쓴 비용은 세이브에 남지 않는다: 켠 채 저장한 세이브를 치트 없이 불러오니 비용이 원래 값이었다.
+			{ "build_free", Area::Build, "건설·업그레이드 비용 없음", "inst:o_game_map_controller.__construction_manager",
+				C, 1, 0, 0, 0, true, "모든 건물 종류의 등급별 건설비를 0 으로 쓴다. 자원이 모자라도 업그레이드를 누를 수 있다. 끄면 원래 값으로 되돌린다.\n"
+					"켠 채로 저장해도 세이브에는 남지 않는다" },
+			// 즉시 업그레이드(research/09). 게임의 즉시 건설(o_debug.is_instant_build_buildings)은 새로 짓는 건물만 끝낸다(사용자가 봤다).
+			// 업그레이드 중인 건물(c_construction.__construction_status 가 3)에 게임의 build_instantly() 를 부르면 바로 끝난다(src/Build.cpp).
+			// 사용자가 플레이에서 봤다(2026-10-05): 이 항목만 켠 채 주택 세 채의 업그레이드를 눌렀고 모두 바로 올랐다. 나무와 도기는 줄지 않았다(시간을 흘린 뒤에도).
+			{ "instant_upgrade", Area::Build, "건물 즉시 업그레이드", "inst:o_building.c_construction.build_instantly",
+				C, 1, 0, 0, 0, true, "업그레이드를 누른 건물을 1초 안에 끝낸다. 자원은 들지 않는다. 건물 즉시 건설은 새로 짓는 건물만 끝낸다.\n"
+					"업그레이드를 누르려면 자원이 있어야 한다. 없으면 비용 없음과 함께 켠다" },
 
 			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
 			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
@@ -140,7 +162,11 @@ namespace NlCore
 	{
 		std::erase_if(State.On, [](const std::string& id) {
 			const Cheat* cheat = FindCheat(id);
-			return !cheat || cheat->Kind != CheatKind::Toggle;
+			if (!cheat || cheat->Kind == CheatKind::Number)		// 수 항목은 Numbers 에 든다. 그 밖(Toggle, Hook, Custom)은 켠 것의 목록에 든다
+				return true;
+			// 함수의 답을 바꾸거나 모듈이 게임의 값을 고쳐 쓰는 항목은 효과를 확인한 것만 켠 채로 시작한다. 확인 전의 것은 그 실행에서 사용자가 켠다:
+			// 창을 열지도 않았는데 게임의 판정이 바뀌거나 값이 고쳐 쓰여 세이브에 굳는 일이 없게.
+			return (cheat->Kind == CheatKind::Hook || cheat->Kind == CheatKind::Custom) && !cheat->Verified;
 		});
 		for (auto it = State.Numbers.begin(); it != State.Numbers.end();)
 		{

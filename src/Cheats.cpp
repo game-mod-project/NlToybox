@@ -1,7 +1,9 @@
 #include "Cheats.hpp"
 
 #include "Access.hpp"
+#include "Recorder.hpp"
 #include "core/AskPath.hpp"
+#include "core/Hooks.hpp"
 #include "core/SpeedControl.hpp"
 #include "core/Text.hpp"
 
@@ -27,6 +29,8 @@ namespace
 		bool Restore = false;		// 방금 껐다. 다음 틱에 원래 값을 한 번 써 넣는다
 		bool HasBase = false;
 		double Base = 0;			// Number 의 처음 본 값
+		bool Applied = false;		// Hook: 바꾸기를 걸었다
+		std::string HookName;		// Hook: 훅을 건 스크립트의 이름(끌 때 쓴다)
 		// 아래는 GameTick 이 채우는 스냅샷
 		bool Found = false;
 		double Current = 0;
@@ -79,8 +83,68 @@ namespace
 
 	// ---- 게임 스레드 ----
 
+	// 함수가 돌려주는 값을 바꾸는 항목(스펙 §3 의 수단 D). 켜면 훅을 걸고(없으면) 바꾸기를 켠다. 끄면 바꾸기만 끈다(훅은 떼지 않는다).
+	// 대상이 메서드의 주소이면 그 인스턴스가 있어야 스크립트를 알 수 있다. 없으면 다음 틱에 다시 해 본다(그때는 훅의 자리를 쓰지 않는다).
+	// 켠 것과 실제로 걸린 것을 틱마다 견준다: 원격의 unoverride 가 바꾸기를 꺼도 체크가 켜져 있으면 다시 건다(core/Hooks).
+	void ApplyHook(Item& It)
+	{
+		const bool live = It.Applied && NlRecorder::Overriding(It.HookName);
+		switch (NlCore::ChooseHookStep(It.On, It.Applied, live))
+		{
+		case NlCore::HookStep::Apply:
+		{
+			const bool again = It.Applied;
+			NlRecorder::Forced value;
+			value.Kind = 'b';
+			value.Number = It.Def->On;
+			std::string name, why;
+			if (NlRecorder::Override(It.Def->Path, value, name, why))
+			{
+				It.Applied = true;
+				It.HookName = name;
+				It.Note = "걸었습니다";
+				It.Logged.clear();
+				Log(std::string("cheat ") + It.Def->Id + ": overriding " + name + (again ? " again (it was turned off elsewhere)" : ""));
+			}
+			else
+			{
+				It.Applied = false;
+				const bool in_game = NlAccess::InGame();
+				It.Note = in_game ? "걸지 못했습니다: " + why : "게임을 시작하면 적용";
+				const std::string line = std::string("cheat ") + It.Def->Id + ": cannot override: " + why;
+				if (in_game && line != It.Logged)		// 같은 까닭을 되풀이해 적지 않는다
+				{
+					It.Logged = line;
+					Log(line);
+				}
+			}
+			break;
+		}
+		case NlCore::HookStep::Remove:
+			NlRecorder::Unoverride(It.HookName);
+			It.Applied = false;
+			It.Note.clear();
+			Log(std::string("cheat ") + It.Def->Id + ": off");
+			break;
+		case NlCore::HookStep::None:
+			break;
+		}
+		It.Found = true;
+		It.Restore = false;
+	}
+
 	void Apply(Item& It, bool Visible)
 	{
+		if (It.Def->Kind == CheatKind::Hook)
+		{
+			ApplyHook(It);
+			return;
+		}
+		if (It.Def->Kind == CheatKind::Custom)
+		{
+			It.Restore = false;		// 모듈의 코드가 IsOn 을 보고 한다(src/Build.cpp)
+			return;
+		}
 		if (!It.On && !It.Restore && !Visible)
 			return;			// 켜지 않았고 보는 사람도 없으면 읽지도 않는다
 
@@ -213,7 +277,7 @@ void NlCheats::Init(LogFn Log_, const NlCore::CheatState& State)
 	{
 		Item item;
 		item.Def = &cheat;
-		if (cheat.Kind == CheatKind::Toggle)
+		if (cheat.Kind != CheatKind::Number)
 			item.On = State.On.count(cheat.Id) > 0;
 		else if (const auto it = State.Numbers.find(cheat.Id); it != State.Numbers.end())
 		{
@@ -264,10 +328,10 @@ void NlCheats::DrawArea(Area Where)
 		any = true;
 		any_on = any_on || item.On;
 		ImGui::PushID(item.Def->Id);
-		if (item.Def->Kind == CheatKind::Toggle)
-			DrawToggle(item);
-		else
+		if (item.Def->Kind == CheatKind::Number)
 			DrawNumber(item);
+		else
+			DrawToggle(item);		// Toggle, Hook, Custom 은 모두 체크 하나다
 		ImGui::PopID();
 	}
 	if (!any)
@@ -341,12 +405,49 @@ bool NlCheats::TakeChanges(std::set<std::string>& On, std::map<std::string, doub
 	{
 		if (!item.On)
 			continue;
-		if (item.Def->Kind == CheatKind::Toggle)
+		if (item.Def->Kind != CheatKind::Number)
 			On.insert(item.Def->Id);
 		else
 			Numbers[item.Def->Id] = item.Number;
 	}
 	return true;
+}
+
+bool NlCheats::IsOn(const std::string& Id)
+{
+	std::lock_guard lock(g_Mutex);
+	for (const Item& item : g_Items)
+		if (Id == item.Def->Id)
+			return item.On;
+	return false;
+}
+
+void NlCheats::SetNote(const std::string& Id, const std::string& Note)
+{
+	std::lock_guard lock(g_Mutex);
+	for (Item& item : g_Items)
+		if (Id == item.Def->Id)
+			item.Note = Note;
+}
+
+bool NlCheats::Set(const std::string& Id, bool On)
+{
+	std::lock_guard lock(g_Mutex);
+	for (Item& item : g_Items)
+	{
+		if (Id != item.Def->Id || item.Def->Kind == CheatKind::Number)
+			continue;
+		if (On && !item.On)
+		{
+			item.On = true;
+			item.Restore = false;
+			g_Changed = g_Dirty = true;
+		}
+		else if (!On && item.On)
+			TurnOff(item);
+		return true;
+	}
+	return false;
 }
 
 int NlCheats::ActiveCount()
