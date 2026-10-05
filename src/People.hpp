@@ -30,6 +30,8 @@ namespace NlPeople
 	std::vector<std::string> Do(const NlCore::PersonCommand& Command);
 	// 플레이어의 병사를 Count 명 만든다(몇 명이 되는지는 core/PeoplePlan 의 SoldierBatch 가 정한다: 1~20).
 	std::vector<std::string> SpawnSoldiers(double Count);
+	// 게임의 디버그 소환기로 플레이어의 사람 하나를 마우스가 가리키는 지도의 자리에 만든다.
+	std::vector<std::string> SpawnHere(NlCore::SpawnKind Kind);
 	std::vector<std::string> List(bool All);
 	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);

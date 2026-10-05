@@ -34,6 +34,8 @@ namespace
 		// 돌려주는 값을 바꾼다(스펙 §3 의 수단 D). 게임 스레드만 읽고 쓴다.
 		bool Override = false;
 		NlRecorder::Forced Value;
+		// Who 로 가린 바꾸기가 self 를 견준 결과(걸린 호출과 지나간 호출의 수). 가려지는지를 재는 데 쓴다.
+		uint64_t Matched = 0, Passed = 0;
 	};
 
 	AurieModule* g_Module = nullptr;
@@ -86,6 +88,9 @@ namespace
 		return KindName(kind);
 	}
 
+	// 플레이어의 영혼의 주소들(SetPlayerSelves). 게임 스레드에서만 읽고 쓴다(틱과 훅).
+	NlCore::SelfSet g_PlayerSelves;
+
 	// 훅을 건 함수가 불릴 때마다 온다(게임 스레드).
 	RValue& Handle(int Index, CInstance* Self, CInstance* Other, RValue& Result, int Count, RValue** Args)
 	{
@@ -133,8 +138,12 @@ namespace
 
 		// 돌려줄 값을 바꾼다. 수, 불리언, undefined 뿐이다. 바꾼 값은 언제나 결과 자리(Result)에 두고 Result 를 돌려준다:
 		// 게임이 반환 참조를 읽든 Result 를 읽든(YYToolkit 의 CallGameScriptEx 는 Result 만 읽는다) 같은 값을 본다.
-		const bool forced = slot.Override;
 		const NlRecorder::Forced value = slot.Value;
+		// 누구의 호출에 걸지(Who). self 가 플레이어의 영혼인지는 틱이 넣어 둔 주소와 견준다(빌트인을 부르지 않는다).
+		const bool forced = slot.Override
+			&& NlCore::HookApplies(value.Who, value.Who != 'a' && g_PlayerSelves.Has(reinterpret_cast<std::uintptr_t>(Self)));
+		if (slot.Override && value.Who != 'a')
+			(forced ? slot.Matched : slot.Passed)++;
 		const auto make = [&value]() {
 			return value.Kind == 'n' ? RValue(value.Number) : value.Kind == 'b' ? RValue(value.Number != 0) : RValue();
 		};
@@ -344,8 +353,14 @@ namespace
 		if (Value.Kind == 'x')
 			return "x" + NlCore::Shortest(Value.Number) + (Value.Whole ? " (whole numbers stay whole)" : "");
 		const std::string text = Value.Kind == 'n' ? NlCore::Shortest(Value.Number) : Value.Kind == 'b' ? (Value.Number != 0 ? "true" : "false") : "undefined";
-		return text + (Value.Skip ? " (skip: the original is not called)" : "");
+		return text + (Value.Skip ? " (skip: the original is not called)" : "")
+			+ (Value.Who == 'p' ? " (only when self is one of the player's souls)" : Value.Who == 'o' ? " (only when self is not one of the player's souls)" : "");
 	}
+}
+
+void NlRecorder::SetPlayerSelves(std::vector<std::uintptr_t> Selves)
+{
+	g_PlayerSelves.Replace(std::move(Selves));
 }
 
 bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string& Why)
@@ -369,6 +384,7 @@ bool NlRecorder::Override(const std::string& Target, const Forced& Value, std::s
 
 	slot->Value = Value;
 	slot->Override = true;
+	slot->Matched = slot->Passed = 0;
 	{
 		std::lock_guard lock(g_Mutex);
 		slot->Recording = true;		// 바꾼 호출이 보이게 기록도 한다(이미 하고 있으면 그대로 잇는다)
@@ -421,6 +437,8 @@ std::string NlRecorder::Report(const std::string& Name)
 	for (const Slot& slot : g_Slots)
 		if (slot.Used && (Name.empty() || slot.Name == name))
 			text += slot.Name + (slot.Recording ? "" : " (stopped)") + "\n"
-				+ (slot.Override ? "  override -> " + ForcedText(slot.Value) + "\n" : "") + slot.Log.Format("  ");
+				+ (slot.Override ? "  override -> " + ForcedText(slot.Value) + "\n" : "")
+				+ (slot.Override && slot.Value.Who != 'a' ? "  applied to " + std::to_string(slot.Matched) + " call(s), let " + std::to_string(slot.Passed) + " pass\n" : "")
+				+ slot.Log.Format("  ");
 	return text;
 }

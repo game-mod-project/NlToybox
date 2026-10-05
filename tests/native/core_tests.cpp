@@ -681,7 +681,10 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 50);
+		CHECK(Cheats().size() == 51);
+		// 아군 무적(research/13): 상처를 입히는 함수를 플레이어의 사람에게만 건너뛴다. 모듈의 코드가 건다(Custom). 가려지는 것은 아직 보지 못했다.
+		CHECK(FindCheat("ally_invincible") && FindCheat("ally_invincible")->Kind == CheatKind::Custom && FindCheat("ally_invincible")->Where == Area::Army
+			&& !FindCheat("ally_invincible")->Verified);
 		// 군대(research/13): 병사의 고용 값. SoulBasic.get_soldier_cost() 가 돌려주는 수에 곱한다. 고용 창의 값과 실제로 빠진 금화로 봤다(160 → 16).
 		CHECK(FindCheat("hire_cost") && FindCheat("hire_cost")->Kind == CheatKind::HookScale && FindCheat("hire_cost")->Where == Area::Army
 			&& FindCheat("hire_cost")->Verified && FindCheat("hire_cost")->Max <= 1 && FindCheat("hire_cost")->Off == 1);		// 값은 정수로 남긴다
@@ -1441,6 +1444,36 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=500 amount=50").Error.empty());
 		CHECK(!ParseRemoteLine("person lords money_add amount=5").Error.empty());
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 money_add amount=0").Error.empty());
+	});
+
+	Test("훅: 누구의 호출에 걸지와 self 의 묶음", [] {
+		CHECK(HookApplies('a', true) && HookApplies('a', false));
+		CHECK(HookApplies('p', true) && !HookApplies('p', false));
+		CHECK(!HookApplies('o', true) && HookApplies('o', false));
+		SelfSet set;
+		CHECK(set.Size() == 0 && !set.Has(0x1000));
+		set.Replace({ 0x3000, 0x1000, 0, 0x2000, 0x1000 });		// 0 은 버리고 겹친 것은 하나로
+		CHECK(set.Size() == 3 && set.Has(0x1000) && set.Has(0x2000) && set.Has(0x3000));
+		CHECK(!set.Has(0) && !set.Has(0x1800) && !set.Has(0x4000));
+		set.Replace({});
+		CHECK(set.Size() == 0 && !set.Has(0x1000));
+	});
+
+	Test("군대: 디버그 소환기의 종류와 원격 명령", [] {
+		SpawnKind kind = SpawnKind::Soldier;
+		CHECK(ParseSpawnKind("knight", kind) && kind == SpawnKind::Knight);
+		CHECK(ParseSpawnKind("peasant", kind) && kind == SpawnKind::Peasant);
+		CHECK(ParseSpawnKind("slave", kind) && ParseSpawnKind("lord", kind) && ParseSpawnKind("soldier", kind));
+		CHECK(!ParseSpawnKind("bandit", kind) && !ParseSpawnKind("wolf", kind) && !ParseSpawnKind("", kind));		// 플레이어의 사람만 만든다
+		CHECK(std::string(SpawnMethod(SpawnKind::Soldier)) == "__spawn_soldier" && std::string(SpawnMethod(SpawnKind::Lord)) == "__spawn_lord");
+		CHECK(std::string(SpawnMethod(SpawnKind::Slave)) == "__spawn_slave");		// 소환기의 목록에는 "slaves" 지만 메서드는 __spawn_slave 다(research/13)
+		CHECK(std::string(SpawnWord(SpawnKind::Peasant)) == "peasant");
+
+		RemoteCommand c = ParseRemoteLine("person spawn knight");
+		CHECK(c.Error.empty() && c.Verb == "person" && c.Target == "spawn" && c.Options.at("kind") == "knight");
+		CHECK(!ParseRemoteLine("person spawn").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn bandit").Error.empty());
+		CHECK(!ParseRemoteLine("person spawn knight 2").Error.empty());
 	});
 
 	Test("군대: 한 번에 만드는 병사의 수와 원격 명령", [] {

@@ -6,8 +6,10 @@
 
 #include <YYTK_Shared.hpp>
 
+#include <cstdint>
 #include <functional>
 #include <string>
+#include <vector>
 
 namespace NlRecorder
 {
@@ -34,7 +36,12 @@ namespace NlRecorder
 		double Number = 0;
 		bool Skip = false;		// 원래 함수를 부르지 않는다(값을 치르는 함수처럼 한 일 자체를 없애야 할 때). 'x' 에는 쓰지 않는다
 		bool Whole = false;		// 'x': 정수는 정수로 남기고 양수는 1 아래로 내리지 않는다(가격). core/Hooks 의 ScaleResult
+		char Who = 'a';			// 누구의 호출에 걸지: 'a' 모두, 'p' self 가 플레이어의 영혼일 때만, 'o' 아닐 때만(SetPlayerSelves 가 넣은 주소와 견준다)
 	};
+
+	// 플레이어의 영혼(구조체)의 주소들. Who 가 'p'·'o' 인 바꾸기가 self 와 견준다. 틱이 통째로 갈아 끼운다(src/People.cpp).
+	// 훅 안에서는 빌트인을 부를 수 없어 진영을 그 자리에서 읽지 못한다. 그래서 주소를 미리 모아 둔다.
+	void SetPlayerSelves(std::vector<std::uintptr_t> Selves);
 
 	// 그 함수가 돌려주는 값을 바꾼다. 훅이 없으면 건다. 바꾼 호출이 보이게 기록도 한다. Target 은 Watch 와 같다.
 	// 게임의 판정을 바꾸는 일이다: 그 함수가 무엇을 돌려주는지 기록으로 본 뒤에만 쓴다.

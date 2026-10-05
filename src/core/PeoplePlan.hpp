@@ -65,6 +65,13 @@ namespace NlCore
 	// 그 자원 번호가 착용 중인 장비인가. Equipped: 착용 중인 것들의 자원 번호(없는 자리는 음수나 수가 아닌 값).
 	bool IsEquipped(int Index, const std::vector<double>& Equipped);
 
+	// 게임의 디버그 소환기(CreatureSpawner)가 만드는 것 가운데 플레이어의 사람(research/13). 마우스가 가리키는 지도의 자리에 나타난다.
+	enum class SpawnKind { Soldier, Knight, Peasant, Slave, Lord };
+	bool ParseSpawnKind(const std::string& Word, SpawnKind& Out);
+	const char* SpawnWord(SpawnKind Kind);		// 원격 명령의 낱말
+	const char* SpawnMethod(SpawnKind Kind);	// 소환기의 메서드 이름(인자 없음)
+	const char* SpawnLabel(SpawnKind Kind);		// 창에 보일 이름
+
 	// 한 번에 만드는 병사의 수: 1~20 의 정수. 0 이하이거나 수가 아니면 거짓(research/13 의 디버그 소환을 그만큼 부른다).
 	constexpr int k_SoldierBatchMax = 20;
 	bool SoldierBatch(double Asked, int& Count);

@@ -194,6 +194,13 @@ namespace NlCore
 				"gml_Script_anon_SoulBasic_gml_GlobalScript_SoulBasic_11987516072_SoulBasic_gml_GlobalScript_SoulBasic",
 				HS, 0.1, 1, 0.01, 1, true, "병사를 고용할 때 내는 금화에 곱한다(0.1 이면 10분의 1). 고용 창을 다시 열면 보인다" },
 
+			// 아군 무적(research/13). 상처는 SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true 가 입힌다. 그 함수를 모두에게 건너뛰게 하자
+			// 도적 무리와 6,371번 맞는 동안(치명상 포함) 새 상처가 하나도 생기지 않았다. 이 항목은 self 가 플레이어의 영혼일 때만 건너뛴다
+			// (src/People.cpp 가 영혼의 주소를 모아 건다). 플레이어의 사람만 가려지는지는 아직 플레이에서 보지 못했다.
+			{ "ally_invincible", Area::Army, "아군 무적 (상처를 입지 않음)",
+				"inst:o_character.__soul.take_damage",
+				C, 1, 0, 0, 0, false, "플레이어의 사람(영주, 주민, 병사)이 싸움에서 상처를 입지 않는다. 적은 그대로 다친다" },
+
 			{ "combat_no_injuries", Area::Army, "부상 없는 전투", "inst:o_debug.is_combat_without_injuries", T, 1, 0, 0, 0, false,
 				"전투에서 부상이 생기지 않게 하는 개발자 스위치로 보인다" },
 			{ "no_dodge", Area::Army, "회피 끔", "inst:o_debug.is_disable_dodge", T, 1, 0, 0, 0, false,

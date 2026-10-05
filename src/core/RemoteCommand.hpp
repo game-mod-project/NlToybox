@@ -25,6 +25,7 @@
 //                                                   age_set, happy, cure, trait_add, trait_remove, knowledge_all, knowledge_add,
 //                                                   money_add, item_add (core/PeoplePlan)
 //   person spawn_soldier amount=<1..20>             플레이어의 병사를 만든다(게임의 디버그 함수. research/13)
+//   person spawn <soldier|knight|peasant|slave|lord>  디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close

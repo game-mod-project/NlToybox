@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "Recorder.hpp"
 #include "core/AskPath.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/Text.hpp"
@@ -35,6 +36,10 @@ namespace
 	// 플레이어의 병사 하나를 만드는 게임의 디버그 함수(research/13). 인자를 하나까지 받고 생략할 수 있다(기계어). 인자 없이 불러 병사가 생기고
 	// 병영의 목록과 게임의 군대 창에 올라오는 것을 봤다. 지도 가장자리의 자리에 나타나 마을로 걸어온다.
 	constexpr const char* k_SpawnSoldier = "gml_Script_rebellion_debug_spawn_player_soldier";
+	// 게임의 디버그 소환기(CreatureSpawner. research/13). __spawn_soldier 같은 메서드는 인자가 없고(기계어) 마우스가 가리키는 지도의 자리에 만든다.
+	constexpr const char* k_Spawner = "inst:o_debug.debug_spawner";
+	// 상처를 입히는 함수(research/13): SoulBasic.take_damage(상처의 이름, 구조체, 불리언) -> true. 생성자의 정적 메서드라 영주 하나의 영혼에서 스크립트를 찾는다.
+	constexpr const char* k_TakeDamage = "inst:o_character.__soul.take_damage";
 	constexpr double k_Unknown = -1e9;										// 읽지 못한 수
 
 	struct Detail			// 고른 사람의 값. RValue 를 담지 않는다
@@ -83,6 +88,10 @@ namespace
 	char g_TraitFilter[48] = "";
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
+	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
+	double g_NextShield = 0;			// 아군 무적: 영혼의 주소를 다시 모을 시각
+	bool g_ShieldOn = false;			// 아군 무적의 바꾸기를 이 모듈이 걸었다
+	std::string g_ShieldName;			// 건 스크립트의 이름
 	bool g_BulkKnowledgeArmed = false;	// "영주 전원에게 모든 지식"은 이것을 켠 뒤에만 눌린다(되돌릴 수 없다)
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
@@ -777,6 +786,89 @@ namespace
 		return "병사 " + std::to_string(made) + "명을 만들었습니다 (주민과 병사 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
 	}
 
+	// 디버그 소환기로 플레이어의 사람 하나를 만든다(마우스가 가리키는 지도의 자리). 돌려주는 글: 한 일.
+	std::string SpawnHereNow(NlCore::SpawnKind Kind)
+	{
+		const std::string label = NlCore::SpawnLabel(Kind);
+		if (!NlAccess::InGame())
+			return "게임 화면이 아닙니다";
+		const int before = NlAccess::InstanceCount("o_dummy") + NlAccess::InstanceCount("o_character");
+		const std::string path = std::string(k_Spawner) + "." + NlCore::SpawnMethod(Kind);
+		RValue result;		// 이 함수 안에서만 든다
+		std::string why;
+		Log("people call " + path + "()");		// 부르기 전에 남긴다
+		if (!CallNoArgs(path, result, why))
+			return label + ": 부르지 못했습니다: " + why;
+		const int after = NlAccess::InstanceCount("o_dummy") + NlAccess::InstanceCount("o_character");
+		Log("people: spawner " + std::string(NlCore::SpawnWord(Kind)) + ", people " + std::to_string(before) + " -> " + std::to_string(after));
+		return label + (after > before ? " 하나를 만들었습니다" : ": 불렀지만 사람의 수가 그대로입니다")
+			+ " (영주와 주민 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
+	}
+
+	// 아군 무적: 상처를 입히는 함수를 self 가 플레이어의 영혼일 때만 건너뛴다. 영혼의 주소는 0.5초마다 다시 모은다
+	// (새로 온 사람은 그 사이에 다칠 수 있다. 사라진 영혼의 주소는 다음에 모을 때 빠진다).
+	void ShieldTick(double Now)
+	{
+		if (Now < g_NextShield)
+			return;
+		g_NextShield = Now + 0.5;
+		constexpr const char* id = "ally_invincible";
+		if (!NlCheats::IsOn(id))
+		{
+			if (g_ShieldOn)
+			{
+				g_ShieldOn = false;
+				NlRecorder::Unoverride(g_ShieldName);
+				NlRecorder::SetPlayerSelves({});
+				NlCheats::SetNote(id, std::string());
+				Log("people: ally_invincible off");
+			}
+			return;
+		}
+		if (!NlAccess::InGame())
+		{
+			NlRecorder::SetPlayerSelves({});		// 지난 게임의 주소가 남지 않게
+			NlCheats::SetNote(id, "게임을 시작하면 적용");
+			return;
+		}
+		std::vector<std::uintptr_t> selves;
+		for (const bool character : { true, false })
+		{
+			const int count = NlAccess::InstanceCount(character ? "o_character" : "o_dummy");
+			for (int n = 0; n < count; n++)
+			{
+				PersonRow row;
+				row.Character = character;
+				row.Index = n;
+				RValue soul;
+				std::string faction;
+				if (ReadSoul(row, soul) && soul.IsStruct()
+					&& FollowString(soul, { { '.', "__faction", 0 }, { '.', "__system_name", 0 } }, faction) && faction == "player")
+					selves.push_back(reinterpret_cast<std::uintptr_t>(soul.m_Object));		// 구조체의 주소. 훅의 self 와 견준다
+			}
+		}
+		const size_t count = selves.size();
+		NlRecorder::SetPlayerSelves(std::move(selves));		// 주소부터 넣고 건다
+		if (!g_ShieldOn || !NlRecorder::Overriding(g_ShieldName))
+		{
+			NlRecorder::Forced value;
+			value.Kind = 'b';
+			value.Number = 0;
+			value.Skip = true;		// 들어올 때 Result 가 undefined 인 것을 표본에서 봤다(research/13)
+			value.Who = 'p';
+			std::string name, why;
+			if (!NlRecorder::Override(k_TakeDamage, value, name, why))
+			{
+				NlCheats::SetNote(id, "걸지 못했습니다: " + why);
+				return;
+			}
+			g_ShieldOn = true;
+			g_ShieldName = name;
+			Log("people: ally_invincible on, " + std::to_string(count) + " souls");
+		}
+		NlCheats::SetNote(id, "플레이어의 사람 " + std::to_string(count) + "명에게 적용 중");
+	}
+
 	void RefreshDetail()
 	{
 		const PersonRow* row = g_Selected.empty() ? nullptr : FindRow(g_Selected);
@@ -977,6 +1069,18 @@ namespace
 			Hint(g_Now.Last);
 	}
 
+	// "마우스 자리에 소환" 단추들. 누르면 틱이 디버그 소환기를 부른다(그리는 쪽은 청만 쌓는다).
+	void DrawSpawnHere(std::initializer_list<NlCore::SpawnKind> Kinds)
+	{
+		ImGui::TextUnformatted("마우스 자리에 소환");
+		for (const NlCore::SpawnKind kind : Kinds)
+		{
+			ImGui::SameLine();
+			if (ImGui::Button((std::string(NlCore::SpawnLabel(kind)) + " +1").c_str()) && g_SpawnKinds.size() < 20)
+				g_SpawnKinds.push_back(kind);
+		}
+	}
+
 	void DrawDetail(const PersonRow& Row)
 	{
 		const Detail& one = g_Now.One;
@@ -1134,6 +1238,15 @@ void NlPeople::GameTick(double Now, bool Active)
 	const Busy busy;
 
 	HoldTick(Now);
+	ShieldTick(Now);
+
+	if (!g_SpawnKinds.empty())
+	{
+		const NlCore::SpawnKind kind = g_SpawnKinds.front();
+		g_SpawnKinds.pop_front();		// 틱마다 하나씩(잰 꼴과 같다)
+		g_Now.Last = SpawnHereNow(kind);
+		g_NextScan = 0;
+	}
 
 	if (g_SpawnQueued > 0)
 	{
@@ -1302,9 +1415,21 @@ void NlPeople::DrawArmy()
 			g_SpawnQueued = (std::min)(g_SpawnQueued + amount, NlCore::k_SoldierBatchMax);		// windows.h 의 min 매크로를 피한다
 		ImGui::PopID();
 	}
-	Hint("게임의 디버그 함수로 병사를 만듭니다. 지도 가장자리에 나타나 마을로 걸어오고, 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
-		"되돌릴 수 없고 세이브에 남습니다. 전투의 피해와 사기는 아직 없습니다.");
+	DrawSpawnHere({ NlCore::SpawnKind::Soldier, NlCore::SpawnKind::Knight });
+	Hint("+1, +5, +10 은 게임의 디버그 함수로 병사를 만듭니다: 지도 가장자리에 나타나 마을로 걸어오고 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
+		"'마우스 자리에 소환'은 게임의 디버그 소환기를 부릅니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다(병사는 경갑과 창). "
+		"병영의 정원과 임금은 따지지 않습니다(재지 않았습니다). 되돌릴 수 없고, 저장하면 세이브에 남을 것으로 보입니다.");
 	DrawLast();
+}
+
+std::vector<std::string> NlPeople::SpawnHere(NlCore::SpawnKind Kind)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
+	g_Now.Last = SpawnHereNow(Kind);
+	return { g_Now.Last };
 }
 
 std::vector<std::string> NlPeople::SpawnSoldiers(double Count)
@@ -1392,6 +1517,8 @@ void NlPeople::DrawLords()
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "lords");
 	Hint("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
+	DrawSpawnHere({ NlCore::SpawnKind::Lord });
+	Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
 	DrawLast();
 }
 
@@ -1410,6 +1537,8 @@ void NlPeople::DrawPeople()
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "people");
 	Hint("계속 유지하려면 위의 항목을 켭니다. 인구는 '날마다 추가 이주민'에 수를 넣으면 다음 이주 때(저녁) 그만큼 더 옵니다.");
+	DrawSpawnHere({ NlCore::SpawnKind::Peasant, NlCore::SpawnKind::Slave });
+	Hint("게임의 디버그 소환기로 플레이어의 주민이나 노예 하나를 바로 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 집과 일자리는 따지지 않습니다.");
 	DrawLast();
 }
 
