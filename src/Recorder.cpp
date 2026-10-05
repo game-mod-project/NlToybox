@@ -145,7 +145,7 @@ namespace
 			std::memcpy(static_cast<void*>(&Target), static_cast<const void*>(&made), sizeof(RValue));
 		};
 
-		if (forced && value.Skip)
+		if (forced && value.Skip && value.Kind != 'x')
 		{
 			// 원래 함수를 부르지 않는다. 들어올 때 Result 에 무엇이 있었는지 표본에 남긴다(부른 쪽이 초기화하는지 잰다).
 			const int came = static_cast<int>(Result.m_Kind) & k_KindMask;
@@ -164,6 +164,28 @@ namespace
 		// 원래 함수가 결과 자리가 아닌 다른 값을 돌려주는 일이 있는지 표본에 남긴다(이 러너에서 재지 않은 것이다).
 		const bool same = &out == &Result;
 		std::string result = sample ? Brief(out) + (same ? "" : " [returned another value, not Result]") : std::string();
+		if (forced && value.Kind == 'x')
+		{
+			// 원래 함수가 돌려준 수에 배율을 곱한다. 수가 아니면(undefined, 구조체) 그대로 지나간다.
+			const int kind = static_cast<int>(out.m_Kind) & k_KindMask;
+			const bool number = kind == VALUE_REAL || kind == VALUE_INT32 || kind == VALUE_INT64;
+			if (number)
+			{
+				const RValue scaled(NlCore::ScaleResult(out.ToDouble(), value.Number, value.Whole));
+				if (same)
+					Result = scaled;		// 원래 함수가 채운 수다. 가진 것이 없다
+				else
+					std::memcpy(static_cast<void*>(&Result), static_cast<const void*>(&scaled), sizeof(RValue));
+				if (sample)
+					result += " => " + Brief(Result);
+			}
+			if (sample)
+			{
+				std::lock_guard lock(g_Mutex);
+				slot.Log.Sample(sample, key, std::move(shape), std::move(args), std::move(result));
+			}
+			return number ? Result : out;
+		}
 		if (forced)
 		{
 			if (same)
@@ -316,6 +338,8 @@ namespace
 
 	std::string ForcedText(const NlRecorder::Forced& Value)
 	{
+		if (Value.Kind == 'x')
+			return "x" + NlCore::Shortest(Value.Number) + (Value.Whole ? " (whole numbers stay whole)" : "");
 		const std::string text = Value.Kind == 'n' ? NlCore::Shortest(Value.Number) : Value.Kind == 'b' ? (Value.Number != 0 ? "true" : "false") : "undefined";
 		return text + (Value.Skip ? " (skip: the original is not called)" : "");
 	}

@@ -30,9 +30,10 @@ namespace NlRecorder
 	// 바꿔서 돌려줄 값. 수, 불리언, undefined 뿐이다(훅 안에서 만들 수 있는 것).
 	struct Forced
 	{
-		char Kind = 'u';		// 'n' 수, 'b' 불리언, 'u' undefined
+		char Kind = 'u';		// 'n' 수, 'b' 불리언, 'u' undefined, 'x' 원래 함수가 돌려준 수에 Number 를 곱한다
 		double Number = 0;
-		bool Skip = false;		// 원래 함수를 부르지 않는다(값을 치르는 함수처럼 한 일 자체를 없애야 할 때)
+		bool Skip = false;		// 원래 함수를 부르지 않는다(값을 치르는 함수처럼 한 일 자체를 없애야 할 때). 'x' 에는 쓰지 않는다
+		bool Whole = false;		// 'x': 정수는 정수로 남기고 양수는 1 아래로 내리지 않는다(가격). core/Hooks 의 ScaleResult
 	};
 
 	// 그 함수가 돌려주는 값을 바꾼다. 훅이 없으면 건다. 바꾼 호출이 보이게 기록도 한다. Target 은 Watch 와 같다.

@@ -382,6 +382,7 @@ namespace
 		value.Kind = C.Args.empty() ? 'u' : C.Args[0].Kind;
 		value.Number = C.Args.empty() ? 0 : C.Args[0].Number;
 		value.Skip = C.Options.count("skip") > 0;
+		value.Whole = C.Options.count("whole") > 0;
 		std::string name, why;
 		if (NlRecorder::Override(C.Target, value, name, why))
 			Say("  overriding " + name);
@@ -430,7 +431,11 @@ namespace
 		else if (C.Verb == "economy")
 			DoEconomy(C);
 		else if (C.Verb == "cheat")
-			Say(NlCheats::Set(C.Target, C.Number != 0) ? "  cheat " + C.Target + (C.Number != 0 ? " on" : " off") : "  : not a switch: " + C.Target);
+		{
+			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
+			Say(ok ? "  cheat " + C.Target + (C.Args.empty() ? (C.Number != 0 ? " on" : " off") : " = " + Shortest(C.Args[0].Number))
+				: "  : cannot set " + C.Target + (C.Args.empty() ? " (it needs a number)" : " (it takes no number)"));
+		}
 		else if (C.Verb == "page")
 			Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
 		else if (C.Verb == "list")

@@ -629,6 +629,13 @@ int main(int argc, char** argv)
 		CHECK(!book.Remember("altar", 1, 3, std::numeric_limits<double>::infinity()));
 		CHECK(book.Remember("hut_6x10", 2, 32, 5) && book.Remember("hut_6x10", 2, 1, 10));
 		CHECK(book.Size() == 3);
+		// 배율을 곱할 때는 지금 값이 아니라 처음 본 값(바탕)에 곱한다.
+		double base = 0;
+		CHECK(book.Find("hut_6x10", 2, 32, base) && base == 5);
+		size_t index = 99;
+		CHECK(book.Find("hut_6x10", 2, 1, base, &index) && base == 10 && index == 2 && book.Entries()[index].Slot == 1);
+		base = 5;
+		CHECK(!book.Find("hut_6x10", 2, 33, base) && !book.Find("altar", 1, 2, base) && base == 5);
 
 		book.Forget({ 1, 0, 1 });							// 되돌린 자리만 잊는다. 못 되돌린 자리는 남아 다음에 다시 되돌린다
 		CHECK(book.Size() == 1 && book.Entries()[0].Building == "hut_6x10" && book.Entries()[0].Slot == 32 && book.Entries()[0].Value == 5);
@@ -665,6 +672,17 @@ int main(int argc, char** argv)
 		CHECK(ChooseHookStep(false, true, false) == HookStep::Remove);		// 걸었다는 표시를 지운다
 		CHECK(ChooseHookStep(false, false, false) == HookStep::None);
 		CHECK(ChooseHookStep(false, false, true) == HookStep::None);		// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
+	});
+
+	Test("훅의 배율: 원래 값에 곱하고, 정수로 남길지 고른다", [] {
+		CHECK(ScaleResult(8, 0.1, true) == 1);					// 가격: 정수는 정수로 남고 0 이 되지 않는다
+		CHECK(ScaleResult(100, 0.1, true) == 10 && ScaleResult(3600, 0.1, true) == 360 && ScaleResult(250, 100, true) == 25000);
+		CHECK(ScaleResult(1, 5, false) == 5 && ScaleResult(1.2, 5, false) == 6);
+		CHECK(ScaleResult(1, 0.5, false) == 0.5 && ScaleResult(1, 0.5, true) == 1);		// 계수는 그대로 곱한다. 정수로 남기면 1 아래로 내려가지 않는다
+		CHECK(ScaleResult(0, 10, true) == 0 && ScaleResult(-4, 2, true) == -8);
+		const double nan = std::numeric_limits<double>::quiet_NaN();
+		CHECK(ScaleResult(5, nan, true) == 5 && ScaleResult(5, 0, true) == 5 && ScaleResult(5, -1, false) == 5);		// 쓸 수 없는 배율이면 원래 값 그대로
+		CHECK(ScaleResult(5, std::numeric_limits<double>::infinity(), false) == 5);
 	});
 
 	Test("훅의 자리: 걸린 대상은 그 자리, 걸다 실패한 대상에는 새 자리를 주지 않는다", [] {
@@ -731,21 +749,37 @@ int main(int argc, char** argv)
 		for (const Cheat& cheat : Cheats())
 		{
 			const AskPath path = ParseAskPath(cheat.Path);
-			if (!path.Error.empty() || path.Steps.empty())
+			if ((!path.Error.empty() || path.Steps.empty()) && !(IsHook(cheat.Kind) && std::string(cheat.Path).rfind("gml_Script_", 0) == 0))
 			{
 				std::printf("  FAIL %s: %s (%s)\n", cheat.Id, cheat.Path, path.Error.c_str());
 				g_Failed++;
 			}
-			CHECK(path.Root == "global" || path.Root == "inst");		// 표에는 ds 번호를 적지 않는다
+			// 표에는 ds 번호를 적지 않는다. 훅 항목은 이름 있는 스크립트를 이름으로 적을 수 있다(그 이름은 이 게임 버전의 것이다).
+			const bool script = IsHook(cheat.Kind) && std::string(cheat.Path).rfind("gml_Script_", 0) == 0;
+			CHECK(script || path.Root == "global" || path.Root == "inst");
 			CHECK(ids.insert(cheat.Id).second);
 			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
 			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
-			if (cheat.Kind == CheatKind::Number)
+			if (cheat.Kind == CheatKind::HookScale || cheat.Kind == CheatKind::CustomScale)		// On: 창이 처음 내놓는 배율. 0 보다 크고 범위 안이다
+				CHECK(cheat.Min > 0 && cheat.On >= cheat.Min && cheat.On <= cheat.Max && cheat.On != 1);
+			if (HasNumber(cheat.Kind))
 				CHECK(cheat.Min < cheat.Max);
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 34);
+		CHECK(Cheats().size() == 42);
+		// 3나-3: 거래·생산·창고 용량(research/10). 게임의 함수가 돌려주는 수에 배율을 곱하는 훅(HookScale)과, 모듈이 자료를 돌며 배율을 쓰는 항목(CustomScale).
+		for (const char* id : { "buy_price", "sell_price", "market_depth", "production_time", "worker_performance" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::HookScale);
+		for (const char* id : { "storage_capacity", "production_amount" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale);
+		CHECK(FindCheat("production_free") && FindCheat("production_free")->Kind == CheatKind::Custom);
+		CHECK(FindCheat("buy_price") && FindCheat("buy_price")->Where == Area::Economy && FindCheat("buy_price")->Max <= 1);		// 싸게 산다
+		CHECK(FindCheat("sell_price") && FindCheat("sell_price")->Min >= 1);														// 비싸게 판다
+		CHECK(FindCheat("production_time") && FindCheat("production_time")->Where == Area::Build && FindCheat("production_time")->Max <= 1);
+		CHECK(HasNumber(CheatKind::Number) && HasNumber(CheatKind::HookScale) && HasNumber(CheatKind::CustomScale));
+		CHECK(!HasNumber(CheatKind::Hook) && !HasNumber(CheatKind::Toggle) && !HasNumber(CheatKind::Custom));
+		CHECK(IsHook(CheatKind::Hook) && IsHook(CheatKind::HookScale) && !IsHook(CheatKind::Custom) && !IsHook(CheatKind::CustomScale) && !IsHook(CheatKind::Number));
 		// 건설 조건과 건설비(research/09). 조건은 게임의 함수가 돌려주는 값을 바꾸는 훅이고, 비용은 모듈이 건물 종류를 돌며 0 으로 쓴다.
 		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
 		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
@@ -805,6 +839,23 @@ int main(int argc, char** argv)
 		// 확인한 훅·모듈 항목은 남고(build_any, build_free, instant_upgrade) 확인 전의 것(build_marks)은 빠진다.
 		// 값을 쓰는 스위치(Toggle: build_all)는 확인 전이어도 그대로다.
 		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free", "instant_upgrade", "build_all" }));
+
+		// 수가 있는 훅·모듈 항목(배율)은 Numbers 에 든다. 수는 범위 안으로 당기고, 확인 전의 것은 버린다(꺼진 채로 시작한다).
+		CheatState scales;
+		scales.On = { "production_time", "storage_capacity" };				// 수가 있는 항목은 On 에 들지 않는다
+		scales.Numbers = { { "production_time", 0.0000001 }, { "storage_capacity", 5 }, { "rest_decrease", 3 }, { "build_any", 1 } };
+		const CheatState kept_scales = KeepKnown(scales);
+		CHECK(kept_scales.On.empty());
+		CHECK(kept_scales.Numbers.count("rest_decrease") == 1 && kept_scales.Numbers.count("build_any") == 0);
+		for (const char* id : { "production_time", "storage_capacity" })
+		{
+			const Cheat* cheat = FindCheat(id);
+			CHECK(cheat != nullptr);
+			if (cheat)
+				CHECK(kept_scales.Numbers.count(id) == (cheat->Verified ? 1u : 0u));
+			if (cheat && cheat->Verified)
+				CHECK(kept_scales.Numbers.at(id) >= cheat->Min && kept_scales.Numbers.at(id) <= cheat->Max);
+		}
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
@@ -1151,6 +1202,29 @@ int main(int argc, char** argv)
 				g_Failed++;
 			}
 		}
+	});
+
+	Test("원격 명령: 반환값에 배율을 곱하는 훅의 줄을 읽는다", [] {
+		const RemoteCommand half = ParseRemoteLine("override gml_Script_x x:0.5");
+		CHECK(half.Error.empty() && half.Target == "gml_Script_x" && half.Args.size() == 1 && half.Args[0].Kind == 'x' && half.Args[0].Number == 0.5
+			&& half.Options.count("whole") == 0);
+		const RemoteCommand whole = ParseRemoteLine("override inst:o_a.get_price x:10 whole");
+		CHECK(whole.Error.empty() && whole.Args.size() == 1 && whole.Args[0].Kind == 'x' && whole.Args[0].Number == 10 && whole.Options.count("whole") == 1);
+		// 배율은 0 보다 큰 유한한 수다. 원래 값이 있어야 곱하므로 skip 과 함께 쓰지 않는다. whole 은 배율에만 붙는다.
+		for (const char* line : { "override gml_Script_x x:0", "override gml_Script_x x:-2", "override gml_Script_x x:abc", "override gml_Script_x x:inf",
+			"override gml_Script_x x:nan", "override gml_Script_x x:2 skip", "override gml_Script_x n:2 whole", "override gml_Script_x x:2 whole extra" })
+			CHECK(!ParseRemoteLine(line).Error.empty());
+	});
+
+	Test("원격 명령: 수가 있는 치트는 수로 켠다", [] {
+		const RemoteCommand set = ParseRemoteLine("cheat production_time 0.1");
+		CHECK(set.Error.empty() && set.Target == "production_time" && set.Number == 1 && set.Args.size() == 1 && set.Args[0].Kind == 'n' && set.Args[0].Number == 0.1);
+		CHECK(ParseRemoteLine("cheat production_time off").Error.empty() && ParseRemoteLine("cheat production_time off").Number == 0);
+		const RemoteCommand on = ParseRemoteLine("cheat production_time on");			// 수 없이 켜면 표가 내놓는 배율로 켠다
+		CHECK(on.Error.empty() && on.Number == 1 && on.Args.empty());
+		CHECK(!ParseRemoteLine("cheat build_any 0.5").Error.empty());					// 수가 없는 항목에 수를 주지 않는다
+		CHECK(!ParseRemoteLine("cheat production_time abc").Error.empty() && !ParseRemoteLine("cheat production_time nan").Error.empty());
+		CHECK(ParseRemoteLine("cheat rest_decrease 0").Error.empty() && ParseRemoteLine("cheat rest_decrease 0").Args.size() == 1);		// 수 항목(Number)도 수로 켠다
 	});
 
 	Test("원격 명령: 부르는 인자를 읽는다", [] {

@@ -15,6 +15,22 @@ namespace NlCore
 		return true;
 	}
 
+	bool CostBook::Find(const std::string& Building, int Level, int Slot, double& Value, size_t* Index) const
+	{
+		for (size_t i = 0; i < m_Entries.size(); i++)
+		{
+			const CostEntry& entry = m_Entries[i];
+			if (entry.Level == Level && entry.Slot == Slot && entry.Building == Building)
+			{
+				Value = entry.Value;
+				if (Index)
+					*Index = i;
+				return true;
+			}
+		}
+		return false;
+	}
+
 	void CostBook::Forget(const std::vector<char>& Done)
 	{
 		if (Done.size() != m_Entries.size())

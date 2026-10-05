@@ -45,6 +45,7 @@ add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Access.cpp
   src/Build.cpp
+  src/Production.cpp
   src/Cheats.cpp
   src/Dump.cpp
   src/Economy.cpp

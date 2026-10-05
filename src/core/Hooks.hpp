@@ -1,6 +1,9 @@
 #pragma once
 // 훅을 다루는 쪽(src/Recorder.cpp, src/Cheats.cpp)의 판단 가운데 러너에 기대지 않는 것.
 
+#include "Knobs.hpp"
+
+#include <cmath>
 #include <cstddef>
 #include <vector>
 
@@ -15,6 +18,15 @@ namespace NlCore
 		if (On)
 			return Applied && Live ? HookStep::None : HookStep::Apply;		// 다른 곳(원격 unoverride)이 껐으면 다시 건다. 체크와 실제가 어긋나지 않게
 		return Applied ? HookStep::Remove : HookStep::None;					// 이 항목이 걸지 않은 바꾸기(원격 override)는 건드리지 않는다
+	}
+
+	// 함수가 돌려준 수에 배율을 곱한 값(반환값에 배율을 거는 훅이 쓴다). Whole: 정수는 정수로 남기고 양수는 1 아래로 내리지 않는다
+	// (가격 8 에 0.1 을 곱해도 1 이다. core/Knobs 의 Scale). 배율이 0 보다 큰 유한한 수가 아니면 원래 값 그대로.
+	inline double ScaleResult(double Value, double Factor, bool Whole)
+	{
+		if (!std::isfinite(Factor) || !(Factor > 0))
+			return Value;
+		return Whole ? Scale(Value, Factor) : Value * Factor;
 	}
 
 	struct HookSlot

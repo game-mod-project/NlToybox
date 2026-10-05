@@ -23,6 +23,9 @@ namespace NlCore
 		// 돌려주는 값: 이 자리에 되돌릴 값이 있는가(방금 기억했거나 이미 기억했다). 거짓이면 그 자리에 0 을 쓰지 않는다.
 		bool Remember(const std::string& Building, int Level, int Slot, double Value);
 
+		// 그 자리의 처음 본 값(바탕). 기억한 적이 없으면 거짓이고 Value 는 그대로다. Index 를 주면 Entries() 에서의 번호도 돌려준다.
+		bool Find(const std::string& Building, int Level, int Slot, double& Value, size_t* Index = nullptr) const;
+
 		// 되돌린 자리를 잊는다. Done[i] 가 0 이 아니면 Entries()[i] 를 지운다. 못 되돌린 자리는 남는다(다음에 다시 되돌린다).
 		// Done 의 수가 장부의 수와 다르면 아무것도 지우지 않는다.
 		void Forget(const std::vector<char>& Done);

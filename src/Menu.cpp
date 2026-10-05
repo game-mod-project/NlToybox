@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Build.hpp"
+#include "Production.hpp"
 #include "Cheats.hpp"
 #include "Economy.hpp"
 #include "Explorer.hpp"
@@ -157,6 +158,7 @@ void NlMenu::GameTick()
 	NlCheats::GameTick(now, visible);
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
+	NlProduction::GameTick(now);
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;

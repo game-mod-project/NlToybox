@@ -35,8 +35,13 @@ namespace NlCheats
 	bool IsOn(const std::string& Id);
 	// 그 항목 옆에 보일 글(한 일, 못 한 까닭). Custom 항목을 하는 코드가 적는다.
 	void SetNote(const std::string& Id, const std::string& Note);
-	// 항목을 켜고 끈다(모드창의 체크와 같다. 원격 명령 cheat). 수 항목이거나 없는 Id 면 거짓.
+	// 그 항목이 켜져 있으면 창에서 정한 수(배율)를 돌려준다. 수가 없는 항목이거나 꺼져 있으면 거짓. CustomScale 을 하는 코드가 본다.
+	bool Factor(const std::string& Id, double& Out);
+	// 항목을 켜고 끈다(모드창의 체크와 같다. 원격 명령 cheat). 배율 항목을 켜면 표가 내놓는 배율(또는 앞서 정한 배율)로 켠다.
+	// 값을 써 넣는 수 항목(Number)은 끄기만 된다. 없는 Id 면 거짓.
 	bool Set(const std::string& Id, bool On);
+	// 수가 있는 항목을 그 수로 켠다(범위 안으로 당긴다). 수가 없는 항목이거나 없는 Id 면 거짓.
+	bool SetNumber(const std::string& Id, double Value);
 
 	// 켜 둔 항목의 수(게임 속도를 걸었으면 하나 더).
 	int ActiveCount();

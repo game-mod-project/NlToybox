@@ -44,6 +44,7 @@ namespace NlCore
 	const std::vector<Cheat>& Cheats()
 	{
 		constexpr CheatKind T = CheatKind::Toggle, N = CheatKind::Number, H = CheatKind::Hook, C = CheatKind::Custom;
+		constexpr CheatKind HS = CheatKind::HookScale, CS = CheatKind::CustomScale;
 
 		// 이름과 값은 새 게임 덤프(refs/runtime/stage0b-run2.late1.json 의 instances.o_debug.members)에서 봤다.
 		// Off 는 그 덤프의 값이다. 뜻은 변수 이름에서 읽은 것이고 효과는 아직 재지 않았다(Verified = false).
@@ -54,6 +55,35 @@ namespace NlCore
 
 			// 창고 용량(…__warehouse.__cached_total_capacity_for_storage_type.<갈래>)은 아직 넣지 않는다: 게임이 다시 채우는 캐시라
 			// "원래대로"가 낡은 값을 써 넣게 된다. 게임이 그 값을 언제 다시 만드는지 잰 뒤(3나-2)에 넣는다.
+
+			// 거래(research/10). 거래 탁자의 상품은 값을 들고 있지 않다. TradeManager 의 buy_default_get(자원)·sell_default_get(자원)이 돌려주는
+			// 기본 가격(__fair_trade_default_price_buy·_sell)에서 그때그때 셈한다(__get_raw_price(방향)). 그 함수가 돌려주는 수에 배율을 곱한다.
+			{ "buy_price", Area::Economy, "구매가 배율", "inst:o_game_map_controller.__trade_manager.buy_default_get", HS, 0.5, 1, 0.01, 1, false,
+				"상인에게서 살 때의 기본 가격에 곱한다(0.5 면 반값). 거래 창을 다시 열면 보인다" },
+			{ "sell_price", Area::Economy, "판매가 배율", "inst:o_game_map_controller.__trade_manager.sell_default_get", HS, 2, 1, 1, 50, false,
+				"상인에게 팔 때의 기본 가격에 곱한다. 거래 창을 다시 열면 보인다" },
+			// 시장 깊이: 값이 떨어지기 전까지 팔 수 있는 양(자원마다 0~130). MarketSaturationManager.get_market_depth(자원).
+			{ "market_depth", Area::Economy, "거래량(시장 깊이) 배율", "inst:o_game_map_controller.__trade_manager.__prices_manager.get_market_depth", HS, 10, 1, 1, 100, false,
+				"값이 떨어지기 전까지 팔 수 있는 양에 곱한다" },
+			// 창고 용량(research/10). 창고 종류(hall, storage, granary, armory)마다 갈래별 용량이 있다. 그 값에 배율을 쓴다(src/Production.cpp).
+			// 용량을 돌려주는 함수(get_total_capacity_for_category)만 바꾸면 HUD 만 바뀌고 자정의 부패 처리는 원래 용량으로 깎는다.
+			{ "storage_capacity", Area::Economy, "창고 용량 배율", "inst:o_data.__building_warehouse_data.__generic_warehouses", CS, 10, 0, 1, 1000, false,
+				"창고 종류마다의 갈래별 용량에 곱한다. 용량을 넘겨 썩던 자원이 썩지 않는다. 끄면 원래 용량으로 되돌린다" },
+
+			// 생산(research/10). 물건 하나를 만드는 데 드는 생산 점수는 resource_production_points_cost_get(자원)이 돌려준다
+			// (o_province_controller.production_cost[자원] × 3600). 그 수에 배율을 곱한다.
+			{ "production_time", Area::Build, "생산 시간 배율", "gml_Script_resource_production_points_cost_get", HS, 0.1, 1, 0.01, 1, false,
+				"물건 하나를 만드는 데 드는 일의 양에 곱한다(0.1 이면 열 배 빨리 만든다)" },
+			// BuildingComponentProduction.get_worker_base_performance_factor(일꾼) → 1. 생성자의 정적 메서드라 건물이 없어도 이름으로 건다
+			// (이름의 번호는 이 게임 버전의 것이다).
+			{ "worker_performance", Area::Build, "작업 효율 배율",
+				"gml_Script_anon_BuildingComponentProduction_gml_GlobalScript_BuildingComponentProduction_2239513882_BuildingComponentProduction_gml_GlobalScript_BuildingComponentProduction",
+				HS, 5, 0, 1, 20, false, "생산 건물에서 일꾼의 기본 작업 효율에 곱한다" },
+			// 조리법: 건물 종류의 __production.__map_of_production(ds_map: 만드는 자원 → { 재료의 배열, 만들어지는 수 }). src/Production.cpp 가 돌며 쓴다.
+			{ "production_amount", Area::Build, "생산량 배율", "inst:o_building.generic.__production", CS, 2, 0, 1, 100, false,
+				"한 번에 만들어지는 수에 곱한다. 끄면 원래 수로 되돌린다" },
+			{ "production_free", Area::Build, "생산 재료 없음", "inst:o_building.generic.__production", C, 1, 0, 0, 0, false,
+				"모든 조리법의 재료를 0 으로 쓴다. 끄면 원래 재료로 되돌린다" },
 
 			// 건설 조건(research/09). 건설 창이 건물마다 이 함수에 (건물 이름, 등급)을 묻는다: 제단은 true, 잠긴 창고·사원은 false 였다.
 			// true 로 바꾼 채 사용자가 잠겨 있던 창고·곡창·무기고를 지었다. 건설 창의 빨간 표시와 안내문은 남는다(아래 항목).
@@ -162,7 +192,7 @@ namespace NlCore
 	{
 		std::erase_if(State.On, [](const std::string& id) {
 			const Cheat* cheat = FindCheat(id);
-			if (!cheat || cheat->Kind == CheatKind::Number)		// 수 항목은 Numbers 에 든다. 그 밖(Toggle, Hook, Custom)은 켠 것의 목록에 든다
+			if (!cheat || HasNumber(cheat->Kind))		// 수가 있는 항목은 Numbers 에 든다. 그 밖(Toggle, Hook, Custom)은 켠 것의 목록에 든다
 				return true;
 			// 함수의 답을 바꾸거나 모듈이 게임의 값을 고쳐 쓰는 항목은 효과를 확인한 것만 켠 채로 시작한다. 확인 전의 것은 그 실행에서 사용자가 켠다:
 			// 창을 열지도 않았는데 게임의 판정이 바뀌거나 값이 고쳐 쓰여 세이브에 굳는 일이 없게.
@@ -171,7 +201,8 @@ namespace NlCore
 		for (auto it = State.Numbers.begin(); it != State.Numbers.end();)
 		{
 			const Cheat* cheat = FindCheat(it->first);
-			if (!cheat || cheat->Kind != CheatKind::Number)
+			// 배율을 거는 훅·모듈 항목도 확인한 것만 켠 채로 시작한다(위와 같은 까닭).
+			if (!cheat || !HasNumber(cheat->Kind) || (cheat->Kind != CheatKind::Number && !cheat->Verified))
 			{
 				it = State.Numbers.erase(it);
 				continue;
