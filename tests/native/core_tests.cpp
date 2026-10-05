@@ -12,6 +12,7 @@
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
+#include "core/Presets.hpp"
 #include "core/WorldPlan.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
@@ -751,7 +752,8 @@ int main(int argc, char** argv)
 				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People
 				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/People.cpp)
 				|| area.Id == Area::Army									// 군대: 병사를 만드는 단추
-				|| area.Id == Area::Events || area.Id == Area::Religion;	// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
+				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
+				|| area.Id == Area::Presets;								// 프리셋: 확인된 항목의 묶음(core/Presets)
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
@@ -1449,6 +1451,48 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=500 amount=50").Error.empty());
 		CHECK(!ParseRemoteLine("person lords money_add amount=5").Error.empty());
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 money_add amount=0").Error.empty());
+	});
+
+	Test("프리셋: 표의 확인된 항목만, 범위 안의 수로", [] {
+		CHECK(Presets().size() == 4);
+		std::vector<std::string> keys;
+		for (const Preset& preset : Presets())
+		{
+			std::string why;
+			CHECK(CheckPreset(preset, why));
+			CHECK(std::find(keys.begin(), keys.end(), preset.Key) == keys.end());
+			keys.push_back(preset.Key);
+			CHECK(FindPreset(preset.Key) == &preset);
+		}
+		CHECK(FindPreset("normal") && FindPreset("normal")->Items.empty());		// 기본: 모두 끈다
+		CHECK(FindPreset("easy") && FindPreset("sandbox") && FindPreset("god"));
+		CHECK(!FindPreset("nope") && !FindPreset(""));
+
+		// 확인 전의 항목, 없는 항목, 범위 밖의 수, 수가 없는 항목에 준 수, 겹친 항목, 값을 써 넣는 항목은 거부한다
+		std::string why;
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "ally_invincible", 0 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "no_such_cheat", 0 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 5 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 0 } } }, why));			// 배율 항목은 배율을 준다
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "build_free", 2 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "build_free", 0 }, { "build_free", 0 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "daily_migrants", 5 } } }, why));			// 세이브에 남는 값을 쓰는 항목은 묶음에 넣지 않는다
+		CHECK(CheckPreset(Preset{ "x", "x", "", { { "build_free", 0 }, { "production_time", 0.5 } } }, why));
+
+		// god 는 sandbox 가 켜는 것을 모두 켠다
+		for (const PresetItem& item : FindPreset("sandbox")->Items)
+		{
+			bool found = false;
+			for (const PresetItem& other : FindPreset("god")->Items)
+				found = found || std::string(other.Id) == item.Id;
+			CHECK(found);
+		}
+
+		RemoteCommand c = ParseRemoteLine("preset god");
+		CHECK(c.Error.empty() && c.Verb == "preset" && c.Target == "god");
+		CHECK(!ParseRemoteLine("preset").Error.empty() && !ParseRemoteLine("preset nope").Error.empty() && !ParseRemoteLine("preset god now").Error.empty());
+		CHECK(ParseRemoteLine("time pause").Error.empty() && ParseRemoteLine("time resume").Target == "resume");
+		CHECK(!ParseRemoteLine("time stop").Error.empty() && !ParseRemoteLine("time").Error.empty() && !ParseRemoteLine("time pause now").Error.empty());
 	});
 
 	Test("월드: 한 번 하는 일과 원격 명령", [] {

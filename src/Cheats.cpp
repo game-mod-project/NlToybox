@@ -4,6 +4,7 @@
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
 #include "core/Hooks.hpp"
+#include "core/Presets.hpp"
 #include "core/Rate.hpp"
 #include "core/Text.hpp"
 
@@ -43,6 +44,7 @@ namespace
 	// 게임 속도는 게임의 함수로 건다(research/08): o_time_controller.__set_warp(배속). 게임이 스스로 (3) 으로 부르는 것을 기록했고,
 	// 24 로 불러 흐름이 배속 1 의 약 24배가 되는 것을 쟀다. 1·3·6·12 는 게임의 단추가 쓰는 값(time_speed_variants)이다. time_warp_max 는 100 이다.
 	constexpr const char* k_SetWarp = "inst:o_time_controller.__set_warp";
+	constexpr const char* k_SetSpeed = "inst:o_time_controller.set_time_speed";		// 게임의 속도 단추가 쓰는 길. 0 번은 첫 속도이고 일시정지를 푼다
 	constexpr double k_Factors[] = { 1, 3, 6, 12, 24, 50 };
 
 	std::recursive_mutex g_Mutex;	// 아래 전부를 지킨다
@@ -52,6 +54,7 @@ namespace
 	bool g_Dirty = true;			// 다음 틱에 바로 적용한다
 	double g_NextApply = 0;
 	double g_WarpAsked = 0;			// 창이 누른 배속. 0 이면 없다. 다음 틱이 게임의 함수로 건다
+	bool g_PauseAsked = false, g_ResumeAsked = false;		// 창이나 원격이 청한 멈춤·다시 흐르게. 다음 틱이 게임의 함수를 부른다
 	std::string g_WarpNote;			// 마지막으로 건 결과
 
 	void Log(const std::string& Line)
@@ -356,6 +359,18 @@ void NlCheats::GameTick(double Now, bool Visible)
 		Log(std::string("speed: ") + (ok ? "ok" : why));
 	}
 
+	if (g_PauseAsked || g_ResumeAsked)
+	{
+		const bool pause = g_PauseAsked;
+		g_PauseAsked = g_ResumeAsked = false;
+		YYTK::RValue result;		// 이 함수 안에서만 든다
+		std::string why;
+		Log(pause ? "speed call __set_warp(0)" : "speed call set_time_speed(0)");		// 부르기 전에 남긴다
+		const bool ok = NlAccess::CallMethod(NlCore::ParseAskPath(pause ? k_SetWarp : k_SetSpeed), { YYTK::RValue(0.0) }, result, why);
+		g_WarpNote = !ok ? "하지 못했습니다: " + why : pause ? "시간을 멈췄습니다" : "시간이 다시 흐릅니다";
+		Log(std::string("speed: ") + (ok ? "ok" : why));
+	}
+
 	if (!g_Dirty && Now < g_NextApply)
 		return;
 	g_Dirty = false;
@@ -401,6 +416,100 @@ void NlCheats::DrawArea(Area Where)
 	ImGui::TextDisabled("(?) 는 효과를 아직 확인하지 않은 항목입니다. 수는 Enter 로 써 넣습니다.");
 }
 
+namespace
+{
+	std::string g_PresetNote;		// 마지막으로 건 묶음
+
+	// 묶음을 건다(g_Mutex 를 든 채 부른다). 돌려주는 것: 켜 둔 항목의 수.
+	int ApplyPresetLocked(const NlCore::Preset& Preset)
+	{
+		int on = 0;
+		for (Item& item : g_Items)
+		{
+			const NlCore::PresetItem* want = nullptr;
+			for (const NlCore::PresetItem& candidate : Preset.Items)
+				if (std::string(candidate.Id) == item.Def->Id)
+					want = &candidate;
+			if (!want)
+			{
+				if (item.On)
+					TurnOff(item);
+				continue;
+			}
+			const bool number = HasNumber(item.Def->Kind);
+			const double value = number ? std::clamp(want->Number, item.Def->Min, item.Def->Max) : 0;
+			if (!item.On || (number && item.Number != value))
+			{
+				if (number)
+					item.Number = value;
+				item.On = true;
+				item.Restore = false;
+				g_Changed = g_Dirty = true;
+			}
+			on++;
+		}
+		g_PresetNote = std::string(Preset.Label) + ": " + std::to_string(on) + "개를 켜 두고 나머지는 껐습니다";
+		Log(std::string("preset ") + Preset.Key + ": " + std::to_string(on) + " on");
+		return on;
+	}
+
+	// 묶음이 켜는 것을 글로: "이름, 이름 x0.1, …"
+	std::string PresetList(const NlCore::Preset& Preset)
+	{
+		std::string text;
+		for (const NlCore::PresetItem& want : Preset.Items)
+		{
+			const Cheat* cheat = NlCore::FindCheat(want.Id);
+			if (!cheat)
+				continue;
+			text += (text.empty() ? "" : ", ") + std::string(cheat->Label) + (HasNumber(cheat->Kind) ? " x" + Shortest(want.Number) : "");
+		}
+		return text.empty() ? "켜는 것이 없습니다" : text;
+	}
+}
+
+void NlCheats::DrawPresets()
+{
+	std::lock_guard lock(g_Mutex);
+	ImGui::PushTextWrapPos(0.0f);
+	ImGui::TextUnformatted("프리셋은 플레이에서 확인된 항목의 묶음입니다. 누르면 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켭니다. "
+		"탐색기의 잠금, 배율 7개, 한 번 하는 단추(금화, 병사 등)는 건드리지 않습니다.");
+	ImGui::PopTextWrapPos();
+	ImGui::Spacing();
+	for (const NlCore::Preset& preset : NlCore::Presets())
+	{
+		ImGui::PushID(preset.Key);
+		if (ImGui::Button(preset.Label, ImVec2(150, 0)))
+			ApplyPresetLocked(preset);
+		ImGui::SameLine();
+		ImGui::TextUnformatted(preset.Help);
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextDisabled("%s", PresetList(preset).c_str());
+		ImGui::PopTextWrapPos();
+		ImGui::Spacing();
+		ImGui::PopID();
+	}
+	if (!g_PresetNote.empty())
+		ImGui::TextDisabled("%s", g_PresetNote.c_str());
+}
+
+bool NlCheats::ApplyPreset(const std::string& Key, std::string& Text)
+{
+	std::lock_guard lock(g_Mutex);
+	const NlCore::Preset* preset = NlCore::FindPreset(Key);
+	if (!preset)
+		return false;
+	ApplyPresetLocked(*preset);
+	Text = g_PresetNote + " (" + PresetList(*preset) + ")";
+	return true;
+}
+
+void NlCheats::AskTime(bool Pause)
+{
+	std::lock_guard lock(g_Mutex);
+	(Pause ? g_PauseAsked : g_ResumeAsked) = true;
+}
+
 void NlCheats::DrawTime()
 {
 	std::lock_guard lock(g_Mutex);
@@ -425,6 +534,13 @@ void NlCheats::DrawTime()
 			g_WarpAsked = factor;
 		ImGui::SameLine();
 	}
+	ImGui::NewLine();
+	// 멈춤: __set_warp(0). 다시: set_time_speed(0)(게임의 첫 속도 단추와 같다. 일시정지를 푼다). 둘 다 실행 묶음에서 수십 번 불러 봤다(research/13).
+	if (ImGui::Button("멈춤", ImVec2(64, 0)))
+		g_PauseAsked = true;
+	ImGui::SameLine();
+	if (ImGui::Button("다시 흐르게", ImVec2(110, 0)))
+		g_ResumeAsked = true;
 	ImGui::EndDisabled();
 	ImGui::NewLine();
 

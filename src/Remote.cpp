@@ -493,6 +493,16 @@ namespace
 			DoPerson(C);
 		else if (C.Verb == "world")
 			DoWorld(C);
+		else if (C.Verb == "preset")
+		{
+			std::string text;
+			Say(NlCheats::ApplyPreset(C.Target, text) ? "  " + text : "  : no such preset");
+		}
+		else if (C.Verb == "time")
+		{
+			NlCheats::AskTime(C.Target == "pause");
+			Say("  time " + C.Target + " asked (the next tick calls the game)");
+		}
 		else if (C.Verb == "cheat")
 		{
 			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);

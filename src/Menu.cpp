@@ -250,6 +250,9 @@ void NlMenu::Draw()
 	case Area::Items:
 		NlPeople::DrawItems();
 		break;
+	case Area::Presets:
+		NlCheats::DrawPresets();
+		break;
 	case Area::Events:
 		NlCheats::DrawArea(page);
 		NlTweaks::DrawArea(page);
