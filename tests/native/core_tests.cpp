@@ -2,6 +2,7 @@
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
 #include "core/AskPath.hpp"
+#include "core/BattlePlan.hpp"
 #include "core/Binding.hpp"
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
@@ -684,13 +685,18 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 52);
+		CHECK(Cheats().size() == 56);
+		// 전투(research/16): 영혼의 두 함수에 아군과 적의 배율을 따로 건다(모듈의 코드가 한다: CustomScale). 실제 싸움에서 확인하기 전이다.
+		for (const char* id : { "ally_power", "enemy_power", "ally_toughness", "enemy_toughness" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale && FindCheat(id)->Where == Area::Army && !FindCheat(id)->Verified);
+		CHECK(FindCheat("ally_power")->Min >= 1 && FindCheat("ally_toughness")->Min >= 1);			// 아군의 것은 올리기만
+		CHECK(FindCheat("enemy_power")->Max <= 1 && FindCheat("enemy_toughness")->Max <= 1 && FindCheat("enemy_power")->Min > 0);		// 적의 것은 내리기만(0 은 아니다)
 		// 외교(research/14): 세력의 적대 판정 Faction.is_enemy_with(세력) -> 불리언을 false 로. 모든 세력에 걸린다. 효과는 보지 못했다.
 		CHECK(FindCheat("no_enemies") && FindCheat("no_enemies")->Kind == CheatKind::Hook && FindCheat("no_enemies")->Where == Area::Diplomacy
 			&& FindCheat("no_enemies")->On == 0 && !FindCheat("no_enemies")->Verified);
 		// 아군 무적(research/13): 상처를 입히는 함수를 플레이어의 사람에게만 건너뛴다. 모듈의 코드가 건다(Custom). 가려지는 것은 아직 보지 못했다.
 		CHECK(FindCheat("ally_invincible") && FindCheat("ally_invincible")->Kind == CheatKind::Custom && FindCheat("ally_invincible")->Where == Area::Army
-			&& !FindCheat("ally_invincible")->Verified);
+			&& FindCheat("ally_invincible")->Verified);		// research/13, 16: 직접 부른 호출이 가려졌고, 게임의 호출에서 self 가 영혼이다
 		// 군대(research/13): 병사의 고용 값. SoulBasic.get_soldier_cost() 가 돌려주는 수에 곱한다. 고용 창의 값과 실제로 빠진 금화로 봤다(160 → 16).
 		CHECK(FindCheat("hire_cost") && FindCheat("hire_cost")->Kind == CheatKind::HookScale && FindCheat("hire_cost")->Where == Area::Army
 			&& FindCheat("hire_cost")->Verified && FindCheat("hire_cost")->Max <= 1 && FindCheat("hire_cost")->Off == 1);		// 값은 정수로 남긴다
@@ -1471,7 +1477,7 @@ int main(int argc, char** argv)
 
 		// 확인 전의 항목, 없는 항목, 범위 밖의 수, 수가 없는 항목에 준 수, 겹친 항목, 값을 써 넣는 항목은 거부한다
 		std::string why;
-		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "ally_invincible", 0 } } }, why));
+		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "no_enemies", 0 } } }, why));				// 확인 전의 항목
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "no_such_cheat", 0 } } }, why));
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 5 } } }, why));
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "production_time", 0 } } }, why));			// 배율 항목은 배율을 준다
@@ -1553,6 +1559,37 @@ int main(int argc, char** argv)
 		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
 		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());
 		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
+	});
+
+	Test("전투: 아군과 적에게 따로 거는 배율", [] {
+		// 한 함수에 거는 배율: self 가 플레이어의 것이면 Number, 아니면 Other('p'). 'a' 는 언제나 Number
+		CHECK(HookFactor('a', false, 3, 0.5, true) == 3 && HookFactor('a', true, 3, 0.5, true) == 3);
+		CHECK(HookFactor('p', true, 3, 0.5, true) == 3 && HookFactor('p', false, 3, 0.5, true) == 0.5);
+		CHECK(HookFactor('o', true, 3, 0.5, true) == 0.5 && HookFactor('o', false, 3, 0.5, true) == 3);
+		CHECK(HookFactor('p', false, 3, 1, true) == 1);		// 적 배율이 없으면 그대로 지나간다
+		// 검토의 지적: 영혼의 주소를 아직 모르면(묶음이 비었다: 메뉴에서 막 들어왔다) 아무에게도 곱하지 않는다. 아군이 적의 배율을 받지 않게
+		CHECK(HookFactor('p', false, 3, 0.5, false) == 1 && HookFactor('o', false, 3, 0.5, false) == 1);
+		CHECK(HookFactor('a', false, 3, 0.5, false) == 3);		// 가리지 않는 바꾸기는 묶음과 무관하다
+		// 수가 아닌 값은 한도가 있어도 그대로 지나간다
+		CHECK(std::isnan(ScaleCapped(std::numeric_limits<double>::quiet_NaN(), 2, true, 20)));
+
+		// 위쪽 한도: 올린 값은 한도에서 멈추고, 원래 한도를 넘던 값과 내린 값은 건드리지 않는다
+		CHECK(ScaleCapped(10, 2, true, 20) == 20 && ScaleCapped(12, 2, true, 20) == 20 && ScaleCapped(7, 2, true, 20) == 14);
+		CHECK(ScaleCapped(25, 2, true, 20) == 25);		// 원래 값이 이미 한도를 넘는다: 낮추지 않는다
+		CHECK(ScaleCapped(30, 0.5, true, 20) == 15 && ScaleCapped(50, 0.5, true, 20) == 25);		// 내리는 배율은 한도와 무관하다
+		CHECK(ScaleCapped(40, 3, true, 0) == 120 && ScaleCapped(40, 0.3, true, 0) == 12);			// 한도 없음
+		CHECK(ScaleCapped(0, 3, true, 20) == 0 && ScaleCapped(-4, 3, true, 20) == -4);				// "없음"의 표식은 그대로
+
+		// 아군 항목과 적 항목을 바꾸기 하나로 묶는다
+		const SideScale none = PlanSides(false, 2, false, 0.5);
+		CHECK(!none.On && none.Mine == 1 && none.Other == 1);
+		const SideScale ally = PlanSides(true, 2, false, 0.5);
+		CHECK(ally.On && ally.Mine == 2 && ally.Other == 1);
+		const SideScale both = PlanSides(true, 2, true, 0.5);
+		CHECK(both.On && both.Mine == 2 && both.Other == 0.5);
+		CHECK(!PlanSides(true, 1, true, 1).On);			// 둘 다 1 이면 걸 것이 없다
+		CHECK(!PlanSides(true, 0, false, 0).On && !PlanSides(true, -2, true, std::numeric_limits<double>::quiet_NaN()).On);
+		CHECK(SameSides(both, PlanSides(true, 2, true, 0.5)) && !SameSides(both, ally) && !SameSides(both, PlanSides(true, 3, true, 0.5)));
 	});
 
 	Test("훅: 누구의 호출에 걸지와 self 의 묶음", [] {
