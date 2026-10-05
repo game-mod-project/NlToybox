@@ -97,15 +97,18 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **게임 스크립트는 `gml_Script_` 이름으로만 부르고 훅을 건다.** 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(`NlCore::ScriptRoutineName`).
   - `call`과 `method`는 인자의 수와 형을 본 함수에만 쓴다. 수는 `record`의 기록이나 본문의 기계어(`dumpbin /disasm`. `research/07`)로,
     형은 기록으로 본다. 본 적 없는 꼴로 부르지 않는다. 순서를 모르면 뒤바뀌어도 탈이 없는 값으로 처음 부른다.
-  - **훅을 걸기 전에 `py -3.14 tools/re/script_calls.py <exe> <이름>`으로 직접 호출을 센다.** 이름 있는 스크립트인데 0곳이면
-    게임의 호출이 훅에 오지 않는다(`pub_sub_event_perform`, `time_hour`). 그때 기록 0번은 "안 불렸다"가 아니다. 메서드는 참조로 불려서 0곳이어도 온다.
+  - **훅을 걸기 전에 `py -3.14 tools/re/script_calls.py <exe> <이름>`으로 직접 호출을 센다.** 0곳이면 참조로만 불리거나 부르는 곳마다
+    본문이 들어가 있는 것이다. 뒤의 경우 게임의 호출이 훅에 오지 않는다(`pub_sub_event_perform`, `time_hour`). 그때 기록 0번은 "안 불렸다"가 아니다.
+    메서드는 참조로 불려서 0곳이어도 온다.
   - **값을 바로 쓰는 것과 게임의 함수로 바꾸는 것은 다르다.** 금화와 영지 창고는 바로 쓰면 게임의 읽기 함수는 그 값을 주지만
     HUD 는 이벤트(`main_budget_change`, `main_resource_change`)가 와야 고쳐진다. 게임의 함수가 있으면 그것으로 바꾼다
     (금화: `gml_Script_budget_money_change(변화량)`. 화면에서 확인했다).
-  - 생성자의 정적 메서드(`…__province.__warehouse.change`)는 `list`에 나오지 않지만 이름으로 읽힌다. 묶인 곳이 없으므로
-    `NlAccess::CallMethod`가 주소의 부모에 묶어 부른다(`method`, `method_call`).
+  - 생성자의 정적 메서드(`…__province.__warehouse.change`)는 `list`에 나오지 않지만 이름으로 읽힌다. 묶인 곳이 없으면
+    `NlAccess::CallMethod`가 그것을 가진 구조체나 인스턴스(주소의 부모)에 묶어 부른다(`method`, `method_call`). 묶을 곳이 없으면 부르지 않는다.
+    부르기 전에 `about <주소>`로 무엇이 어떻게 불릴지 본다.
   - 한 번 건 훅은 떼지 않는다(`src/Recorder.cpp`. 한 실행에 64개까지). 훅 안에서는 빌트인을 부르지 않는다.
-  - 실행 묶음이 죽으면 `*.kept`가 남는다. `session.ps1 -Action stop`이 되돌린다.
+  - 묻는 파일은 이름을 바꿔 집은 것만 실행한다(`NlCore::TakeRemoteRequest`). 같은 요청을 두 번 실행하지 않는다.
+  - 실행 묶음이 죽으면 `*.kept`와 `NlToyBox.session.txt`(켤 때 없던 설정 파일의 표식)가 남는다. `session.ps1 -Action stop`이 되돌린다.
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
 - **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.

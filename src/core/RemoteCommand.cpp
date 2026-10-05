@@ -3,6 +3,8 @@
 #include "AskPath.hpp"
 #include "Text.hpp"
 
+#include <fstream>
+
 namespace NlCore
 {
 	namespace
@@ -78,6 +80,34 @@ namespace NlCore
 				return false;
 			}
 		}
+	}
+
+	bool TakeRemoteRequest(const std::filesystem::path& Ask, const std::filesystem::path& Taken, std::vector<std::string>& Lines)
+	{
+		std::error_code ec;
+		Lines.clear();
+		std::filesystem::remove(Taken, ec);
+		std::filesystem::rename(Ask, Taken, ec);
+		if (ec)
+			return false;
+
+		bool opened = false;
+		{
+			std::ifstream in(Taken);
+			opened = static_cast<bool>(in);
+			std::string line;
+			while (opened && std::getline(in, line))
+				Lines.push_back(line);
+		}
+		std::filesystem::remove(Taken, ec);
+		return opened;
+	}
+
+	void DropStaleRemoteRequest(const std::filesystem::path& Ask, const std::filesystem::path& Taken)
+	{
+		std::error_code ec;
+		std::filesystem::remove(Ask, ec);
+		std::filesystem::remove(Taken, ec);
 	}
 
 	double OptionNumber(const RemoteCommand& Command, const std::string& Key, double Fallback)

@@ -15,6 +15,7 @@
 //   state,  shot <이름>,  window open|close
 // 인자: n:<수>  s:<글> 또는 s:{공백이 든 글}  b:0|1  u(undefined)  p:<주소>(그 주소의 값)
 
+#include <filesystem>
 #include <map>
 #include <string>
 #include <vector>
@@ -42,4 +43,12 @@ namespace NlCore
 
 	// 옵션의 수. 없거나 수가 아니면 Fallback.
 	double OptionNumber(const RemoteCommand& Command, const std::string& Key, double Fallback);
+
+	// 묻는 파일을 집는다: Ask 를 Taken 으로 이름을 바꾼 뒤(됐을 때만) 줄들을 읽고 Taken 을 지운다.
+	// 이름을 바꾸지 못하면(없다, 다른 프로그램이 잡고 있다) 거짓이고 줄을 주지 않는다. 읽고 나서 지우지 못해 같은 요청을
+	// 두 번 실행하는 일이 없게 한다(요청은 게임의 함수를 부를 수 있다). 남아 있던 Taken 은 실행 도중 끊긴 요청이므로 버린다.
+	bool TakeRemoteRequest(const std::filesystem::path& Ask, const std::filesystem::path& Taken, std::vector<std::string>& Lines);
+
+	// 모듈이 뜰 때 남아 있던 요청을 버린다(죽은 도구가 남긴 호출이 다음 실행에서 불리지 않게).
+	void DropStaleRemoteRequest(const std::filesystem::path& Ask, const std::filesystem::path& Taken);
 }

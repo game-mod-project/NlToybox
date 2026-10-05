@@ -189,13 +189,12 @@ bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string
 	const NlCore::AskPath path = NlCore::ParseAskPath(Target);
 	if (path.Error.empty() && !path.Steps.empty())
 	{
-		RValue value;
 		NlAccess::MethodInfo info;
-		if (!NlAccess::Read(path, value, Why))
+		if (!NlAccess::AboutMethod(path, info, Why))
 			return false;
-		if (!NlAccess::AboutMethod(value, info) || info.Script.empty())
+		if (info.Script.empty())
 		{
-			Why = "not a method: " + Target;
+			Why = "the method has no script name: " + Target;
 			return false;
 		}
 		given = info.Script;
@@ -234,10 +233,14 @@ bool NlRecorder::Watch(const std::string& Target, std::string& Name, std::string
 		reinterpret_cast<PVOID>(k_Detours[free_slot]), reinterpret_cast<PVOID*>(&slot.Original));
 	if (!AurieSuccess(status) || !slot.Original)
 	{
-		slot.Name.clear();
+		// 실패한 자리는 다시 쓰지 않는다: 같은 훅 이름("NlToyBox.rec.N")을 Aurie 에 두 번 주지 않는다(Aurie 가 실패한 이름을
+		// 표에 남기는지는 모른다. 소스가 레포에 없다). 자리는 넉넉하다.
+		slot.Used = true;
+		slot.Recording = false;
+		slot.Name = Name + " (hook failed)";
 		slot.Target = nullptr;
 		slot.Original = nullptr;
-		Why = std::string("MmCreateHook ") + AurieStatusToString(status);
+		Why = AurieSuccess(status) ? "MmCreateHook gave no trampoline" : std::string("MmCreateHook ") + AurieStatusToString(status);
 		return false;
 	}
 	slot.Used = true;

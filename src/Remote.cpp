@@ -23,7 +23,7 @@ using Clock = std::chrono::steady_clock;
 
 namespace
 {
-	std::filesystem::path g_Dir, g_Ask, g_Answer;
+	std::filesystem::path g_Dir, g_Ask, g_Taken, g_Answer;
 	std::string g_Version;
 	std::function<void(const std::string&)> g_Log;
 	Clock::time_point g_Start, g_NextPoll;
@@ -240,14 +240,19 @@ namespace
 		RValue result;
 		std::vector<RValue> args;
 		std::string why;
-		if (!BuildArgs(C.Args, args, why))
+		const AskPath path = NlCore::ParseAskPath(C.Target);
+		NlAccess::MethodInfo info;
+		if (!NlAccess::AboutMethod(path, info, why) || !BuildArgs(C.Args, args, why))
 		{
 			Say("  : " + why);
 			return;
 		}
-		Say("  calling the method with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
-		Log("remote method " + C.Target + " (" + std::to_string(args.size()) + " arguments)");
-		if (NlAccess::CallMethod(NlCore::ParseAskPath(C.Target), args, result, why))
+		// 무엇을 어떤 self 로 부르는지 부르기 전에 남긴다(죽으면 여기까지 남는다).
+		const std::string how = info.How == NlCore::Binding::AsIs ? "self as bound" : info.How == NlCore::Binding::ToOwner ? "self bound to the owner" : "refused";
+		Say("  calling " + (info.Script.empty() ? std::string("the method") : info.Script) + " (" + how + ") with "
+			+ std::to_string(args.size()) + " arguments");
+		Log("remote method " + C.Target + " (" + std::to_string(args.size()) + " arguments, " + how + ")");
+		if (NlAccess::CallMethod(path, args, result, why))
 			SayResult(result);
 		else
 			Say("  : " + why);
@@ -258,7 +263,8 @@ namespace
 	{
 		RValue value;		// 이 함수 안에서만 든다
 		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(C.Target), value, why))
+		const AskPath path = NlCore::ParseAskPath(C.Target);
+		if (!NlAccess::Read(path, value, why))
 		{
 			Say("  : " + why);
 			return;
@@ -266,10 +272,13 @@ namespace
 		const NlAccess::Row row = NlAccess::Describe({}, value);
 		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
 		NlAccess::MethodInfo info;
-		if (NlAccess::AboutMethod(value, info))
+		if (NlAccess::AboutMethod(path, info, why))
 		{
 			Say("  script " + (info.Script.empty() ? std::string("?") : info.Script));
-			Say(std::string("  self ") + (info.Bound ? "bound" : "unbound (method binds it to the owner)"));
+			Say(std::string("  self ") + (info.Bound ? "bound" : "unbound"));
+			Say(std::string("  method would ") + (info.How == NlCore::Binding::AsIs ? "call it as bound"
+				: info.How == NlCore::Binding::ToOwner ? "bind it to the owner (the parent of the path) and call"
+				: "refuse: unbound, and the owner is not a struct or an instance"));
 		}
 	}
 
@@ -347,7 +356,10 @@ void NlRemote::Init(const std::filesystem::path& ModuleDir, const std::string& V
 {
 	g_Dir = ModuleDir;
 	g_Ask = ModuleDir / "NlToyBox.ask.txt";
+	g_Taken = ModuleDir / "NlToyBox.ask.txt.taken";
 	g_Answer = ModuleDir / "NlToyBox.answer.txt";
+	// 앞 실행이 남긴 요청은 실행하지 않는다(죽은 도구가 남긴 호출이 평소 플레이의 첫 틱에 불리지 않게).
+	NlCore::DropStaleRemoteRequest(g_Ask, g_Taken);
 	g_Version = Version;
 	g_Log = std::move(Log_);
 	g_Start = Clock::now();
@@ -366,14 +378,10 @@ void NlRemote::GameTick()
 		return;
 
 	// 도구는 임시 파일에 쓴 뒤 이름을 바꿔 놓는다. 여기서 보이면 다 쓰인 것이다.
+	// 이름을 바꿔 집은 것만 실행한다: 읽고 나서 지우지 못하면 같은 호출이 0.25초마다 되풀이된다.
 	std::vector<std::string> lines;
-	{
-		std::ifstream in(g_Ask);
-		std::string line;
-		while (std::getline(in, line))
-			lines.push_back(line);
-	}
-	std::filesystem::remove(g_Ask, ec);
+	if (!NlCore::TakeRemoteRequest(g_Ask, g_Taken, lines))
+		return;
 
 	std::string id = "-";
 	g_Out.open(g_Answer, std::ios::app);

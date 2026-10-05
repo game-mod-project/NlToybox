@@ -3,7 +3,7 @@
 조사일 2026-10-05. 대상: Norland `0.5588.9777.0`, 모듈 `0.5.0`(커밋 `eca9898`). 게임을 켠 횟수: 1
 (실행 묶음 `stage3-session1`, 15:50~16:12). 메뉴에서 통로와 훅을 확인한 뒤 사용자가 새 게임을 시작했고, 게임 화면에서 값과 함수를 찾았다.
 
-답은 `refs/runtime/stage3-session1.answer.txt`(요청 128개), 로그는 `stage3-session1.log`, 화면은 `refs/ui/gold-*.png`·`wood-*.png`(추적 안 함). 다시 재려면:
+답은 `refs/runtime/stage3-session1.answer.txt`(요청 64개, 명령 192줄), 로그는 `stage3-session1.log`, 화면은 `refs/ui/gold-*.png`·`wood-*.png`(추적 안 함). 다시 재려면:
 
     pwsh -File tools/session.ps1 -Action start
     & tools\ask.ps1 -Lines 'state', 'call gml_Script_budget_money_get'
@@ -76,7 +76,7 @@
 - 이벤트: `global.__pub_sub_controller.__events.__events_by_name`에 이름 764개. `main_budget_change`, `main_resource_change`, `building_warehouse_resource_change`,
   `salary_change`, `time_speed_set`, `time_warp_changed`, `pause_toggle` 등.
 - `o_debug`의 변수 127개(목록은 답 파일). 실행 중 `is_can_build_all_buildings`, `is_instant_build_buildings`, `is_resources_edit_mode`가 참이었다
-  (모듈은 `cheat state: none`으로 시작했다. 모드창에서 켠 것이다). 그 사이 `o_building`이 14 → 17 이 됐다. **스위치의 효과인지는 사용자에게 물어야 안다.**
+  (모듈은 `cheat state: none`으로 시작했다. 사용자가 모드창에서 켰다). 그 사이 `o_building`이 14 → 17 이 됐다. 효과는 아래 "사용자가 플레이에서 본 것".
 
 ## 처음 잰 것
 
@@ -111,7 +111,8 @@
   세 함수 모두 읽은 대로 불러서 맞았다. 형은 기계어로 알 수 없다. 게임의 호출 기록이나 같은 종류 함수의 기록으로 본다.
 - **`method_call(메서드, [인자])`는 인자를 넘긴다.** `method inst:o_time_controller.set_time_speed n:1` 뒤 훅에 `(1) -> undefined`가 남았다.
 - **인자 없는 `method`는 부른 것을 확인하지 못했다.** `method inst:o_time_controller.is_paused` → `-> undefined`(불리언이 나와야 한다).
-  모듈이 인자가 없으면 배열을 넘기지 않는다. 매뉴얼의 꼴은 배열이 필수다.
+  0.5.0 은 인자가 없으면 배열 없이 `method_call(메서드)`로 불렀다. 매뉴얼은 그 꼴을 허용한다("array_args … can be omitted if the method takes no arguments").
+  **왜 `undefined`였는지는 모른다**: 그 메서드에 훅을 걸지 않아 불렸는지조차 보지 못했다. 다음 실행에서 `record <주소>` 뒤 `method`로 훅에 오는지 잰다.
 - **생성자의 정적 메서드는 이름으로 읽힌다.** `…__province.__budget.change`, `.get`, `…__province.__warehouse.change`, `.get`이 `method`로 읽혔다.
   `list`에는 나오지 않는다(구조체 자신의 변수만 늘어놓는다). 오브젝트의 메서드(`o_building.get_warehouse` 등)는 `list`에 나온다.
 - `set_time_speed(1)`은 멈춘 동안(튜토리얼 알림으로 멈춤, `is_hand_pause` 참, `time_warp` 0) `time_speed_index`를 바꾸지 않았다(0 그대로). 뜻은 모른다.
@@ -123,13 +124,27 @@
 ## 실행 뒤에 고친 것 (모듈 0.5.1. 게임에서는 아직 확인하지 않았다)
 
 - `call`과 `record`가 `gml_Script_` 이름으로만 찾는다(`NlCore::ScriptRoutineName`). 접두 없는 이름에는 붙인다.
-- `method`가 `NlAccess::CallMethod`를 거친다: `method_get_self`가 `undefined`인 메서드는 주소의 부모(구조체나 인스턴스)에 `method(부모, 함수)`로 묶어 부르고,
-  인자가 없어도 빈 배열(`array_create(0)`)을 넘긴다. 매뉴얼의 꼴은 `method(struct_ref_or_instance_id, func)`,
-  `method_call(method, [array_args], [offset], [num_args])`, `method_get_self(method)`(없으면 `undefined`)다.
-  **정적 메서드의 `method_get_self`가 정말 `undefined`인지는 재지 않았다.** 부르기 전에 `about <주소>`로 본다(부르지 않는다).
-- 새 명령 `about <주소>`: 값의 형, 메서드이면 묶인 스크립트의 이름과 묶인 곳이 있는지.
-- 훅 자리 24 → 64.
+- `method`가 `NlAccess::CallMethod`를 거친다: `method_get_self`가 `undefined`인 메서드는 그것을 가진 구조체나 인스턴스(주소의 부모)에
+  `method(부모, 함수)`로 묶어 부른다. 묶인 곳도 없고 가진 것이 구조체나 인스턴스가 아니면(전역, 배열의 원소, ds 의 값) 부르지 않는다
+  (`NlCore::ChooseBinding`. 그대로 부르면 self 가 전역이 된다). 인자는 늘 배열로 넘긴다(없으면 `array_create(0)`. 인자가 있는 호출에서 확인된 길 하나로 간다).
+  매뉴얼의 꼴은 `method(struct_ref_or_instance_id, func)`, `method_call(method, [array_args], [offset], [num_args])`, `method_get_self(method)`(없으면 `undefined`)다.
+  **`method_get_self`·`method`·`array_create`는 이 러너에서 아직 부른 적이 없다. 정적 메서드의 `method_get_self`가 정말 `undefined`인지도 재지 않았다.**
+  부르기 전에 `about <주소>`로 본다(부르지 않는다). `method`는 무엇을 어떤 self 로 부르는지 부르기 전에 답에 적는다.
+- 새 명령 `about <주소>`: 값의 형, 메서드이면 묶인 스크립트의 이름, 묶인 곳이 있는지, `method`가 어떻게 부를지.
+- 훅 자리 24 → 64. 훅을 걸다 실패한 자리는 다시 쓰지 않는다.
+- 묻는 파일은 이름을 바꿔 집은 것만 실행한다(`NlCore::TakeRemoteRequest`). 읽고 나서 지우지 못하면 같은 호출이 0.25초마다 되풀이될 수 있었다
+  (이 실행의 요청 64개에서는 없었다). 모듈이 뜰 때 남아 있던 요청은 버린다.
+- `session.ps1`: 켤 때 사용자에게 없던 설정 파일을 실행 묶음이 만들었으면 `stop`이 지운다(`NlToyBox.session.txt`가 "없었다"를 적어 둔다).
+  이 실행에서 사용자가 모드창으로 스위치를 켰고, 사용자에게 치트 상태 파일이 없었다면 그 상태가 다음 플레이에 남았을 것이다.
 - `tools/re/script_calls.py`: exe 에서 스크립트 함수의 주소와 직접 호출 수.
+
+## 사용자가 플레이에서 본 것 (2026-10-05, 이 실행의 모드창)
+
+| 스위치 | 본 것 |
+|---|---|
+| `inst:o_debug.is_instant_build_buildings` | **즉시 건설이 된다.** |
+| `inst:o_debug.is_can_build_all_buildings` | 건설 목록은 풀린다. 조건에 걸리는 건물은 여전히 지을 수 없다. 어느 조건인지는 재지 않았다 |
+| `inst:o_debug.is_resources_edit_mode` | 자원의 목록이 나오지 않아 아무것도 할 수 없었다. 쓸 수 없다 |
 
 ## 확인하지 못한 것
 
