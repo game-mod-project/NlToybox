@@ -300,7 +300,7 @@ namespace NlCore
 			}
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
-				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove)");
+				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove)");
 			command.Target = tokens[1];
 			if (!options(3))
 				return command;
@@ -308,7 +308,8 @@ namespace NlCore
 			person.Who = tokens[1];
 			double index = -1;
 			const auto given = command.Options.find("index");
-			if (given != command.Options.end() && (!ParseNumber(given->second, index) || index != std::floor(index)))
+			// 정수로 바꾸기 전에 범위를 본다(inf 나 1e300 을 int 로 바꾸는 것은 정의되지 않은 동작이다).
+			if (given != command.Options.end() && (!ParseNumber(given->second, index) || !std::isfinite(index) || index != std::floor(index) || index < 0 || index >= 1000))
 				return fail("person index= needs a whole number");
 			person.Index = static_cast<int>(index);
 			const auto amount = command.Options.find("amount");
@@ -326,6 +327,10 @@ namespace NlCore
 			}
 			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
 				return fail(std::string("person ") + tokens[2] + " needs name=<trait name>");
+			if (NeedsText(person.Act) && IsProtectedTrait(person.Text))
+				return fail(std::string("person ") + tokens[2] + " does not take that trait (species and death states are protected)");
+			if (IsBulkWho(person.Who) && !(person.Act == PersonAct::SkillsMax || person.Act == PersonAct::NeedsFill || person.Act == PersonAct::Happy || person.Act == PersonAct::Cure))
+				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure (name one person for the rest)");
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");

@@ -65,13 +65,23 @@ namespace
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
 
-	// 표의 항목(플레이어의 사람을 조금씩 돌며 쓴다)
+	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
+	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
+
+	struct Busy
+	{
+		Busy() { g_Busy = true; }
+		~Busy() { g_Busy = false; }
+	};
+
+	// 표의 항목(플레이어의 사람을 조금씩 돌며 쓴다). 바퀴의 판단은 core/PeoplePlan 의 HoldRound 가 한다.
 	std::vector<PersonRow> g_HoldPeople;
-	size_t g_HoldCursor = 0;
-	double g_NextHold = 0, g_NextHoldScan = 0, g_NextHappy = 0;
+	NlCore::HoldRound g_Hold;
+	double g_NextHold = 0, g_NextHoldScan = 0, g_NextHappy = 0, g_NextHoldLog = 0;
 	bool g_HappyRound = false;			// 이번 바퀴에서 행복 생각을 본다
-	bool g_AgeTouched = false;			// "노화로 죽을 수 있다"를 끈 사람이 있다(되돌릴 것이 있다)
-	size_t g_RoundNeeds = 0, g_RoundHappy = 0, g_RoundAge = 0, g_RoundPeople = 0;
+	bool g_HoldNoted = false;			// 항목 옆에 글을 적어 두었다(할 일이 없어지면 한 번 비운다)
+	size_t g_RoundPeople = 0;
+	size_t g_LogNeeds = 0, g_LogHappy = 0, g_LogAge = 0;		// 마지막 로그 줄 뒤로 쓴 수
 
 	void Log(const std::string& Line)
 	{
@@ -156,6 +166,7 @@ namespace
 			g_Now.People.clear();
 			g_Now.One = Detail();
 			g_Names.clear();
+			g_AliveLogged = false;
 			return false;
 		}
 
@@ -175,9 +186,24 @@ namespace
 					continue;
 				FollowString(soul, { { '.', "__faction", 0 }, { '.', "__system_name", 0 } }, row.Faction);
 				FollowNumber(soul, { { '.', "__social_strata", 0 } }, row.Strata);
+				// c_status.__is_dead 는 게임의 캐시다. 특성이 바뀌면 -4 로 비워진다(research/11). 비어 있으면 게임에 묻는다:
+				// SoulBasic.is_alive() -> 불리언(게임이 인자 없이 부르는 것을 기록했다).
 				double dead = 0;
-				if (NlAccess::ReadNumber(Base(row) + ".c_status.__is_dead", dead))
-					row.Dead = dead != 0;
+				const bool read = NlAccess::ReadNumber(Base(row) + ".c_status.__is_dead", dead);
+				NlCore::Alive alive = NlCore::AliveFromDeadCache(read, dead);
+				if (alive == NlCore::Alive::Unknown)
+				{
+					if (!g_AliveLogged)
+					{
+						g_AliveLogged = true;
+						Log("people call is_alive() where the death cache is empty (first: " + Base(row) + " " + row.Uuid + ")");		// 부르기 전에 남긴다
+					}
+					RValue answer;
+					std::string why;
+					if (CallNoArgs(Base(row) + ".__soul.is_alive", answer, why) && NlGame::IsNumber(answer))
+						alive = answer.ToDouble() != 0 ? NlCore::Alive::Yes : NlCore::Alive::No;
+				}
+				row.Dead = alive != NlCore::Alive::Yes;		// 알 수 없는 사람은 건드리지 않는다
 
 				auto known = g_Names.find(row.Uuid);
 				if (known == g_Names.end())
@@ -330,7 +356,8 @@ namespace
 	}
 
 	// 한 사람에게 명령 하나를 한다. 안 됐으면 거짓이고 Note 에 까닭. 됐을 때의 Note 는 덧붙일 말(없어도 된다).
-	bool One(const PersonCommand& C, const PersonRow& Row, std::string& Note)
+	// Bulk: 여럿을 도는 길이다(일괄 명령, 표의 항목). 읽지 못한 사람은 건너뛴다.
+	bool One(const PersonCommand& C, const PersonRow& Row, std::string& Note, bool Bulk = false)
 	{
 		RValue soul_value;
 		if (!StillThere(Row, soul_value))
@@ -401,9 +428,10 @@ namespace
 		case PersonAct::Happy:
 		{
 			double sum = 0;
-			if (CallNumber(soul + ".__minds.get_total_modify", sum) && sum >= 100)
+			const bool read = CallNumber(soul + ".__minds.get_total_modify", sum);
+			if (!NlCore::ShouldAttachHappy(read, sum, Bulk))
 			{
-				Note = "이미 생각의 합이 100 을 넘습니다";
+				Note = read ? "이미 생각의 합이 100 을 넘습니다" : "생각의 합을 읽지 못했습니다";
 				return true;
 			}
 			RValue mind;
@@ -490,17 +518,20 @@ namespace
 		if (NlCore::NeedsText(C.Act) && !KnownTrait(C.Text))
 			return "게임에 없는 특성입니다: " + C.Text;
 
-		const std::vector<size_t> targets = NlCore::PickTargets(g_Now.People, C.Who);
+		// 대상의 사본을 먼저 뜬다. 아래에서 부르는 게임의 함수가 사람들의 목록을 바꿔도(드나듦, 다시 읽기) 낡은 자리로 목록을 다시 찾지 않는다.
+		std::vector<PersonRow> targets;
+		for (const size_t at : NlCore::PickTargets(g_Now.People, C.Who))
+			targets.push_back(g_Now.People[at]);
 		if (targets.empty())
 			return "대상이 없습니다";
 
+		const bool bulk = NlCore::IsBulkWho(C.Who);
 		size_t done = 0;
 		std::string first_failure, note;
-		for (const size_t at : targets)
+		for (const PersonRow& row : targets)
 		{
-			const PersonRow row = g_Now.People[at];		// 사본(게임의 함수가 사람을 늘리거나 줄여도 흔들리지 않게)
 			std::string one;
-			if (One(C, row, one))
+			if (One(C, row, one, bulk))
 			{
 				done++;
 				if (targets.size() == 1)
@@ -533,35 +564,52 @@ namespace
 
 	void HoldNotes(const std::string& Note)
 	{
+		g_HoldNoted = true;
 		for (const char* id : k_HoldIds)
 			NlCheats::SetNote(id, NlCheats::IsOn(id) ? Note : std::string());
 	}
 
+	void ClearHoldNotes()
+	{
+		if (!g_HoldNoted)
+			return;
+		g_HoldNoted = false;
+		for (const char* id : k_HoldIds)
+			NlCheats::SetNote(id, std::string());
+	}
+
 	void HoldTick(double Now)
 	{
+		// 이 함수는 오브젝트 이벤트마다 불린다. 시각부터 본다: 아래의 것들(항목 읽기, 게임 화면인지)은 0.25초에 한 번만 한다.
+		if (Now < g_NextHold)
+			return;
+		g_NextHold = Now + 0.25;
+
 		const bool hunger = NlCheats::IsOn("no_hunger"), tired = NlCheats::IsOn("no_tiredness"), all = NlCheats::IsOn("needs_full");
 		const bool happy = NlCheats::IsOn("always_happy"), ageless = NlCheats::IsOn("no_old_age_death");
 		const std::vector<int> needs = NlCore::NeedsToHold(hunger, tired, all);
-		if (needs.empty() && !happy && !ageless && !g_AgeTouched)
+		if (needs.empty() && !happy && !ageless && !g_Hold.AgeWritten)
 		{
-			g_HoldCursor = 0;
+			g_Hold.Cursor = 0;
+			ClearHoldNotes();		// 끈 항목 옆에 "적용 중"이 남지 않게
 			return;
 		}
 		if (!NlAccess::InGame())
 		{
 			HoldNotes("게임을 시작하면 적용");
-			g_AgeTouched = false;		// 새로 불러온 게임의 깃발은 처음 값이다(세이브에 남지 않는다)
-			g_HoldCursor = 0;
+			g_Hold = NlCore::HoldRound();		// 새로 불러온 게임의 깃발은 처음 값이다(세이브에 남지 않는다)
+			g_HoldPeople.clear();
 			return;
 		}
-		if (Now < g_NextHold)
-			return;
-		g_NextHold = Now + 0.25;
 
-		if (g_HoldCursor == 0)
+		const NlCore::HoldPlan plan = NlCore::HoldBegin(g_Hold, !needs.empty(), happy, ageless);
+		if (!plan.Work)
+			return;
+
+		if (g_Hold.Cursor == 0)
 		{
-			// 바퀴의 처음: 사람들을 다시 읽는다(5초에 한 번까지).
-			if (Now >= g_NextHoldScan || g_HoldPeople.empty())
+			// 바퀴의 처음: 사람들을 다시 읽는다(5초에 한 번까지. 되돌리는 바퀴를 시작할 때는 바로).
+			if (plan.Rescan || Now >= g_NextHoldScan || g_HoldPeople.empty())
 			{
 				g_NextHoldScan = Now + 5;
 				if (!Scan())
@@ -574,17 +622,18 @@ namespace
 			g_HappyRound = happy && Now >= g_NextHappy;
 			if (g_HappyRound)
 				g_NextHappy = Now + 60;
-			g_RoundNeeds = g_RoundHappy = g_RoundAge = g_RoundPeople = 0;
+			g_RoundPeople = 0;
 		}
 
-		const NlCore::PeopleSlice slice = NlCore::NextPeopleSlice(g_HoldPeople.size(), g_HoldCursor, 40);
-		for (size_t i = slice.Begin; i < slice.End; i++)
+		const NlCore::PeopleSlice slice = NlCore::NextPeopleSlice(g_HoldPeople.size(), g_Hold.Cursor, 40);
+		for (size_t i = slice.Begin; i < slice.End && i < g_HoldPeople.size(); i++)
 		{
-			const PersonRow& row = g_HoldPeople[i];
+			const PersonRow row = g_HoldPeople[i];		// 사본(아래의 Scan 이나 게임의 함수가 목록을 바꿔도 흔들리지 않게)
 			RValue soul;
 			if (!StillThere(row, soul))
 			{
 				g_NextHoldScan = 0;		// 사람이 드나들었다. 다음 바퀴에서 다시 읽는다
+				NlCore::HoldTouched(g_Hold, false, true);
 				continue;
 			}
 			g_RoundPeople++;
@@ -604,44 +653,54 @@ namespace
 							continue;
 						if (have_limits)
 							FollowNumber(limits, { step }, limit);
-						// 거의 찬 칸은 건드리지 않는다(게임은 한 번에 0.3 쯤씩 줄인다).
-						if (NlCore::NeedValue(limit, limit, wanted) && current < wanted - 0.5 && NlAccess::SetNumber(values, step, wanted, why))
-							g_RoundNeeds++;
+						if (NlCore::ShouldFillNeed(current, limit) && NlCore::NeedValue(NlCore::k_FillAll, limit, wanted) && NlAccess::SetNumber(values, step, wanted, why))
+							g_LogNeeds++;
 					}
 				}
 			}
 
-			if (ageless || g_AgeTouched)
+			bool age_off = false;
+			if (plan.WriteAge)
 			{
 				// __soul.__aging.__old.__debug_is_can_die_of_old_age: 인물마다 true 다. 켜면 false 로, 끄면 다시 true 로 쓴다.
 				RValue old;
 				const PathStep flag{ '.', "__debug_is_can_die_of_old_age", 0 };
 				double current = 0;
-				const double wanted = ageless ? 0 : 1;
-				if (NlAccess::Follow(soul, { { '.', "__aging", 0 }, { '.', "__old", 0 } }, old, why) && old.IsStruct()
-					&& FollowNumber(old, { flag }, current) && current != wanted && NlAccess::SetNumber(old, flag, wanted, why))
-					g_RoundAge++;
+				if (NlAccess::Follow(soul, { { '.', "__aging", 0 }, { '.', "__old", 0 } }, old, why) && old.IsStruct() && FollowNumber(old, { flag }, current))
+				{
+					if (current != plan.AgeValue && NlAccess::SetNumber(old, flag, plan.AgeValue, why))
+					{
+						g_LogAge++;
+						current = plan.AgeValue;
+					}
+					age_off = current == 0;		// 꺼진 깃발이 있다(되돌릴 것이 있다)
+				}
 			}
+			NlCore::HoldTouched(g_Hold, age_off, false);
 
-			if (g_HappyRound)
+			if (g_HappyRound && happy)		// 도중에 끄면 남은 사람에게는 붙이지 않는다
 			{
 				PersonCommand command;
 				command.Act = PersonAct::Happy;
 				command.Who = row.Uuid;
 				std::string note;
-				if (One(command, row, note) && note.empty())
-					g_RoundHappy++;
+				if (One(command, row, note, true) && note.empty())
+					g_LogHappy++;
 			}
 		}
-		g_HoldCursor = slice.Next;
+		NlCore::HoldEnd(g_Hold, slice, ageless);
 
 		if (slice.Wrapped)
 		{
-			if (g_RoundNeeds || g_RoundHappy || g_RoundAge)
-				Log("people hold: " + std::to_string(g_RoundPeople) + " people, " + std::to_string(g_RoundNeeds) + " need(s) filled, "
-					+ std::to_string(g_RoundHappy) + " happy mind(s), " + std::to_string(g_RoundAge) + " old-age flag(s) " + (ageless ? "off" : "back on"));
-			g_AgeTouched = ageless;		// 끈 뒤의 한 바퀴가 되돌렸다
 			HoldNotes(std::to_string(g_RoundPeople) + "명에게 적용 중");
+			// 로그는 쓴 것이 있을 때, 60초에 한 줄까지만 남긴다(욕구는 틱마다 조금씩 줄어 바퀴마다 쓸 것이 생긴다).
+			if ((g_LogNeeds || g_LogHappy || g_LogAge) && Now >= g_NextHoldLog)
+			{
+				g_NextHoldLog = Now + 60;
+				Log("people hold: " + std::to_string(g_RoundPeople) + " people; since the last line " + std::to_string(g_LogNeeds) + " need(s) filled, "
+					+ std::to_string(g_LogHappy) + " happy mind(s), " + std::to_string(g_LogAge) + " old-age flag(s) written");
+				g_LogNeeds = g_LogHappy = g_LogAge = 0;
+			}
 		}
 	}
 
@@ -678,10 +737,18 @@ namespace
 		return true;
 	}
 
+	// 흐린 글. 창의 너비에서 줄을 바꾼다(긴 안내 글이 창 밖으로 잘리지 않게).
+	void Hint(const std::string& Text)
+	{
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextDisabled("%s", Text.c_str());
+		ImGui::PopTextWrapPos();
+	}
+
 	void DrawLast()
 	{
 		if (!g_Now.Last.empty())
-			ImGui::TextDisabled("%s", g_Now.Last.c_str());
+			Hint(g_Now.Last);
 	}
 
 	void DrawDetail(const PersonRow& Row)
@@ -703,11 +770,13 @@ namespace
 		}
 		ImGui::Text("나이 %s", NumberText(one.Age, 0).c_str());
 		ImGui::SameLine();
+		ImGui::BeginDisabled(one.Age == k_Unknown || g_AgeInputFor != who);		// 나이를 읽지 못한 사람에게 앞 사람의 수로 부르지 않는다
 		ImGui::SetNextItemWidth(90);
 		ImGui::InputInt("##age", &g_AgeInput);
 		ImGui::SameLine();
 		if (ImGui::Button("이 나이로"))
 			Push(PersonAct::AgeSet, who, -1, g_AgeInput);
+		ImGui::EndDisabled();
 		ImGui::Text("기분 %s   생각의 합 %s   통증 %s", NumberText(one.Moral, 0).c_str(), NumberText(one.MindSum, 0).c_str(), NumberText(one.Pain, 1).c_str());
 		if (ImGui::Button("행복하게"))
 			Push(PersonAct::Happy, who);
@@ -720,7 +789,7 @@ namespace
 		ImGui::SameLine();
 		if (ImGui::Button("능력치 모두 20"))
 			Push(PersonAct::SkillsMax, who);
-		ImGui::TextDisabled("기분은 게임이 생각의 합으로 다시 셈합니다. '행복하게'는 게임의 디버그용 생각(+100, 하루)을 붙입니다.");
+		Hint("기분은 게임이 생각의 합으로 다시 셈합니다. '행복하게'는 게임의 디버그용 생각(+100, 하루)을 붙입니다. 능력치는 0~20, 나이는 1~120 입니다.");
 
 		ImGui::SeparatorText("능력치");
 		if (ImGui::BeginTable("skills", 3, ImGuiTableFlags_SizingFixedFit))
@@ -768,7 +837,7 @@ namespace
 				ImGui::TableNextColumn();
 				ImGui::PushID(100 + static_cast<int>(i));
 				if (ImGui::SmallButton("채우기"))
-					Push(PersonAct::NeedSet, who, static_cast<int>(i), limit);
+					Push(PersonAct::NeedSet, who, static_cast<int>(i), NlCore::k_FillAll);		// 상한까지(읽은 상한을 보내지 않는다)
 				ImGui::SameLine();
 				if (ImGui::SmallButton("0 으로"))
 					Push(PersonAct::NeedSet, who, static_cast<int>(i), 0);
@@ -781,8 +850,10 @@ namespace
 		for (size_t i = 0; i < one.Traits.size(); i++)
 		{
 			ImGui::PushID(200 + static_cast<int>(i));
+			ImGui::BeginDisabled(NlCore::IsProtectedTrait(one.Traits[i]));		// 종과 죽음의 특성은 떼지 않는다
 			if (ImGui::SmallButton("떼기"))
 				Push(PersonAct::TraitRemove, who, -1, 0, one.Traits[i]);
+			ImGui::EndDisabled();
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::TextUnformatted(one.Traits[i].c_str());
@@ -794,7 +865,7 @@ namespace
 			int shown = 0;
 			for (const std::string& name : g_Now.TraitNames)
 			{
-				if (name.find(g_TraitFilter) == std::string::npos || Has(one.Traits, name))
+				if (name.find(g_TraitFilter) == std::string::npos || Has(one.Traits, name) || NlCore::IsProtectedTrait(name))
 					continue;
 				if (shown++ >= 12)
 				{
@@ -811,7 +882,7 @@ namespace
 			if (!shown)
 				ImGui::TextDisabled("그런 이름의 특성이 없습니다(게임의 영문 이름입니다. 예: brave, gifted).");
 		}
-		ImGui::TextDisabled("특성은 게임의 이름 그대로입니다. 상태(human, kid, dead 같은 것)를 떼면 게임이 어떻게 받는지는 재지 않았습니다.");
+		Hint("특성은 게임의 이름 그대로입니다. 종과 죽음의 특성(human, dead 같은 것)은 붙이거나 뗄 수 없습니다.");
 	}
 
 	size_t CountPlayers(bool Characters)
@@ -832,6 +903,9 @@ void NlPeople::Init(LogFn Log_)
 void NlPeople::GameTick(double Now, bool Active)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)		// 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어왔다
+		return;
+	const Busy busy;
 
 	HoldTick(Now);
 
@@ -911,7 +985,7 @@ void NlPeople::DrawLords()
 	ImGui::SameLine();
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "lords");
-	ImGui::TextDisabled("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
+	Hint("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
 	DrawLast();
 }
 
@@ -929,13 +1003,16 @@ void NlPeople::DrawPeople()
 	ImGui::SameLine();
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "people");
-	ImGui::TextDisabled("계속 유지하려면 위의 항목을 켭니다. 인구는 '날마다 추가 이주민'에 수를 넣으면 다음 이주 때(저녁) 그만큼 더 옵니다.");
+	Hint("계속 유지하려면 위의 항목을 켭니다. 인구는 '날마다 추가 이주민'에 수를 넣으면 다음 이주 때(저녁) 그만큼 더 옵니다.");
 	DrawLast();
 }
 
 std::vector<std::string> NlPeople::Do(const NlCore::PersonCommand& Command)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
 	g_Now.Last = Execute(Command);
 	return { g_Now.Last };
 }
@@ -943,6 +1020,9 @@ std::vector<std::string> NlPeople::Do(const NlCore::PersonCommand& Command)
 std::vector<std::string> NlPeople::List(bool All)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
 	if (!Scan())
 		return { g_Now.Why };
 	std::vector<std::string> lines;
@@ -957,6 +1037,9 @@ std::vector<std::string> NlPeople::List(bool All)
 std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
 	if (!Scan())
 		return { g_Now.Why };
 	const PersonRow* row = FindRow(Uuid);

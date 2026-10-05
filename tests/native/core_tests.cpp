@@ -19,6 +19,7 @@
 #include "core/Schedule.hpp"
 #include "core/Text.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdio>
 #include <filesystem>
@@ -683,7 +684,11 @@ int main(int argc, char** argv)
 		CHECK(Cheats().size() == 48);
 		// 4단계: 인구·욕구(research/11). 플레이어의 사람을 돌며 쓰는 항목은 모듈의 코드가 한다(src/People.cpp).
 		for (const char* id : { "no_hunger", "no_tiredness", "needs_full", "always_happy", "no_old_age_death" })
-			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People && !FindCheat(id)->Verified);
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People);
+		// 플레이에서 봤다(research/11): 욕구가 100 으로 유지되고(손님은 그대로), 기분이 35 → 98 이 됐다. 노화 깃발은 써지는 것까지만 봤다.
+		for (const char* id : { "no_hunger", "no_tiredness", "needs_full", "always_happy" })
+			CHECK(FindCheat(id)->Verified);
+		CHECK(!FindCheat("no_old_age_death")->Verified);
 		// 이주민 보너스는 플레이에서 봤다: 3 을 쓰자 그날 저녁 3명이 왔다.
 		CHECK(FindCheat("daily_migrants") && FindCheat("daily_migrants")->Kind == CheatKind::Number && FindCheat("daily_migrants")->Verified
 			&& FindCheat("daily_migrants")->Min == 0 && FindCheat("daily_migrants")->Max == 50);
@@ -1157,6 +1162,154 @@ int main(int argc, char** argv)
 			CHECK(GoodTraitName(wound));
 	});
 
+	Test("인물: 죽음은 게임의 캐시에서 읽고, 비어 있으면 모른다고 답한다", [] {
+		// c_status.__is_dead 는 true/false 이거나, 아직 셈하지 않았으면 -4 다. 특성을 바꾸면 게임이 캐시를 비운다(research/11).
+		// -4 를 "죽었다"로 읽으면 특성을 붙인 바로 뒤의 명령이 그 사람을 놓친다(확인 실행에서 그랬다).
+		CHECK(AliveFromDeadCache(true, 0) == Alive::Yes);
+		CHECK(AliveFromDeadCache(true, 1) == Alive::No);
+		CHECK(AliveFromDeadCache(true, -4) == Alive::Unknown);
+		CHECK(AliveFromDeadCache(false, 0) == Alive::Unknown);		// 읽지 못했다
+		CHECK(AliveFromDeadCache(true, std::numeric_limits<double>::quiet_NaN()) == Alive::Unknown);
+	});
+
+	Test("인물: 종과 죽음의 특성은 붙이지도 떼지도 않는다", [] {
+		for (const char* name : { "human", "wolf", "pig", "dog", "dead", "delayed_dead", "dead_from_old_age", "dead_from_poison", "dying_from_old", "lost_head" })
+			CHECK(IsProtectedTrait(name));
+		for (const char* name : { "brave", "kid", "bruise_light", "pneumonia_st_1", "inspired", "" })
+			CHECK(!IsProtectedTrait(name));
+
+		std::string why;
+		PersonCommand c;
+		c.Who = "25556c3312bce178";
+		c.Act = PersonAct::TraitAdd;
+		c.Text = "dead";
+		CHECK(!CheckPersonCommand(c, why) && !why.empty());
+		c.Act = PersonAct::TraitRemove;
+		c.Text = "human";
+		CHECK(!CheckPersonCommand(c, why));
+		c.Text = "brave";
+		CHECK(CheckPersonCommand(c, why));
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 trait_add name=lost_head").Error.empty());
+	});
+
+	Test("인물: 여럿에게 한꺼번에 하는 것은 네 가지뿐이다", [] {
+		CHECK(IsBulkWho("lords") && IsBulkWho("people") && !IsBulkWho("25556c3312bce178") && !IsBulkWho(""));
+		std::string why;
+		PersonCommand c;
+		c.Who = "people";
+		for (const PersonAct act : { PersonAct::SkillsMax, PersonAct::NeedsFill, PersonAct::Happy, PersonAct::Cure })
+		{
+			c.Act = act;
+			CHECK(CheckPersonCommand(c, why));
+		}
+		// 나이·특성·능력치 하나·욕구 하나는 한 사람을 짚어서만 한다(한 줄의 실수가 모든 사람을 세이브에 남게 바꾸지 않게).
+		c.Act = PersonAct::AgeSet;
+		c.Amount = 1;
+		CHECK(!CheckPersonCommand(c, why) && !why.empty());
+		c.Act = PersonAct::TraitAdd;
+		c.Text = "brave";
+		CHECK(!CheckPersonCommand(c, why));
+		c.Act = PersonAct::SkillSet;
+		c.Index = 0;
+		c.Amount = 20;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Act = PersonAct::NeedSet;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Who = "lords";
+		c.Act = PersonAct::TraitRemove;
+		CHECK(!CheckPersonCommand(c, why));
+		CHECK(!ParseRemoteLine("person people age_set amount=1").Error.empty());
+		CHECK(!ParseRemoteLine("person lords trait_add name=brave").Error.empty());
+		CHECK(ParseRemoteLine("person lords cure").Error.empty());
+	});
+
+	Test("인물: 채우기는 상한까지, 번호는 유한한 정수만", [] {
+		double out = -1;
+		CHECK(NeedValue(k_FillAll, 100, out) && out == 100);		// 창의 "채우기"는 읽은 상한이 아니라 이 수를 보낸다(상한을 읽지 못했어도 0 을 쓰지 않는다)
+		CHECK(NeedValue(k_FillAll, 60, out) && out == 60);
+		CHECK(ShouldFillNeed(99.4, 100) && !ShouldFillNeed(99.6, 100) && !ShouldFillNeed(100, 100));	// 거의 찬 칸은 건드리지 않는다
+		CHECK(!ShouldFillNeed(50, 0) && !ShouldFillNeed(std::numeric_limits<double>::quiet_NaN(), 100));
+
+		// 행복 생각: 한 사람을 짚었으면 합을 읽지 못해도 붙인다. 여럿을 돌 때는 읽지 못한 사람을 건너뛴다(되풀이해 쌓이지 않게).
+		CHECK(ShouldAttachHappy(true, 40, false) && ShouldAttachHappy(true, 40, true));
+		CHECK(!ShouldAttachHappy(true, 100, false) && !ShouldAttachHappy(true, 136.5, true));
+		CHECK(ShouldAttachHappy(false, 0, false) && !ShouldAttachHappy(false, 0, true));
+
+		CHECK(!ParseRemoteLine("person lords skill_set index=inf amount=1").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 skill_set index=1e300 amount=1").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 happy index=inf").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 skill_set index=1.5 amount=1").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 age_set amount=nan").Error.empty());
+		CHECK(ParseRemoteLine("person 25556c3312bce178 skill_add index=7 amount=-1").Error.empty());
+	});
+
+	Test("인구: 노화 깃발을 끈 뒤에는 처음부터 온전한 한 바퀴로 되돌린다", [] {
+		const auto run = [](HoldRound& round, size_t count, bool ageless, bool skip = false) {
+			// 한 틱: 계획을 받고, 묶음의 사람마다 깃발을 쓰고, 묶음을 닫는다. 돌려주는 것: 이번 틱에 깃발을 쓴 사람의 자리.
+			std::vector<size_t> touched;
+			const HoldPlan plan = HoldBegin(round, false, false, ageless);
+			if (!plan.Work)
+				return touched;
+			const PeopleSlice slice = NextPeopleSlice(count, round.Cursor, 40);
+			for (size_t i = slice.Begin; i < slice.End; i++)
+			{
+				const bool skipped = skip && i == slice.Begin;
+				if (plan.WriteAge && !skipped)
+					touched.push_back(i);
+				HoldTouched(round, plan.WriteAge && !skipped && plan.AgeValue == 0, skipped);
+			}
+			HoldEnd(round, slice, ageless);
+			return touched;
+		};
+
+		// (가) 바퀴 도중에 끈다: 100명, 40명씩. 80명까지 끈 뒤 항목을 끄면 처음부터 다시 돌아 100명을 모두 되돌린다.
+		HoldRound round;
+		std::vector<bool> off(100, false);
+		for (int tick = 0; tick < 2; tick++)
+			for (const size_t i : run(round, 100, true))
+				off[i] = true;
+		CHECK(round.AgeWritten && round.Cursor == 80);
+		for (int tick = 0; tick < 3; tick++)
+			for (const size_t i : run(round, 100, false))
+				off[i] = false;
+		CHECK(std::find(off.begin(), off.end(), true) == off.end());		// 남은 깃발이 없다
+		CHECK(!round.AgeWritten);
+		CHECK(run(round, 100, false).empty());								// 되돌릴 것이 없으면 돌지 않는다
+
+		// (나) 켠 뒤 첫 바퀴가 감기기 전에 끈다: 첫 묶음만 쓴 채 꺼도 되돌린다.
+		round = HoldRound();
+		CHECK(run(round, 100, true).size() == 40 && round.AgeWritten);
+		size_t restored = 0;
+		for (int tick = 0; tick < 3; tick++)
+			restored += run(round, 100, false).size();
+		CHECK(restored == 100 && !round.AgeWritten);
+
+		// (다) 되돌리는 바퀴에서 건너뛴 사람이 있으면(자리가 바뀌었다) 한 바퀴를 더 돈다.
+		round = HoldRound();
+		run(round, 30, true);
+		CHECK(round.AgeWritten);
+		run(round, 30, false, true);										// 한 사람을 건너뛰었다
+		CHECK(round.AgeWritten);											// 아직 되돌릴 것이 있다고 본다
+		const HoldPlan again = HoldBegin(round, false, false, false);
+		CHECK(again.Work && again.Rescan && again.WriteAge && again.AgeValue == 1);
+		round.Cursor = 0;
+		run(round, 30, false);												// 이번에는 깨끗이 돈다
+		CHECK(!round.AgeWritten);
+
+		// 다시 켜면 되돌리던 것을 그만두고 끈다.
+		round = HoldRound();
+		run(round, 100, true);
+		run(round, 100, false);
+		const HoldPlan on = HoldBegin(round, false, false, true);
+		CHECK(on.WriteAge && on.AgeValue == 0 && !round.Restoring);
+
+		// 할 일이 없으면 일하지 않는다. 욕구나 행복만 켜져 있으면 깃발은 건드리지 않는다.
+		round = HoldRound();
+		CHECK(!HoldBegin(round, false, false, false).Work);
+		const HoldPlan needs = HoldBegin(round, true, false, false);
+		CHECK(needs.Work && !needs.WriteAge);
+	});
+
 	Test("인구: 켠 항목이 채워 둘 욕구의 번호", [] {
 		CHECK(NeedsToHold(false, false, false).empty());
 		CHECK(NeedsToHold(true, false, false) == std::vector<int>{ 1 });				// 음식
@@ -1203,11 +1356,11 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("person").Error.empty());
 		CHECK(!ParseRemoteLine("person lords").Error.empty());										// 무엇을 할지 없다
 		CHECK(!ParseRemoteLine("person lords explode").Error.empty());
-		CHECK(!ParseRemoteLine("person lords skill_set amount=12").Error.empty());					// 번호가 없다
-		CHECK(!ParseRemoteLine("person lords skill_set index=9 amount=12").Error.empty());			// 능력치는 여덟이다
-		CHECK(!ParseRemoteLine("person lords skill_set index=1").Error.empty());					// 수가 없다
-		CHECK(!ParseRemoteLine("person lords trait_add").Error.empty());
-		CHECK(!ParseRemoteLine("person lords trait_add name=Bad!").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 skill_set amount=12").Error.empty());			// 번호가 없다
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 skill_set index=9 amount=12").Error.empty());	// 능력치는 여덟이다
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 skill_set index=1").Error.empty());			// 수가 없다
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 trait_add").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 trait_add name=Bad!").Error.empty());
 		CHECK(!ParseRemoteLine("person show").Error.empty());
 		CHECK(!ParseRemoteLine("person bad/who happy").Error.empty());								// 누구: 글자·숫자·밑줄만
 	});

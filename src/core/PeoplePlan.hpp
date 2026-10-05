@@ -22,6 +22,7 @@ namespace NlCore
 	constexpr double k_SkillMax = 20;		// Skills.get_max_level 이 돌려준 수
 	constexpr double k_NeedMax = 100;		// __motive_limit 의 수(읽지 못했을 때 쓴다)
 	constexpr double k_AgeMin = 1, k_AgeMax = 120;
+	constexpr double k_FillAll = 1e9;		// "상한까지 채운다"로 보내는 수(NeedValue 가 상한으로 당긴다). 읽은 상한을 보내지 않는다: 읽지 못했으면 0 이 쓰인다
 
 	enum class PersonAct { SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove };
 
@@ -41,8 +42,12 @@ namespace NlCore
 	bool NeedsIndex(PersonAct Act);
 	bool NeedsAmount(PersonAct Act);
 	bool NeedsText(PersonAct Act);
-	// 명령이 온전한가: 누구인지 있고, 번호가 범위 안이고, 수가 유한하고, 글이 특성 이름의 꼴이다. 아니면 거짓이고 Why 에 까닭.
+	// 명령이 온전한가: 누구인지 있고, 번호가 범위 안이고, 수가 유한하고, 글이 특성 이름의 꼴이고 붙이거나 떼도 되는 특성이다.
+	// 여럿("lords", "people")에게는 SkillsMax·NeedsFill·Happy·Cure 만 된다. 아니면 거짓이고 Why 에 까닭.
 	bool CheckPersonCommand(const PersonCommand& Command, std::string& Why);
+
+	// 여럿을 가리키는 글인가("lords", "people").
+	bool IsBulkWho(const std::string& Who);
 
 	// 누구를 가리키는 글의 꼴: 글자·숫자·밑줄만(uuid, lords, people). 주소에 그대로 들어가지 않지만 로그와 답에 적힌다.
 	bool GoodWho(const std::string& Who);
@@ -58,6 +63,11 @@ namespace NlCore
 		bool Dead = false;		// c_status.__is_dead
 	};
 
+	// 죽음은 c_status.__is_dead 에서 읽는다. 그것은 게임의 캐시다: true/false 이거나, 아직 셈하지 않았으면 -4(특성이 바뀌면 게임이 비운다).
+	// Unknown 이면 부르는 쪽이 게임의 is_alive() 로 묻는다. -4 를 죽음으로 읽으면 특성을 붙인 바로 뒤의 명령이 그 사람을 놓친다.
+	enum class Alive { Yes, No, Unknown };
+	Alive AliveFromDeadCache(bool Read, double Raw);
+
 	// 플레이어의 산 사람인가.
 	bool IsPlayers(const PersonRow& Row);
 	// 명령의 대상들(People 안의 자리). "lords": 플레이어의 o_character, "people": 플레이어의 사람 모두(일괄 명령은 손님과 다른 진영에 가지 않는다).
@@ -72,9 +82,17 @@ namespace NlCore
 
 	// 특성 이름의 꼴: 소문자·숫자·밑줄만, 1~64자. 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 	bool GoodTraitName(const std::string& Name);
+	// 붙이지도 떼지도 않는 특성: 종(human, wolf, pig, dog)과 죽음의 상태(dead, lost_head …). 게임이 어떻게 받는지 재지 않았다.
+	bool IsProtectedTrait(const std::string& Name);
 	// "치료"가 떼는 부상의 특성 이름들(inst:o_data.game_trait_list 에 있는 이름). 병과 출혈은 게임의 함수(cure_all_disease, cure_bleeding)가 한다.
 	// 사라지면 안 되는 상태(human, kid, dead, lost_head …)와 영구한 흉터는 넣지 않는다.
 	const std::vector<const char*>& WoundTraits();
+
+	// 이 칸을 채울까: 상한에서 0.5 넘게 모자랄 때만(게임은 한 번에 0.3 쯤씩 줄인다. 거의 찬 칸을 틱마다 쓰지 않는다).
+	bool ShouldFillNeed(double Current, double Limit);
+	// 행복 생각을 붙일까: 생각의 합이 100 아래일 때. 합을 읽지 못했으면, 한 사람을 짚은 명령은 붙이고 여럿을 도는 길(Bulk)은 건너뛴다
+	// (읽지 못하는 사람에게 60초마다 되풀이해 쌓이지 않게).
+	bool ShouldAttachHappy(bool Read, double MindSum, bool Bulk);
 
 	// 켠 항목에 따라 채워 둘 욕구의 번호들(작은 번호부터). 배고픔 없음 → 음식(1), 피로 없음 → 수면(0)·휴식(2), 모두 → 0~5.
 	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All);
@@ -87,4 +105,26 @@ namespace NlCore
 	};
 	// 사람이 많으면 한 틱에 다 쓰지 않는다: Count 명 가운데 Cursor 부터 Batch 명. 끝에 닿으면 다음은 처음부터다.
 	PeopleSlice NextPeopleSlice(size_t Count, size_t Cursor, size_t Batch);
+
+	// 표의 인구 항목이 사람들을 도는 바퀴의 상태(src/People.cpp 의 HoldTick). 러너와 무관한 판단만 든다.
+	struct HoldRound
+	{
+		size_t Cursor = 0;			// 다음 틱이 시작할 자리
+		bool AgeWritten = false;	// "노화로 죽을 수 있다"를 끈 사람이 있다(되돌릴 것이 있다). 첫 깃발을 쓴 때부터 참이다
+		bool Restoring = false;		// 지금 도는 바퀴가 되돌리는 바퀴다(항목이 꺼진 채 처음부터 끝까지 돌아야 한다)
+		bool RestoreClean = true;	// 되돌리는 바퀴에서 건너뛴 사람이 없다
+	};
+	struct HoldPlan
+	{
+		bool Work = false;			// 이번 틱에 사람들을 돈다
+		bool Rescan = false;		// 사람들을 다시 읽고 돈다(되돌리는 바퀴를 새로 시작한다)
+		bool WriteAge = false;		// 깃발을 쓴다
+		double AgeValue = 1;		// 쓸 값: 0 은 "죽지 않는다", 1 은 원래대로
+	};
+	// 틱의 처음: 켜진 것을 보고 할 일을 정한다. 노화 항목이 꺼졌는데 되돌릴 것이 남아 있으면 처음부터 한 바퀴를 새로 돈다.
+	HoldPlan HoldBegin(HoldRound& Round, bool AnyNeeds, bool Happy, bool Ageless);
+	// 한 사람을 다룬 뒤: 깃발을 껐는가(WroteAgeOff), 그 사람을 건너뛰었는가(자리의 사람이 바뀌었다).
+	void HoldTouched(HoldRound& Round, bool WroteAgeOff, bool Skipped);
+	// 묶음을 다룬 뒤. 되돌리는 바퀴가 건너뛴 사람 없이 끝났을 때만 되돌릴 것이 없어진다. 아니면 다음 틱이 다시 한 바퀴를 시작한다.
+	void HoldEnd(HoldRound& Round, const PeopleSlice& Slice, bool Ageless);
 }

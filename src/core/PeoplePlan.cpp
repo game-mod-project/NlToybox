@@ -87,11 +87,20 @@ namespace NlCore
 		return std::all_of(Who.begin(), Who.end(), [](unsigned char c) { return std::isalnum(c) || c == '_'; });
 	}
 
+	bool IsBulkWho(const std::string& Who)
+	{
+		return Who == "lords" || Who == "people";
+	}
+
 	bool CheckPersonCommand(const PersonCommand& Command, std::string& Why)
 	{
 		Why.clear();
+		const bool bulk_act = Command.Act == PersonAct::SkillsMax || Command.Act == PersonAct::NeedsFill || Command.Act == PersonAct::Happy
+			|| Command.Act == PersonAct::Cure;
 		if (!GoodWho(Command.Who))
 			Why = "누구인지 없습니다";
+		else if (IsBulkWho(Command.Who) && !bulk_act)
+			Why = "한 사람을 짚어서만 할 수 있습니다";
 		else if (NeedsIndex(Command.Act))
 		{
 			const size_t count = Command.Act == PersonAct::NeedSet ? NeedNames().size() : SkillNames().size();
@@ -102,7 +111,16 @@ namespace NlCore
 			Why = "수가 아닙니다";
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
 			Why = "특성 이름이 아닙니다";
+		if (Why.empty() && NeedsText(Command.Act) && IsProtectedTrait(Command.Text))
+			Why = "붙이거나 뗄 수 없는 특성입니다";
 		return Why.empty();
+	}
+
+	Alive AliveFromDeadCache(bool Read, double Raw)
+	{
+		if (!Read)
+			return Alive::Unknown;
+		return Raw == 0 ? Alive::Yes : Raw == 1 ? Alive::No : Alive::Unknown;		// NaN 과 -4 는 어느 쪽도 아니다
 	}
 
 	bool IsPlayers(const PersonRow& Row)
@@ -154,6 +172,15 @@ namespace NlCore
 		return std::all_of(Name.begin(), Name.end(), [](unsigned char c) { return std::islower(c) || std::isdigit(c) || c == '_'; });
 	}
 
+	bool IsProtectedTrait(const std::string& Name)
+	{
+		// 이름은 game_trait_list 에 있는 것이다(research/11).
+		for (const char* one : { "human", "wolf", "pig", "dog", "dead", "delayed_dead", "dead_from_old_age", "dead_from_poison", "dying_from_old", "lost_head" })
+			if (Name == one)
+				return true;
+		return false;
+	}
+
 	const std::vector<const char*>& WoundTraits()
 	{
 		// 이름은 실행 중인 게임의 inst:o_data.game_trait_list 에서 읽었다(research/11). 타박상(bruise_light)을 붙였다 떼는 것을 쟀다.
@@ -164,6 +191,17 @@ namespace NlCore
 			"burn_light", "burn_middle", "burn_heavy", "inflamed_wound", "blood_poisoning",
 		};
 		return names;
+	}
+
+	bool ShouldFillNeed(double Current, double Limit)
+	{
+		double wanted = 0;
+		return std::isfinite(Current) && NeedValue(Limit, Limit, wanted) && Current < wanted - 0.5;
+	}
+
+	bool ShouldAttachHappy(bool Read, double MindSum, bool Bulk)
+	{
+		return Read ? MindSum < 100 : !Bulk;
 	}
 
 	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All)
@@ -185,5 +223,44 @@ namespace NlCore
 		slice.Wrapped = slice.End >= Count;
 		slice.Next = slice.Wrapped ? 0 : slice.End;
 		return slice;
+	}
+
+	HoldPlan HoldBegin(HoldRound& Round, bool AnyNeeds, bool Happy, bool Ageless)
+	{
+		HoldPlan plan;
+		if (Ageless)
+			Round.Restoring = false;		// 다시 켰다. 되돌리던 것을 그만둔다
+		else if (Round.AgeWritten && !Round.Restoring)
+		{
+			// 꺼졌는데 끈 깃발이 남아 있다. 바퀴의 어디에 있었든 처음부터 온전한 한 바퀴로 되돌린다.
+			Round.Restoring = true;
+			Round.RestoreClean = true;
+			Round.Cursor = 0;
+			plan.Rescan = true;
+		}
+		plan.Work = AnyNeeds || Happy || Ageless || Round.AgeWritten;
+		plan.WriteAge = Ageless || Round.AgeWritten;
+		plan.AgeValue = Ageless ? 0 : 1;
+		if (!plan.Work)
+			Round.Cursor = 0;
+		return plan;
+	}
+
+	void HoldTouched(HoldRound& Round, bool WroteAgeOff, bool Skipped)
+	{
+		if (WroteAgeOff)
+			Round.AgeWritten = true;		// 바퀴가 감기기를 기다리지 않는다(첫 묶음만 쓰고 꺼도 되돌린다)
+		if (Skipped && Round.Restoring)
+			Round.RestoreClean = false;
+	}
+
+	void HoldEnd(HoldRound& Round, const PeopleSlice& Slice, bool Ageless)
+	{
+		Round.Cursor = Slice.Next;
+		if (!Slice.Wrapped || Ageless || !Round.Restoring)
+			return;
+		if (Round.RestoreClean)
+			Round.AgeWritten = false;		// 모두 되돌렸다
+		Round.Restoring = false;			// 깨끗하지 않았으면 다음 틱의 HoldBegin 이 다시 한 바퀴를 시작한다
 	}
 }

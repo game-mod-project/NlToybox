@@ -153,19 +153,22 @@ namespace NlCore
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
 
 			// 인구·욕구(research/11). 욕구는 __soul.__motive.__motive[6](0 수면, 1 음식, 2 휴식, 3 신앙심, 4 성관계, 5 돌봄)에 있다.
-			// 모듈(src/People.cpp)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다. 한 사람의 한 칸에 100 을 쓰고 게임이 그 값을 주는 것까지 봤다.
-			// 켜 둔 채 사람들이 먹지 않고 자지 않는지는 보지 못했다.
-			{ "no_hunger", Area::People, "배고픔 없음", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, false,
+			// 모듈(src/People.cpp)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다.
+			// 플레이에서 봤다(2026-10-06, 0.10.0): 켜자 플레이어의 사람 29명의 칸이 100 으로 유지됐고 손님은 그대로였다. "배고픔 없음"은 음식 칸만,
+			// "피로 없음"은 수면·휴식 칸만 채웠다. 끄자 그때부터 평소대로 줄었다. 켜 둔 채 식량이 줄지 않는지는 하루를 돌려 보지 못했다.
+			{ "no_hunger", Area::People, "배고픔 없음", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두의 음식 욕구를 가득 채워 둔다. 끄면 그때부터 평소대로 줄어든다" },
-			{ "no_tiredness", Area::People, "피로 없음 (수면·휴식)", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, false,
+			{ "no_tiredness", Area::People, "피로 없음 (수면·휴식)", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두의 수면과 휴식 욕구를 가득 채워 둔다" },
-			{ "needs_full", Area::People, "모든 욕구 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, false,
+			{ "needs_full", Area::People, "모든 욕구 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두의 욕구 여섯(수면, 음식, 휴식, 신앙심, 성관계, 돌봄)을 가득 채워 둔다" },
 			// 기분은 게임이 생각(minds)의 합으로 10분쯤마다 다시 셈한다. 바로 쓴 값은 남지 않는다. 게임의 디버그용 생각(mind_debug_totally_happy:
-			// 기분 +100, 하루)을 붙이자 기분이 43 → 100 이 됐다(한 사람). 모듈이 플레이어의 사람마다 생각의 합이 100 아래면 붙인다.
-			{ "always_happy", Area::People, "언제나 행복", "inst:o_data.mind_debug_totally_happy", C, 1, 0, 0, 0, false,
+			// 기분 +100, 하루)을 모듈이 플레이어의 사람마다 생각의 합이 100 아래면 붙인다(60초에 한 바퀴).
+			// 플레이에서 봤다: 켜고 20분(게임 시간)쯤 뒤 기분이 35 → 98, 70 → 98 이 됐다. 게임의 인물 창에는 그 생각이 "mind.debug_totally_happy"로 보인다(번역이 없다).
+			{ "always_happy", Area::People, "언제나 행복", "inst:o_data.mind_debug_totally_happy", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두에게 게임의 디버그용 생각(기분 +100, 하루)을 붙여 둔다. 끄면 붙어 있던 것은 하루 뒤에 사라진다" },
-			// 인물마다 __soul.__aging.__old.__debug_is_can_die_of_old_age(true)가 있다. 이름에서 읽은 뜻이고 효과는 재지 않았다. 세이브에는 남지 않는다(열쇠 0건).
+			// 인물마다 __soul.__aging.__old.__debug_is_can_die_of_old_age(true)가 있다. 켜면 false 로, 끄면 다시 true 로 써지는 것까지 봤다(손님은 그대로).
+			// 이름에서 읽은 뜻이고, 늙어도 죽지 않는지는 보지 못했다. 세이브에는 남지 않는다(열쇠 0건).
 			{ "no_old_age_death", Area::People, "노화로 죽지 않음", "inst:o_character.__soul.__aging.__old.__debug_is_can_die_of_old_age", C, 1, 0, 0, 0, false,
 				"플레이어의 사람 모두의 '노화로 죽을 수 있다'를 끈다. 끄면 다시 켠다" },
 			// 이주 관리자의 다음 이주 보너스. 3 을 쓰자 그날 저녁 "3명의 이주자가 도착했습니다"가 뜨고 주민이 31 → 34 가 됐다(2026-10-06, 0.9.1).
