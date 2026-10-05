@@ -500,8 +500,8 @@ namespace
 		}
 		else if (C.Verb == "time")
 		{
-			NlCheats::AskTime(C.Target == "pause");
-			Say("  time " + C.Target + " asked (the next tick calls the game)");
+			Say("  running time " + C.Target);		// 죽으면 여기까지 남는다
+			Say("  " + NlCheats::TimeNow(C.Target == "pause"));
 		}
 		else if (C.Verb == "cheat")
 		{

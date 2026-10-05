@@ -13,6 +13,7 @@
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
 #include "core/Presets.hpp"
+#include "core/TimeAsk.hpp"
 #include "core/WorldPlan.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
@@ -1487,6 +1488,30 @@ int main(int argc, char** argv)
 				found = found || std::string(other.Id) == item.Id;
 			CHECK(found);
 		}
+
+		// 표의 지금 상태가 어느 묶음과 같은가(검토의 지적: 프리셋은 저장되어 다음 실행에서도 켜진 채 시작한다. 패널이 지금의 상태를 보인다)
+		CHECK(MatchPreset({}) == FindPreset("normal"));
+		std::vector<CheatOn> on;
+		for (const PresetItem& item : FindPreset("sandbox")->Items)
+			on.push_back({ item.Id, item.Number });
+		CHECK(MatchPreset(on) == FindPreset("sandbox"));
+		on.push_back({ "no_hunger", 0 });
+		CHECK(MatchPreset(on) == nullptr);								// 하나 더 켜져 있다
+		on.pop_back();
+		on.pop_back();
+		CHECK(MatchPreset(on) == nullptr);								// 하나가 꺼져 있다
+		on.clear();
+		for (const PresetItem& item : FindPreset("easy")->Items)
+			on.push_back({ item.Id, std::string(item.Id) == "production_time" ? 0.25 : item.Number });
+		CHECK(MatchPreset(on) == nullptr);								// 배율이 다르다
+		CHECK(MatchPreset({ { "ally_invincible", 0 } }) == nullptr);		// 묶음에 없는 항목만 켜져 있다
+
+		// 시간의 멈춤·다시 흐르게가 돌려주는 글: 게임 화면이 아니면 부르지 않고, 부른 뒤의 상태를 단정하지 않는다
+		CHECK(TimeReport(true, TimeCall::NotInGame, "") == "게임 화면에서만 됩니다" && TimeReport(false, TimeCall::NotInGame, "") == "게임 화면에서만 됩니다");
+		CHECK(TimeReport(true, TimeCall::Failed, "no member") == "멈춤을 부르지 못했습니다: no member");
+		CHECK(TimeReport(false, TimeCall::Failed, "x") == "다시 흐르게를 부르지 못했습니다: x");
+		CHECK(TimeReport(true, TimeCall::Called, "").find("멈춤을 불렀습니다") == 0 && TimeReport(true, TimeCall::Called, "").find("멈췄습니다") == std::string::npos);
+		CHECK(TimeReport(false, TimeCall::Called, "").find("다시 흐르게를 불렀습니다") == 0 && TimeReport(false, TimeCall::Called, "").find("x1") != std::string::npos);
 
 		RemoteCommand c = ParseRemoteLine("preset god");
 		CHECK(c.Error.empty() && c.Verb == "preset" && c.Target == "god");
