@@ -118,10 +118,12 @@ Present 훅 (게임 스레드)                 EVENT_OBJECT_CALL 콜백 (게임 
 | `src/core/CheatTable` | 치트 표(§6): 항목의 이름·영역·주소·종류 | `AskPath` |
 | `src/core/CheatState` | 치트 상태 파일(`NlToyBox.cheats.txt`)을 읽고 쓴다 | 없음 |
 | `src/core/Rate` | 흐름의 빠르기를 잰다(게임 시간이 실제 1초에 얼마나 느는가) | 없음 |
+| `src/core/SpeedTrial` | 게임 속도의 손잡이를 시험으로 고르는 상태 기계(§9). 값을 읽고 쓰는 일은 바깥이 한다 | `Rate` |
 | `src/Access` | 주소를 따라가 읽고, 쓰고, 자식을 늘어놓는다. 값을 글로 적는다 | 러너, `AskPath` |
-| `src/Explorer` | 탐색기(§7): 훑기, 고치기, 잠금, 즐겨찾기, 찾기 | `Access` |
-| `src/Cheats` | 치트 표의 항목을 적용하고(켜기, 수, 잠금, 속도) 영역의 패널을 그린다 | `Access`, `CheatTable`, `CheatState`, `Rate` |
-| `src/Menu` | 왼쪽 목록과 오른쪽 패널, 상태 줄(메뉴인가 게임 화면인가) | `Explorer`, `Cheats`, `Tweaks` |
+| `src/Search` | 이름·값으로 찾기, 다시 거르기 | `Access` |
+| `src/Explorer` | 탐색기(§7): 훑기, 고치기, 즐겨찾기와 잠금, 찾기 | `Access`, `Search` |
+| `src/Cheats` | 치트 표의 항목을 적용하고(켜기, 수, 속도) 영역의 패널을 그린다 | `Access`, `CheatTable`, `Rate`, `SpeedTrial` |
+| `src/Menu` | 왼쪽 목록과 오른쪽 패널, 상태 줄, 상태 파일 | `Explorer`, `Cheats`, `Tweaks`, `CheatState` |
 
 `src/core`의 것은 `tests/native`에서 시험한다. 기존 `Tweaks`(배율 7개)는 2단계에서는 "배율" 항목으로 그대로 두고 3단계에서 영역으로 옮긴다.
 
@@ -161,11 +163,11 @@ inst:o_production_manager.ppm_map_of_process@key   수(ds 번호)인 변수 뒤�
 ```cpp
 struct Cheat {
     const char* Id;        // 상태 파일의 이름
-    Category Area;         // 왼쪽 목록의 어느 영역인가
+    Area Where;            // 왼쪽 목록의 어느 영역인가
     const char* Label;     // 창에 보이는 이름
     const char* Path;      // §5 의 주소
     CheatKind Kind;        // Toggle | Number
-    double On, Off;        // Toggle 이 쓰는 값
+    double On, Off;        // Toggle: 켤 때와 끌 때 써 넣는 값. Off 는 덤프에서 본 원래 값이다
     double Min, Max;       // Number 의 범위
     bool Verified;         // 플레이에서 효과를 봤는가
     const char* Help;      // 변수 이름에서 읽은 뜻. Verified 가 아니면 추정이다
@@ -180,7 +182,8 @@ struct Cheat {
 ### 6.2 적용
 
 - 켠 Toggle 과 값을 정한 Number 는 0.5초마다 대상에 써 넣는다(새 게임이나 불러오기로 `o_debug`가 다시 만들어져도 따라간다).
-  처음 본 값을 바탕으로 기억하고, 끄면 바탕을 한 번 써 넣은 뒤 손을 뗀다.
+  끄면 원래 값을 한 번 써 넣은 뒤 손을 뗀다: Toggle 은 표의 `Off`, Number 는 처음 본 값이다.
+  (Toggle 이 처음 본 값을 쓰지 않는 까닭: 켠 채로 저장된 값을 처음 보면 "원래 값"이 켠 값이 된다.)
 - 대상이 없으면(메뉴에서는 `o_debug`가 없다) "게임을 시작하면 적용"이라고 보인다.
 - 잠금은 0.1초마다 쓴다. 대상이 없으면 "대상 없음"으로 남는다.
 
@@ -264,14 +267,16 @@ lock inst:o_character:0.starving_hours=0
 
 메뉴에서는 시간이 멈춰 있어 미리 잴 수 없다(§2.3). 그래서 판정을 기능 안에 넣는다.
 
-1. 모듈은 0.1초마다 `__game_time`을 읽어 최근 1.5초의 흐름(실제 1초에 얼마나 느는가)을 안다.
-2. 사용자가 배율 M 을 누르면 후보를 차례로 시험한다: `time_warp_new` → `time_warp` → `__debug_custom_wrap` → `time_speed_variants[time_speed_index]`.
-   후보 하나마다: 원래 값을 적어 두고, 1.5초 동안 M 을 계속 써 넣고, 흐름이 누르기 전의 (M ÷ 그때의 `time_warp`)배에서 ±25% 안이면 채택한다.
-   아니면 원래 값을 되돌리고 다음 후보로 간다.
-3. 채택한 후보로 그 뒤의 배율을 건다. 써 넣기를 멈춘 뒤에도 흐름이 남는지 0.5초 본다. 남으면 "한 번 쓰기", 안 남으면 "계속 쓰기"로 건다.
+1. 모듈은 0.1초마다 `__game_time`을 읽어 최근 1초의 흐름(실제 1초에 얼마나 느는가)을 안다.
+2. 사용자가 처음 배율을 누르면 후보를 차례로 시험한다: `time_warp_new` → `time_warp` → `__debug_custom_wrap` → `time_speed_variants[time_speed_index]`.
+   **시험에 쓰는 값은 누른 배율이 아니라 지금 `time_warp`의 2배다.** 누른 배율이 지금 속도와 같으면 "달라지지 않았다"와 "먹었다"를 가릴 수 없다.
+   후보 하나마다: 원래 값을 적어 두고, 2초 동안 시험 값을 계속 써 넣고(프레임마다 한 번쯤), 흐름이 누르기 전의 2배에서 ±25% 안이면 채택한다.
+   아니면 원래 값을 되돌리고 다음 후보로 간다. 읽을 수 없는 후보는 쓰지 않고 넘어간다.
+3. 채택한 뒤 써 넣기를 멈추고 1.5초 뒤에도 흐름이 남는지 본다. 남으면 "한 번 쓰기", 안 남으면 "계속 쓰기"다. 그 방식으로 누른 배율을 건다.
 4. 넷 다 아니면 창에 그렇게 알리고 시도마다의 값을 로그에 적는다. 그 기록으로 다음 손잡이를 정한다.
 
-- 흐름이 0 일 때(일시정지, 메뉴)는 시험하지 않고 "일시정지를 풀고 누르세요"라고 알린다.
+- 흐름이 0 일 때(일시정지, 메뉴)는 시험하지 않고 "일시정지를 풀고 누르세요"라고 알린다. 시험 중에 흐름이 0 이 되면 그만두고 원래 값을 되돌린다.
+- "게임에 맡김"은 채택한 후보를 시험 전의 값으로 되돌린다.
 - "계속 쓰기"가 게임의 일시정지를 막는지는 모른다. 첫 플레이의 기록을 보고 고친다.
 - 창에는 지금의 흐름(기준의 몇 배인가)과 채택한 후보의 이름을 보인다.
 
