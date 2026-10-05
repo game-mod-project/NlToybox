@@ -12,6 +12,7 @@
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
+#include "core/WorldPlan.hpp"
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
@@ -681,7 +682,10 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 51);
+		CHECK(Cheats().size() == 52);
+		// 외교(research/14): 세력의 적대 판정 Faction.is_enemy_with(세력) -> 불리언을 false 로. 모든 세력에 걸린다. 효과는 보지 못했다.
+		CHECK(FindCheat("no_enemies") && FindCheat("no_enemies")->Kind == CheatKind::Hook && FindCheat("no_enemies")->Where == Area::Diplomacy
+			&& FindCheat("no_enemies")->On == 0 && !FindCheat("no_enemies")->Verified);
 		// 아군 무적(research/13): 상처를 입히는 함수를 플레이어의 사람에게만 건너뛴다. 모듈의 코드가 건다(Custom). 가려지는 것은 아직 보지 못했다.
 		CHECK(FindCheat("ally_invincible") && FindCheat("ally_invincible")->Kind == CheatKind::Custom && FindCheat("ally_invincible")->Where == Area::Army
 			&& !FindCheat("ally_invincible")->Verified);
@@ -746,7 +750,8 @@ int main(int argc, char** argv)
 			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time
 				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People
 				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/People.cpp)
-				|| area.Id == Area::Army;									// 군대: 병사를 만드는 단추
+				|| area.Id == Area::Army									// 군대: 병사를 만드는 단추
+				|| area.Id == Area::Events || area.Id == Area::Religion;	// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
@@ -1444,6 +1449,41 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=500 amount=50").Error.empty());
 		CHECK(!ParseRemoteLine("person lords money_add amount=5").Error.empty());
 		CHECK(!ParseRemoteLine("person 25556c3312bce178 money_add amount=0").Error.empty());
+	});
+
+	Test("월드: 한 번 하는 일과 원격 명령", [] {
+		WorldAct act = WorldAct::CooldownsClear;
+		CHECK(ParseWorldAct("bishop", act) && act == WorldAct::BishopSend);
+		CHECK(ParseWorldAct("cooldowns_clear", act) && act == WorldAct::CooldownsClear);
+		CHECK(!ParseWorldAct("ambush", act) && !ParseWorldAct("", act));		// 궁수 매복은 불러서 게임이 끝났다(research/14). 넣지 않는다
+		CHECK(std::string(WorldActWord(WorldAct::BishopSend)) == "bishop" && std::string(WorldActWord(WorldAct::CooldownsClear)) == "cooldowns_clear");
+
+		// 이벤트 쿨다운 한 칸: 0 보다 큰 수에만 0 을 쓴다
+		CHECK(ShouldClearCooldown(true, 19) && ShouldClearCooldown(true, 0.5));
+		CHECK(!ShouldClearCooldown(true, 0) && !ShouldClearCooldown(true, -4) && !ShouldClearCooldown(false, 19));
+		CHECK(!ShouldClearCooldown(true, std::numeric_limits<double>::quiet_NaN()));
+
+		// 주교: 있는지 읽지 못했거나 이미 있으면 부르지 않는다
+		CHECK(ChooseBishopStep(true, false) == BishopStep::Call);
+		CHECK(ChooseBishopStep(true, true) == BishopStep::AlreadyHere);
+		CHECK(ChooseBishopStep(false, false) == BishopStep::Unknown && ChooseBishopStep(false, true) == BishopStep::Unknown);
+
+		// 쿨다운 지우기의 보고: 쓴 것, 쓰지 못한 것, 열지 못한 것을 그대로 적는다(검토의 지적)
+		const ClearResult none;									// 열지 못했다
+		const ClearResult two{ true, 2, 0 }, one{ true, 1, 0 }, empty{ true, 0, 0 }, part{ true, 1, 2 };
+		CHECK(CooldownReport(two, one) == "이벤트 쿨다운 2개와 묶음 쿨다운 1개를 0 으로 썼습니다");
+		CHECK(CooldownReport(empty, empty) == "지울 쿨다운이 없습니다 (0 보다 큰 칸이 없습니다)");
+		CHECK(CooldownReport(part, one) == "이벤트 쿨다운 1개와 묶음 쿨다운 1개를 0 으로 썼습니다. 쓰지 못한 칸: 이벤트 2, 묶음 0");
+		CHECK(CooldownReport(two, none) == "이벤트 쿨다운 2개를 0 으로 썼습니다. 묶음 쿨다운은 읽지 못했습니다");		// 앞의 쓰기를 숨기지 않는다
+		CHECK(CooldownReport(none, one) == "묶음 쿨다운 1개를 0 으로 썼습니다. 이벤트 쿨다운은 읽지 못했습니다");
+		CHECK(CooldownReport(none, none) == "이벤트 쿨다운을 읽지 못했습니다");
+		CHECK(CooldownTouched(two, none) && CooldownTouched(none, part) && CooldownTouched(ClearResult{ true, 0, 3 }, empty));
+		CHECK(!CooldownTouched(empty, empty) && !CooldownTouched(none, none));
+
+		RemoteCommand c = ParseRemoteLine("world bishop");
+		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
+		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());
+		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
 	});
 
 	Test("훅: 누구의 호출에 걸지와 self 의 묶음", [] {

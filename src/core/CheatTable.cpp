@@ -19,10 +19,10 @@ namespace NlCore
 			{ Area::Items, "items", "아이템", 5, true },
 			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/People.cpp)
 			{ Area::Diplomacy, "diplomacy", "외교", 6 },
-			{ Area::Religion, "religion", "종교", 6 },
+			{ Area::Religion, "religion", "종교", 6, true },		// 주교 부르기(src/World.cpp)
 			{ Area::Time, "time", "시간", 2, true },
 			{ Area::World, "world", "월드", 6 },
-			{ Area::Events, "events", "이벤트", 6 },
+			{ Area::Events, "events", "이벤트", 6, true },			// 이벤트 쿨다운 지우기(src/World.cpp)
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7 },
 		};
@@ -220,6 +220,10 @@ namespace NlCore
 			{ "hire_price_factor", Area::Army, "병사 고용가 계수", "inst:o_debug.soldier_hiring_price_skill_factor", N, 0, 0, 0, 20, false,
 				"battle_params.json 의 soldier_hiring_price_skill_factor 가 옮겨진 값이다(원래 5). 전투 기술에 따른 고용가로 보인다" },
 
+			// 세력의 적대 판정(research/14): Faction.is_enemy_with(세력) -> 불리언. 게임이 구조체 하나로 네 시간에 270번 불렀고 true 와 false 를 모두 봤다.
+			// 생성자의 정적 메서드라 플레이어의 세력에서 스크립트를 찾는다. 건 훅은 모든 세력의 호출에 걸린다. 효과(전쟁, 습격, 지도의 표시)는 보지 못했다.
+			{ "no_enemies", Area::Diplomacy, "세력끼리 적대하지 않음 (모든 세력)", "inst:o_game_map_controller.__factions_manager.__player_faction.is_enemy_with",
+				H, 0, 1, 0, 0, false, "어느 세력도 다른 세력을 적으로 보지 않는다고 답하게 한다(플레이어만이 아니라 모든 세력끼리). 효과는 확인 전" },
 			{ "no_rebellions", Area::Diplomacy, "반란이 일어나지 않음", "inst:o_debug.is_rebellions_can_started", T, 0, 1, 0, 0, false,
 				"반란이 시작될 수 있는지를 정하는 값으로 보인다(원래 켜져 있다)" },
 

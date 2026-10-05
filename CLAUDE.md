@@ -126,6 +126,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `__production.__map_of_production`(ds_map: 만드는 자원 → 재료의 배열과 만들어지는 수)이다(`research/10`).
   - **세이브 파일(`%LOCALAPPDATA%\Strategy\saves\*.norland`)은 머리(버전, 이름) 뒤가 평문 JSON 이다.** 고쳐 쓰는 자료가 세이브에 남는지는 그 열쇠가 파일에 있는지로 본다(읽기만 한다).
     기본 가격·창고 종류의 용량·조리법·생산 비용·건설비의 열쇠는 없었다(시장 깊이와 포화도는 있다).
+    **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다**(`__events_cooldowns` → `"events_cooldowns"`). 밑줄을 떼고 찾는다(`research/14`. 위의 "없었다"는 두 이름 모두로 다시 봤다).
   - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
@@ -153,6 +154,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **들머리의 인자 맞춤(`0x14018A9B0`, N)은 "생략해도 된다"가 아니다.** 모자란 인자를 `undefined`로 채울 뿐이고, 그 값을 수로 쓰는 함수는 GML 오류로 게임을 끝낸다
     (`ArmyLoyaltyManager.get_summary_army_loyalty()`를 인자 없이 불러 "I32 argument is undefined"로 죽었다. `research/13`). 인자 맞춤이 있는 함수는 인자가 N 개인 함수로 보고,
     게임이 부르는 꼴을 `record`로 본 뒤에만 부른다(`rebellion_debug_spawn_player_soldier`는 인자 없이 되는 것을 불러서 본 예외다).
+  - **인자가 없는 디버그 함수도 게임을 끝낼 수 있다.** `AmbushManager.debug_start_ambush_archers()`는 본문이 `argc`를 옮기지 않는데도 안에서 빈 값을 써서
+    "REAL argument incorrect type undefined"로 죽었다(`research/14`). 게임이 스스로 부르지 않는 함수를 처음 부를 때는 **실행의 맨 마지막에, 그 뒤에 할 일을 남기지 않고** 하나만 부르고,
+    사용자에게 오류 창이 뜰 수 있다고 먼저 알린다. 불러서 된 것: `debug_force_send_bishop()`, 디버그 소환기의 `__spawn_*()`, `rebellion_debug_spawn_player_soldier()`.
 - 군대(`research/13`). 병사는 `o_dummy`이고 갈래(`__soul.__social_strata`)가 2 다. 병영의 목록은 `…__soldiers_barracks_manager.get_array_of_soldiers()`.
   - 병사 추가: `gml_Script_rebellion_debug_spawn_player_soldier()`(인자 없음). 지도 가장자리에 생겨 걸어온다. 한 틱에 20번까지 불러 봤다(`NlCore::SoldierBatch`).
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
@@ -165,6 +169,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"와 표본의 `[self in, other out, …]`으로 본다.
     싸움이 없을 때는 그 함수를 `method`로 직접 불러 잰다: `take_damage`는 `s:<상처의 이름> p:<영혼의 주소> b:0`으로 플레이어의 병사와 다른 진영의 사람에게 한 번씩(앞은 건너뛰어지고 뒤는 멍이 생겼다).
   - 소지품에 넣은 장비는 바로 착용되지만 남지 않는다(게임이 `give_possible_equipment(구조체)`로 되돌린다). 장비는 그 길로 주지 않는다.
+- 종교·이벤트 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0),
+  주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world cooldowns_clear|bishop`이 같은 길을 탄다.
+  세력의 자료는 `gm.__factions_manager`(`__array_of_factions[57]`, `__player_faction`)에 있고, 게임은 `Faction.get_relation_with(세력) -> 수`, `is_enemy_with(세력) -> 불리언`을 부른다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.

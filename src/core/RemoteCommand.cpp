@@ -4,6 +4,7 @@
 #include "CheatTable.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
+#include "WorldPlan.hpp"
 #include "Text.hpp"
 
 #include <cmath>
@@ -355,6 +356,14 @@ namespace NlCore
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");
+		}
+		else if (verb == "world")
+		{
+			// world <cooldowns_clear|bishop>      한 번 하는 일: 이벤트 쿨다운 지우기, 주교 부르기(core/WorldPlan)
+			WorldAct act = WorldAct::CooldownsClear;
+			if (count != 2 || !ParseWorldAct(tokens[1], act))
+				return fail("world needs cooldowns_clear or bishop");
+			command.Target = tokens[1];
 		}
 		else if (verb == "cheat")
 		{
