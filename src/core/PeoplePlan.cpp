@@ -18,6 +18,8 @@ namespace NlCore
 			{ PersonAct::SkillSet, "skill_set" }, { PersonAct::SkillAdd, "skill_add" }, { PersonAct::SkillsMax, "skills_max" },
 			{ PersonAct::NeedSet, "need_set" }, { PersonAct::NeedsFill, "needs_fill" }, { PersonAct::AgeSet, "age_set" },
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
+			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
+			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" },
 		};
 
 		bool Clamp(double Value, double Low, double High, bool Whole, double& Out)
@@ -67,17 +69,33 @@ namespace NlCore
 
 	bool NeedsIndex(PersonAct Act)
 	{
-		return Act == PersonAct::SkillSet || Act == PersonAct::SkillAdd || Act == PersonAct::NeedSet;
+		return IndexLimit(Act) > 0;
+	}
+
+	int IndexLimit(PersonAct Act)
+	{
+		switch (Act)
+		{
+		case PersonAct::SkillSet:
+		case PersonAct::SkillAdd:
+			return static_cast<int>(SkillNames().size());
+		case PersonAct::NeedSet:
+			return static_cast<int>(NeedNames().size());
+		case PersonAct::ItemAdd:
+			return k_ItemIndexMax;
+		default:
+			return 0;
+		}
 	}
 
 	bool NeedsAmount(PersonAct Act)
 	{
-		return NeedsIndex(Act) || Act == PersonAct::AgeSet;
+		return NeedsIndex(Act) || Act == PersonAct::AgeSet || Act == PersonAct::MoneyAdd;
 	}
 
 	bool NeedsText(PersonAct Act)
 	{
-		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove;
+		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd;
 	}
 
 	bool GoodWho(const std::string& Who)
@@ -92,26 +110,47 @@ namespace NlCore
 		return Who == "lords" || Who == "people";
 	}
 
+	bool BulkAllowed(const std::string& Who, PersonAct Act)
+	{
+		if (!IsBulkWho(Who))
+			return true;
+		if (Act == PersonAct::SkillsMax || Act == PersonAct::NeedsFill || Act == PersonAct::Happy || Act == PersonAct::Cure)
+			return true;
+		return Act == PersonAct::KnowledgeAll && Who == "lords";		// 주민은 지식을 갖지 않는다
+	}
+
+	bool GiftDelta(double Current, double Asked, double& Delta)
+	{
+		if (!std::isfinite(Current) || !std::isfinite(Asked))
+			return false;
+		double delta = std::round(Asked);
+		if (delta < 0)
+			delta = std::max(delta, -std::max(0.0, std::floor(Current)));		// 가진 것까지만 뺀다
+		if (delta == 0)
+			return false;
+		Delta = delta;
+		return true;
+	}
+
 	bool CheckPersonCommand(const PersonCommand& Command, std::string& Why)
 	{
 		Why.clear();
-		const bool bulk_act = Command.Act == PersonAct::SkillsMax || Command.Act == PersonAct::NeedsFill || Command.Act == PersonAct::Happy
-			|| Command.Act == PersonAct::Cure;
+		const bool trait = Command.Act == PersonAct::TraitAdd || Command.Act == PersonAct::TraitRemove;
+		const bool gift = Command.Act == PersonAct::MoneyAdd || Command.Act == PersonAct::ItemAdd;
 		if (!GoodWho(Command.Who))
 			Why = "누구인지 없습니다";
-		else if (IsBulkWho(Command.Who) && !bulk_act)
+		else if (!BulkAllowed(Command.Who, Command.Act))
 			Why = "한 사람을 짚어서만 할 수 있습니다";
-		else if (NeedsIndex(Command.Act))
-		{
-			const size_t count = Command.Act == PersonAct::NeedSet ? NeedNames().size() : SkillNames().size();
-			if (Command.Index < 0 || static_cast<size_t>(Command.Index) >= count)
-				Why = "번호가 범위 밖입니다";
-		}
+		else if (NeedsIndex(Command.Act) && (Command.Index < 0 || Command.Index >= IndexLimit(Command.Act)))
+			Why = "번호가 범위 밖입니다";
 		if (Why.empty() && NeedsAmount(Command.Act) && !std::isfinite(Command.Amount))
 			Why = "수가 아닙니다";
+		if (Why.empty() && gift && (std::round(Command.Amount) == 0 || std::fabs(Command.Amount) > k_GiftMax))
+			Why = "줄 수가 0 이거나 너무 큽니다";
+		// 지식의 이름도 특성의 이름과 같은 꼴이다(소문자·숫자·밑줄). 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
-			Why = "특성 이름이 아닙니다";
-		if (Why.empty() && NeedsText(Command.Act) && IsProtectedTrait(Command.Text))
+			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
+		if (Why.empty() && trait && IsProtectedTrait(Command.Text))
 			Why = "붙이거나 뗄 수 없는 특성입니다";
 		return Why.empty();
 	}

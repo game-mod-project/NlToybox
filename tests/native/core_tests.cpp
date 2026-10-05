@@ -681,7 +681,10 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 48);
+		CHECK(Cheats().size() == 49);
+		// 5단계: 연구 시간(research/12). 도서관 관리자의 get_learn_time 이 돌려주는 수에 곱한다. 효과는 보지 못했다.
+		CHECK(FindCheat("research_time") && FindCheat("research_time")->Kind == CheatKind::HookScale && FindCheat("research_time")->Where == Area::Knowledge
+			&& !FindCheat("research_time")->Verified && FindCheat("research_time")->Max <= 1);
 		// 4단계: 인구·욕구(research/11). 플레이어의 사람을 돌며 쓰는 항목은 모듈의 코드가 한다(src/People.cpp).
 		for (const char* id : { "no_hunger", "no_tiredness", "needs_full", "always_happy", "no_old_age_death" })
 			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People);
@@ -735,7 +738,8 @@ int main(int argc, char** argv)
 		{
 			// 인물·영주·인구는 제 패널(src/People.cpp)이 있다.
 			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time
-				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People;
+				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People
+				|| area.Id == Area::Knowledge || area.Id == Area::Items;		// 지식·아이템도 제 패널이 있다(src/People.cpp)
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
@@ -1308,6 +1312,98 @@ int main(int argc, char** argv)
 		CHECK(!HoldBegin(round, false, false, false).Work);
 		const HoldPlan needs = HoldBegin(round, true, false, false);
 		CHECK(needs.Work && !needs.WriteAge);
+	});
+
+	Test("인물: 지식·소지금·소지품을 주는 명령", [] {
+		for (const char* word : { "knowledge_all", "knowledge_add", "money_add", "item_add" })
+		{
+			PersonAct act = PersonAct::Cure;
+			CHECK(ParsePersonAct(word, act));
+			CHECK_STR(PersonActWord(act), word);
+		}
+		CHECK(NeedsText(PersonAct::KnowledgeAdd) && !NeedsText(PersonAct::KnowledgeAll));
+		CHECK(NeedsAmount(PersonAct::MoneyAdd) && NeedsAmount(PersonAct::ItemAdd) && !NeedsAmount(PersonAct::KnowledgeAll) && !NeedsAmount(PersonAct::KnowledgeAdd));
+		CHECK(NeedsIndex(PersonAct::ItemAdd) && !NeedsIndex(PersonAct::MoneyAdd) && !NeedsIndex(PersonAct::KnowledgeAdd));
+		CHECK(IndexLimit(PersonAct::SkillSet) == 8 && IndexLimit(PersonAct::NeedSet) == 6 && IndexLimit(PersonAct::ItemAdd) == 200 && IndexLimit(PersonAct::Happy) == 0);
+
+		std::string why;
+		PersonCommand c;
+		c.Who = "25556c3312bce178";
+		c.Act = PersonAct::KnowledgeAdd;
+		c.Text = "building_mine";
+		CHECK(CheckPersonCommand(c, why));
+		c.Text = "dead";			// 지식의 이름은 특성의 막힌 이름과 무관하다(게임의 지식 목록으로 본다)
+		CHECK(CheckPersonCommand(c, why));
+		c.Text = "Bad Name";
+		CHECK(!CheckPersonCommand(c, why));
+		c.Text.clear();
+		CHECK(!CheckPersonCommand(c, why));
+
+		c.Act = PersonAct::ItemAdd;
+		c.Index = 1;
+		c.Amount = 50;
+		CHECK(CheckPersonCommand(c, why));
+		c.Index = -1;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Index = 200;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Index = 1;
+		c.Amount = 0;				// 줄 것이 없다
+		CHECK(!CheckPersonCommand(c, why));
+
+		c.Act = PersonAct::MoneyAdd;
+		c.Amount = 1000;
+		CHECK(CheckPersonCommand(c, why));
+		c.Amount = -200;
+		CHECK(CheckPersonCommand(c, why));
+		c.Amount = std::numeric_limits<double>::quiet_NaN();
+		CHECK(!CheckPersonCommand(c, why));
+		c.Amount = 2e9;				// 한 번에 백만까지
+		CHECK(!CheckPersonCommand(c, why));
+
+		// 모든 지식은 영주 전원에게도 된다(주민은 지식을 갖지 않는다). 소지금·소지품·지식 하나는 한 사람을 짚어서만.
+		c.Act = PersonAct::KnowledgeAll;
+		c.Who = "lords";
+		CHECK(CheckPersonCommand(c, why));
+		c.Who = "people";
+		CHECK(!CheckPersonCommand(c, why));
+		c.Who = "lords";
+		c.Act = PersonAct::MoneyAdd;
+		c.Amount = 100;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Act = PersonAct::Cure;
+		c.Who = "people";
+		CHECK(CheckPersonCommand(c, why));
+		CHECK(BulkAllowed("lords", PersonAct::KnowledgeAll) && !BulkAllowed("people", PersonAct::KnowledgeAll) && BulkAllowed("people", PersonAct::Happy)
+			&& !BulkAllowed("lords", PersonAct::ItemAdd) && BulkAllowed("25556c3312bce178", PersonAct::ItemAdd));
+	});
+
+	Test("인물: 주는 수는 정수로, 가진 것보다 많이 빼지 않는다", [] {
+		double delta = 0;
+		CHECK(GiftDelta(493, 1000, delta) && delta == 1000);
+		CHECK(GiftDelta(493, -1000, delta) && delta == -493);		// 0 아래로 내려가지 않는다
+		CHECK(GiftDelta(10, 2.6, delta) && delta == 3);
+		CHECK(!GiftDelta(0, -5, delta));							// 뺄 것이 없다
+		CHECK(!GiftDelta(5, 0.2, delta));							// 반올림하면 0 이다
+		CHECK(!GiftDelta(std::numeric_limits<double>::quiet_NaN(), 5, delta) && !GiftDelta(5, std::numeric_limits<double>::infinity(), delta));
+		CHECK(GiftDelta(-3, 10, delta) && delta == 10);			// 읽은 수가 음수여도 더하는 것은 된다
+	});
+
+	Test("원격 명령: 지식·소지금·소지품의 줄을 읽는다", [] {
+		CHECK(ParseRemoteLine("person 25556c3312bce178 knowledge_all").Error.empty());
+		CHECK(ParseRemoteLine("person lords knowledge_all").Error.empty());
+		CHECK(!ParseRemoteLine("person people knowledge_all").Error.empty());
+		RemoteCommand c = ParseRemoteLine("person 25556c3312bce178 knowledge_add name=building_mine");
+		CHECK(c.Error.empty() && c.Options.at("name") == "building_mine");
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 knowledge_add").Error.empty());
+		c = ParseRemoteLine("person 25556c3312bce178 money_add amount=1000");
+		CHECK(c.Error.empty() && c.Number == 1000);
+		c = ParseRemoteLine("person 25556c3312bce178 item_add index=1 amount=50");
+		CHECK(c.Error.empty() && c.Options.at("index") == "1" && c.Number == 50);
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add amount=50").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=500 amount=50").Error.empty());
+		CHECK(!ParseRemoteLine("person lords money_add amount=5").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 money_add amount=0").Error.empty());
 	});
 
 	Test("인구: 켠 항목이 채워 둘 욕구의 번호", [] {

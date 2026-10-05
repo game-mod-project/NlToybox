@@ -24,7 +24,15 @@ namespace NlCore
 	constexpr double k_AgeMin = 1, k_AgeMax = 120;
 	constexpr double k_FillAll = 1e9;		// "상한까지 채운다"로 보내는 수(NeedValue 가 상한으로 당긴다). 읽은 상한을 보내지 않는다: 읽지 못했으면 0 이 쓰인다
 
-	enum class PersonAct { SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove };
+	constexpr double k_GiftMax = 1e6;		// 소지금·소지품을 한 번에 주거나 빼는 수의 한도
+	constexpr int k_ItemIndexMax = 200;		// 자원 번호의 한도(실제 자원의 수는 부르는 쪽이 게임에서 읽어 본다. 39개였다)
+
+	// KnowledgeAll: 모든 지식을 준다. KnowledgeAdd: 이름으로 지식 하나를 준다. MoneyAdd: 소지금을 더하거나 뺀다. ItemAdd: 소지품의 자원을 더하거나 뺀다(research/12).
+	enum class PersonAct
+	{
+		SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove,
+		KnowledgeAll, KnowledgeAdd, MoneyAdd, ItemAdd,
+	};
 
 	struct PersonCommand
 	{
@@ -32,14 +40,17 @@ namespace NlCore
 		std::string Who;		// 인물의 uuid. 또는 "lords"(플레이어의 영주 전원), "people"(플레이어의 사람 전원)
 		int Index = -1;			// 능력치나 욕구의 번호
 		double Amount = 0;		// 맞출 수, 더할 수, 나이
-		std::string Text;		// 특성의 이름
+		std::string Text;		// 특성이나 지식의 이름
 	};
 
-	// 원격 명령의 낱말: skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove.
+	// 원격 명령의 낱말: skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove,
+	// knowledge_all, knowledge_add, money_add, item_add.
 	bool ParsePersonAct(const std::string& Word, PersonAct& Out);
 	const char* PersonActWord(PersonAct Act);
-	// 그 명령이 번호(능력치·욕구)를, 수를, 글(특성 이름)을 받는가.
+	// 그 명령이 번호(능력치·욕구·자원)를, 수를, 글(특성이나 지식의 이름)을 받는가.
 	bool NeedsIndex(PersonAct Act);
+	// 번호를 받는 명령의 번호의 한도(0 이상 이 수 미만). 번호를 받지 않으면 0.
+	int IndexLimit(PersonAct Act);
 	bool NeedsAmount(PersonAct Act);
 	bool NeedsText(PersonAct Act);
 	// 명령이 온전한가: 누구인지 있고, 번호가 범위 안이고, 수가 유한하고, 글이 특성 이름의 꼴이고 붙이거나 떼도 되는 특성이다.
@@ -48,6 +59,11 @@ namespace NlCore
 
 	// 여럿을 가리키는 글인가("lords", "people").
 	bool IsBulkWho(const std::string& Who);
+	// 그 대상에게 그 일을 해도 되는가. 한 사람에게는 무엇이든. 여럿에게는 능력치 최대·욕구·행복·치료, 영주 전원에게는 모든 지식도.
+	bool BulkAllowed(const std::string& Who, PersonAct Act);
+
+	// 소지금·소지품에 더할 정수. 가진 것보다 많이 빼지 않는다(0 아래로 내려가지 않는다). 할 것이 없거나(0) 수가 아니면 거짓.
+	bool GiftDelta(double Current, double Asked, double& Delta);
 
 	// 누구를 가리키는 글의 꼴: 글자·숫자·밑줄만(uuid, lords, people). 주소에 그대로 들어가지 않지만 로그와 답에 적힌다.
 	bool GoodWho(const std::string& Who);

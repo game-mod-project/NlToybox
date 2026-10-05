@@ -300,7 +300,8 @@ namespace NlCore
 			}
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
-				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove)");
+				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, "
+					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add)");
 			command.Target = tokens[1];
 			if (!options(3))
 				return command;
@@ -319,18 +320,15 @@ namespace NlCore
 			const auto name = command.Options.find("name");
 			if (name != command.Options.end())
 				person.Text = name->second;
-			if (NeedsIndex(person.Act))
-			{
-				const size_t limit = person.Act == PersonAct::NeedSet ? NeedNames().size() : SkillNames().size();
-				if (person.Index < 0 || static_cast<size_t>(person.Index) >= limit)
-					return fail(std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(limit - 1) + ">");
-			}
+			if (NeedsIndex(person.Act) && (person.Index < 0 || person.Index >= IndexLimit(person.Act)))
+				return fail(std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(IndexLimit(person.Act) - 1) + ">");
 			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
-				return fail(std::string("person ") + tokens[2] + " needs name=<trait name>");
-			if (NeedsText(person.Act) && IsProtectedTrait(person.Text))
+				return fail(std::string("person ") + tokens[2] + " needs name=<name>");
+			const bool trait = person.Act == PersonAct::TraitAdd || person.Act == PersonAct::TraitRemove;
+			if (trait && IsProtectedTrait(person.Text))
 				return fail(std::string("person ") + tokens[2] + " does not take that trait (species and death states are protected)");
-			if (IsBulkWho(person.Who) && !(person.Act == PersonAct::SkillsMax || person.Act == PersonAct::NeedsFill || person.Act == PersonAct::Happy || person.Act == PersonAct::Cure))
-				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure (name one person for the rest)");
+			if (!BulkAllowed(person.Who, person.Act))
+				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, and lords also knowledge_all (name one person for the rest)");
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");

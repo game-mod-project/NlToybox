@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/EconomyPlan.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -28,6 +29,9 @@ namespace
 	// 게임의 디버그용 생각: 기분 +100, 하루. Minds.attach_generic_mind(생각 구조체)로 붙인다(게임이 그 꼴로 부르는 것을 기록했다).
 	constexpr const char* k_HappyMind = "inst:o_data.mind_debug_totally_happy";
 	constexpr const char* k_TraitList = "inst:o_data.game_trait_list";		// 특성 이름 282개
+	// 지식의 종류 121개(research/12). 한 칸은 구조체: __name, __caption_replaced(화면의 이름), __category.
+	constexpr const char* k_KnowledgeList = "inst:o_data.__knowledge_data.__knowledge_list";
+	constexpr const char* k_ResourceCaptions = "global.__resource_caption";	// 자원 번호 → "resource.wood"(research/07)
 	constexpr double k_Unknown = -1e9;										// 읽지 못한 수
 
 	struct Detail			// 고른 사람의 값. RValue 를 담지 않는다
@@ -38,6 +42,13 @@ namespace
 		std::vector<double> Skills, Points;		// 능력치 여덟의 등급과 점수. 그 사람에게 없는 칸은 k_Unknown(주민은 전투만 있다)
 		std::vector<double> Needs, Limits;		// 욕구 여섯과 상한
 		std::vector<std::string> Traits;
+		double Money = k_Unknown, KnowledgeCount = k_Unknown;		// 소지금, 가진 지식의 수(지식을 갖지 않는 사람은 k_Unknown)
+		std::vector<double> Items;									// 소지품: 자원 번호 → 수
+	};
+
+	struct KnowledgeName
+	{
+		std::string Name, Caption, Category;		// 게임의 이름("building_mine"), 화면의 이름("광산"), 갈래(economic, cultural_knowledge, textbooks)
 	};
 
 	struct Snapshot			// 틱이 채우고 Draw 가 읽는다
@@ -46,6 +57,8 @@ namespace
 		std::string Why;
 		std::vector<PersonRow> People;
 		std::vector<std::string> TraitNames;	// 게임에 있는 특성의 이름(이름순)
+		std::vector<KnowledgeName> Knowledge;	// 게임에 있는 지식(게임의 목록의 차례. 자리가 __knowledge_list 의 번호다)
+		std::vector<std::string> Resources;		// 자원 번호 → 창에 보일 이름
 		Detail One;
 		std::string Last;						// 마지막으로 한 일
 	};
@@ -64,6 +77,7 @@ namespace
 	int g_AgeInput = 0;
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
+	char g_KnowledgeFilter[48] = "";
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
 	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
@@ -137,6 +151,35 @@ namespace
 			return false;
 		Out = result.ToDouble();
 		return true;
+	}
+
+	// 지식의 목록과 자원의 이름. 게임마다 한 번 읽는다.
+	void LoadTables()
+	{
+		RValue list;
+		std::string why;
+		g_Now.Knowledge.clear();
+		if (NlAccess::Read(NlCore::ParseAskPath(k_KnowledgeList), list, why) && list.IsArray())
+			NlAccess::ForEachChild(list, Holder::Array, [&](const PathStep&, const RValue& item) {
+				KnowledgeName one;
+				if (item.IsStruct())
+				{
+					FollowString(item, { { '.', "__name", 0 } }, one.Name);
+					FollowString(item, { { '.', "__caption_replaced", 0 } }, one.Caption);
+					FollowString(item, { { '.', "__category", 0 } }, one.Category);
+				}
+				g_Now.Knowledge.push_back(std::move(one));		// 읽지 못한 칸도 자리를 지킨다(자리가 번호다)
+				return true;
+			});
+
+		RValue captions;
+		g_Now.Resources.clear();
+		if (NlAccess::Read(NlCore::ParseAskPath(k_ResourceCaptions), captions, why) && captions.IsArray())
+			NlAccess::ForEachChild(captions, Holder::Array, [&](const PathStep& step, const RValue& caption) {
+				g_Now.Resources.push_back(caption.IsString() ? NlCore::ResourceLabel(NlCore::ResourceKey(caption.ToString())) : "#" + Shortest(step.Index));
+				return true;
+			});
+		Log("people: " + std::to_string(g_Now.Knowledge.size()) + " knowledge names, " + std::to_string(g_Now.Resources.size()) + " resources");
 	}
 
 	void LoadTraitNames()
@@ -225,7 +268,10 @@ namespace
 		}
 
 		if (!g_Now.Ready)
+		{
 			LoadTraitNames();
+			LoadTables();
+		}
 		g_Now.People = std::move(people);
 		g_Now.Ready = true;
 		g_Now.Why.clear();
@@ -300,13 +346,26 @@ namespace
 		if (g_DetailLogged != Row.Uuid)
 		{
 			g_DetailLogged = Row.Uuid;
-			Log("people call get_age(), get_pain(), get_total_modify() on " + Base(Row) + " " + Row.Uuid);		// 사람마다 한 번만 남긴다
+			Log("people call get_age(), get_pain(), get_total_modify(), get_knowledge_count() on " + Base(Row) + " " + Row.Uuid);		// 사람마다 한 번만 남긴다
 		}
 		CallNumber(base + ".get_age", Out.Age);
 		CallNumber(base + ".get_pain", Out.Pain);
 		CallNumber(base + ".__minds.get_total_modify", Out.MindSum);
+		// 소지금과 소지품은 값으로 읽는다. 가진 지식의 수는 ComponentKnowledge.get_knowledge_count()(인자 없음. 3, 4, 121 을 돌려줬다).
+		FollowNumber(soul, { { '.', "__inventory", 0 }, { '.', "__money", 0 } }, Out.Money);
+		ReadNumbers(soul, { { '.', "__inventory", 0 }, { '.', "__resources", 0 } }, Out.Items);
+		CallNumber(base + ".__character_soul.__knowledge.get_knowledge_count", Out.KnowledgeCount);
 		Out.Ready = true;
 		return true;
+	}
+
+	// 게임의 지식 목록에서의 자리. 없으면 -1.
+	int KnowledgeIndex(const std::string& Name)
+	{
+		for (size_t i = 0; i < g_Now.Knowledge.size(); i++)
+			if (g_Now.Knowledge[i].Name == Name)
+				return static_cast<int>(i);
+		return -1;
 	}
 
 	bool KnownTrait(const std::string& Name)
@@ -493,6 +552,112 @@ namespace
 			}
 			return Detach(Row, C.Text, Note);
 		}
+		case PersonAct::KnowledgeAll:
+		{
+			const std::string knowledge = soul + ".__character_soul.__knowledge";
+			double before = 0, after = 0;
+			if (!CallNumber(knowledge + ".get_knowledge_count", before))
+			{
+				Note = "지식을 갖는 사람이 아닙니다";		// 주민
+				return false;
+			}
+			// ComponentKnowledge.add_all_knowledge(): 인자 없음(기계어). 부르자 한 영주의 지식이 121개가 되고 게임의 지식 창에 보였다(research/12).
+			Log("people call add_all_knowledge() on " + Row.Uuid);
+			if (!CallNoArgs(knowledge + ".add_all_knowledge", result, Note))
+				return false;
+			if (!CallNumber(knowledge + ".get_knowledge_count", after) || after < before)
+			{
+				Note = "지식의 수를 다시 읽지 못했습니다";
+				return false;
+			}
+			Note = "지식 " + Shortest(before) + "개에서 " + Shortest(after) + "개로";
+			return true;
+		}
+		case PersonAct::KnowledgeAdd:
+		{
+			const int index = KnowledgeIndex(C.Text);
+			RValue knowledge, answer;
+			std::string name, why;
+			// 지식 구조체는 게임의 목록에서 얻는다. 그 자리의 이름이 청한 이름인지 다시 본다.
+			if (index < 0 || !NlAccess::Read(NlCore::ParseAskPath(std::string(k_KnowledgeList) + "[" + std::to_string(index) + "]"), knowledge, why) || !knowledge.IsStruct()
+				|| !FollowString(knowledge, { { '.', "__name", 0 } }, name) || name != C.Text)
+			{
+				Note = "게임의 지식 목록에서 찾지 못했습니다";
+				return false;
+			}
+			const std::string component = soul + ".__character_soul.__knowledge";
+			// is_have_knowledge(지식 구조체) -> 불리언: 게임이 그 꼴로 부르는 것을 기록했다.
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(component + ".is_have_knowledge"), { knowledge }, answer, Note) || !NlGame::IsNumber(answer))
+			{
+				Note = "지식을 갖는 사람이 아닙니다";
+				return false;
+			}
+			if (answer.ToDouble() != 0)
+			{
+				Note = "이미 가진 지식입니다";
+				return true;
+			}
+			// add_knowledge(지식 구조체, true, true) -> true: 연구가 끝날 때 게임이 그 꼴로 불렀다.
+			Log("people call add_knowledge(" + C.Text + ", true, true) on " + Row.Uuid);
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(component + ".add_knowledge"), { knowledge, RValue(true), RValue(true) }, result, Note))
+				return false;
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(component + ".is_have_knowledge"), { knowledge }, answer, Note) || !NlGame::IsNumber(answer) || answer.ToDouble() == 0)
+			{
+				Note = "게임이 주지 않았습니다";
+				return false;
+			}
+			return true;
+		}
+		case PersonAct::MoneyAdd:
+		{
+			const std::string money = soul + ".__inventory.__money";
+			double current = 0, delta = 0, after = 0;
+			if (!NlAccess::ReadNumber(money, current) || !NlCore::GiftDelta(current, C.Amount, delta))
+			{
+				Note = "더하거나 뺄 것이 없습니다";
+				return false;
+			}
+			// ComponentInventory.change_money(변화량): 게임이 수 하나로 100번 불렀다((29), (-40). research/12).
+			Log("people call change_money(" + Shortest(delta) + ") on " + Row.Uuid);
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__inventory.change_money"), { RValue(delta) }, result, Note))
+				return false;
+			if (!NlAccess::ReadNumber(money, after) || after != current + delta)
+			{
+				Note = "소지금이 청한 만큼 바뀌지 않았습니다(" + Shortest(current) + "에서 " + Shortest(after) + ")";
+				return false;
+			}
+			return true;
+		}
+		case PersonAct::ItemAdd:
+		{
+			if (static_cast<size_t>(C.Index) >= g_Now.Resources.size())
+			{
+				Note = "없는 자원입니다";
+				return false;
+			}
+			// ComponentInventory.get(자원 번호) -> 수, change(자원 번호, 변화량): 게임이 (수), (수, 수)로 불렀다. change(1, 50) 뒤 get(1) 이 50 이었다.
+			const NlCore::AskPath get = NlCore::ParseAskPath(soul + ".__inventory.get");
+			const RValue resource(static_cast<double>(C.Index));
+			RValue count;
+			double delta = 0;
+			if (!NlAccess::CallMethod(get, { resource }, count, Note) || !NlGame::IsNumber(count))
+				return false;
+			const double current = count.ToDouble();
+			if (!NlCore::GiftDelta(current, C.Amount, delta))
+			{
+				Note = "더하거나 뺄 것이 없습니다";
+				return false;
+			}
+			Log("people call inventory.change(" + std::to_string(C.Index) + ", " + Shortest(delta) + ") on " + Row.Uuid);
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__inventory.change"), { resource, RValue(delta) }, result, Note))
+				return false;
+			if (!NlAccess::CallMethod(get, { resource }, count, Note) || !NlGame::IsNumber(count) || count.ToDouble() != current + delta)
+			{
+				Note = "소지품이 청한 만큼 바뀌지 않았습니다";
+				return false;
+			}
+			return true;
+		}
 		}
 		return false;
 	}
@@ -515,8 +680,11 @@ namespace
 			return why;
 		if (!Scan())
 			return g_Now.Why;
-		if (NlCore::NeedsText(C.Act) && !KnownTrait(C.Text))
+		const bool trait = C.Act == PersonAct::TraitAdd || C.Act == PersonAct::TraitRemove;
+		if (trait && !KnownTrait(C.Text))
 			return "게임에 없는 특성입니다: " + C.Text;
+		if (C.Act == PersonAct::KnowledgeAdd && KnowledgeIndex(C.Text) < 0)
+			return "게임에 없는 지식입니다: " + C.Text;
 
 		// 대상의 사본을 먼저 뜬다. 아래에서 부르는 게임의 함수가 사람들의 목록을 바꿔도(드나듦, 다시 읽기) 낡은 자리로 목록을 다시 찾지 않는다.
 		std::vector<PersonRow> targets;
@@ -937,33 +1105,159 @@ void NlPeople::GameTick(double Now, bool Active)
 	}
 }
 
+namespace
+{
+	// 왼쪽의 사람 목록. 인물·지식·아이템 패널이 함께 쓴다(고른 사람도 함께 쓴다). 돌려주는 것: 고른 사람(없으면 nullptr).
+	const PersonRow* DrawWho(bool LordsOnly)
+	{
+		ImGui::BeginChild("who", ImVec2(210, 0), ImGuiChildFlags_Borders);
+		if (!LordsOnly)
+			ImGui::Checkbox("주민·손님도 보기", &g_ShowAll);
+		for (const PersonRow& row : g_Now.People)
+		{
+			if ((LordsOnly || !g_ShowAll) && !(NlCore::IsPlayers(row) && row.Character))
+				continue;
+			const std::string label = row.Name + "  " + KindText(row) + "##" + row.Uuid;
+			ImGui::BeginDisabled(row.Dead);
+			if (ImGui::Selectable(label.c_str(), g_Selected == row.Uuid))
+				g_Selected = row.Uuid;
+			ImGui::EndDisabled();
+		}
+		ImGui::EndChild();
+		ImGui::SameLine();
+		return g_Selected.empty() ? nullptr : FindRow(g_Selected);
+	}
+
+	// 고른 사람의 값을 아직 읽지 못했으면 참(그 글을 그린다).
+	bool DetailPending(const PersonRow& Row)
+	{
+		ImGui::Text("%s  (%s)", Row.Name.c_str(), KindText(Row).c_str());
+		if (g_Now.One.Ready && g_Now.One.Uuid == Row.Uuid)
+			return false;
+		ImGui::TextDisabled("값을 읽는 중입니다.");
+		return true;
+	}
+}
+
 void NlPeople::DrawPerson()
 {
 	std::lock_guard lock(g_Mutex);
 	if (NotReady())
 		return;
 
-	ImGui::BeginChild("who", ImVec2(210, 0), ImGuiChildFlags_Borders);
-	ImGui::Checkbox("주민·손님도 보기", &g_ShowAll);
-	for (const PersonRow& row : g_Now.People)
-	{
-		if (!g_ShowAll && !(NlCore::IsPlayers(row) && row.Character))
-			continue;
-		const std::string label = row.Name + "  " + KindText(row) + "##" + row.Uuid;
-		ImGui::BeginDisabled(row.Dead);
-		if (ImGui::Selectable(label.c_str(), g_Selected == row.Uuid))
-			g_Selected = row.Uuid;
-		ImGui::EndDisabled();
-	}
-	ImGui::EndChild();
-
-	ImGui::SameLine();
+	const PersonRow* row = DrawWho(false);
 	ImGui::BeginChild("one", ImVec2(0, 0));
-	const PersonRow* row = g_Selected.empty() ? nullptr : FindRow(g_Selected);
 	if (!row)
 		ImGui::TextDisabled("왼쪽에서 사람을 고르세요.");
 	else
 		DrawDetail(*row);
+	DrawLast();
+	ImGui::EndChild();
+}
+
+void NlPeople::DrawKnowledge()
+{
+	std::lock_guard lock(g_Mutex);
+	if (NotReady())
+		return;
+
+	const PersonRow* row = DrawWho(true);		// 지식은 영주가 가진다
+	ImGui::BeginChild("one", ImVec2(0, 0));
+	if (ImGui::Button("영주 전원에게 모든 지식 주기"))
+		Push(PersonAct::KnowledgeAll, "lords");
+	Hint("지식은 영주가 가집니다. 준 지식은 되돌릴 수 없고 세이브에 남습니다. 교과서 지식은 능력치도 올립니다. 모든 지식을 가진 영주가 하나 있으면 지식으로 잠긴 건물이 풀립니다.");
+	if (!row)
+		ImGui::TextDisabled("왼쪽에서 영주를 고르세요.");
+	else if (!DetailPending(*row))
+	{
+		const Detail& one = g_Now.One;
+		const std::string who = row->Uuid;
+		ImGui::Text("가진 지식 %s / %d", NumberText(one.KnowledgeCount, 0).c_str(), static_cast<int>(g_Now.Knowledge.size()));
+		ImGui::SameLine();
+		if (ImGui::Button("이 영주에게 모든 지식 주기"))
+			Push(PersonAct::KnowledgeAll, who);
+
+		ImGui::SetNextItemWidth(160);
+		ImGui::InputText("이름의 일부로 찾아 하나 주기", g_KnowledgeFilter, sizeof(g_KnowledgeFilter));
+		if (g_KnowledgeFilter[0])
+		{
+			int shown = 0;
+			for (const KnowledgeName& knowledge : g_Now.Knowledge)
+			{
+				if (knowledge.Name.empty() || (knowledge.Caption.find(g_KnowledgeFilter) == std::string::npos && knowledge.Name.find(g_KnowledgeFilter) == std::string::npos))
+					continue;
+				if (shown++ >= 14)
+				{
+					ImGui::TextDisabled("더 있습니다. 이름을 더 적어 주세요.");
+					break;
+				}
+				ImGui::PushID(knowledge.Name.c_str());
+				if (ImGui::SmallButton("주기"))
+					Push(PersonAct::KnowledgeAdd, who, -1, 0, knowledge.Name);
+				ImGui::PopID();
+				ImGui::SameLine();
+				ImGui::Text("%s  (%s, %s)", knowledge.Caption.c_str(), knowledge.Name.c_str(), knowledge.Category.c_str());
+			}
+			if (!shown)
+				ImGui::TextDisabled("그런 이름의 지식이 없습니다(화면의 이름이나 게임의 영문 이름. 예: 광산, mine).");
+		}
+	}
+	DrawLast();
+	ImGui::EndChild();
+}
+
+void NlPeople::DrawItems()
+{
+	std::lock_guard lock(g_Mutex);
+	if (NotReady())
+		return;
+
+	const PersonRow* row = DrawWho(false);
+	ImGui::BeginChild("one", ImVec2(0, 0));
+	if (!row)
+		ImGui::TextDisabled("왼쪽에서 사람을 고르세요.");
+	else if (!DetailPending(*row))
+	{
+		const Detail& one = g_Now.One;
+		const std::string who = row->Uuid;
+		ImGui::Text("소지금 %s", one.Money == k_Unknown ? "-" : NlCore::Thousands(one.Money).c_str());
+		for (const double amount : { 100.0, 1000.0, 10000.0, -100.0 })
+		{
+			ImGui::SameLine();
+			ImGui::PushID(static_cast<int>(amount));
+			if (ImGui::SmallButton((std::string(amount > 0 ? "+" : "") + NlCore::Thousands(amount)).c_str()))
+				Push(PersonAct::MoneyAdd, who, -1, amount);
+			ImGui::PopID();
+		}
+		Hint("소지품과 소지금은 게임의 함수로 바꿉니다(게임의 인물 창에 보입니다). 영지 창고의 자원은 '경제'에 있습니다. 장비는 아직 없습니다.");
+
+		ImGui::SeparatorText("소지품");
+		if (ImGui::BeginTable("items", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		{
+			for (size_t i = 1; i < g_Now.Resources.size() && i < one.Items.size(); i++)		// 0 번(룬)은 건드리지 않는다(경제 패널과 같다)
+			{
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(g_Now.Resources[i].c_str());
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(NumberText(one.Items[i], 0).c_str());
+				ImGui::TableNextColumn();
+				ImGui::PushID(300 + static_cast<int>(i));
+				for (const double amount : { 1.0, 10.0, 100.0 })
+				{
+					if (ImGui::SmallButton(("+" + NlCore::Fixed(amount, 0)).c_str()))
+						Push(PersonAct::ItemAdd, who, static_cast<int>(i), amount);
+					ImGui::SameLine();
+				}
+				ImGui::BeginDisabled(!(one.Items[i] > 0));
+				if (ImGui::SmallButton("0 으로"))
+					Push(PersonAct::ItemAdd, who, static_cast<int>(i), -NlCore::k_GiftMax);
+				ImGui::EndDisabled();
+				ImGui::PopID();
+			}
+			ImGui::EndTable();
+		}
+	}
 	DrawLast();
 	ImGui::EndChild();
 }
@@ -1051,6 +1345,7 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 
 	std::vector<std::string> lines;
 	lines.push_back(row->Name + "  " + (row->Character ? "character" : "dummy") + ":" + std::to_string(row->Index) + "  faction " + row->Faction);
+	lines.push_back("knowledge " + NumberText(one.KnowledgeCount, 0) + "  money " + NumberText(one.Money, 0));
 	lines.push_back("age " + NumberText(one.Age, 0) + "  moral " + NumberText(one.Moral, 2) + "  minds " + NumberText(one.MindSum, 2) + "  pain " + NumberText(one.Pain, 2));
 	std::string skills = "skills", needs = "needs", traits = "traits";
 	for (size_t i = 0; i < one.Skills.size(); i++)
