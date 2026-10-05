@@ -160,7 +160,7 @@ void NlMenu::GameTick()
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
 	NlProduction::GameTick(now);
-	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People));
+	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items));
 	if (visible && now >= g_NextState)
 	{
 		g_NextState = now + 1;
@@ -237,6 +237,16 @@ void NlMenu::Draw()
 	case Area::Lord:
 		NlPeople::DrawLords();
 		NlTweaks::DrawArea(page);
+		break;
+	case Area::Knowledge:
+		// 표의 항목(연구 시간)과 배율(교본 경험)을 먼저, 그 아래에 지식을 주는 패널.
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlPeople::DrawKnowledge();
+		break;
+	case Area::Items:
+		NlPeople::DrawItems();
 		break;
 	case Area::People:
 		// 표의 항목(욕구, 이주민)을 먼저, 그 아래에 지금 한 번 하는 단추들.

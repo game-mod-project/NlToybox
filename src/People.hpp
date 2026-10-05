@@ -15,13 +15,15 @@ namespace NlPeople
 
 	void Init(LogFn Log);
 
-	// 게임 스레드의 틱. Active: 인물·영주·인구 가운데 한 패널이 보이는가(보일 때만 목록과 값을 새로 읽는다).
+	// 게임 스레드의 틱. Active: 이 파일의 패널(인물, 영주, 인구, 지식, 아이템) 가운데 하나가 보이는가(보일 때만 목록과 값을 새로 읽는다).
 	void GameTick(double Now, bool Active);
 
 	// 그리는 쪽.
 	void DrawPerson();		// 인물: 한 사람을 골라 고친다
 	void DrawLords();		// 영주: 플레이어의 영주 전원에게 한꺼번에
 	void DrawPeople();		// 인구·욕구: 플레이어의 사람 전원에게 한꺼번에
+	void DrawKnowledge();	// 지식: 영주에게 지식을 준다(research/12)
+	void DrawItems();		// 아이템: 한 사람의 소지금과 소지품
 
 	// 원격 명령(창 없이 같은 길을 태운다). 게임 스레드에서 부른다. 돌려주는 것: 답의 줄들.
 	std::vector<std::string> Do(const NlCore::PersonCommand& Command);

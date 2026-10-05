@@ -14,8 +14,9 @@ namespace NlCore
 			{ Area::Person, "person", "인물", 4, true },
 			{ Area::Lord, "lord", "영주", 4, true },
 			{ Area::People, "people", "인구·욕구", 4, true },
-			{ Area::Knowledge, "knowledge", "지식", 5 },
-			{ Area::Items, "items", "아이템", 5 },
+			// 지식·아이템도 제 패널(src/People.cpp)이 있다.
+			{ Area::Knowledge, "knowledge", "지식", 5, true },
+			{ Area::Items, "items", "아이템", 5, true },
 			{ Area::Army, "army", "군대·전투", 5 },
 			{ Area::Diplomacy, "diplomacy", "외교", 6 },
 			{ Area::Religion, "religion", "종교", 6 },
@@ -180,6 +181,11 @@ namespace NlCore
 				"한 시간에 휴식이 줄어드는 양으로 보인다(원래 3). 0 이면 피로가 쌓이지 않을 것으로 보인다" },
 			{ "no_occupational_disease", Area::People, "직업병 끔", "inst:o_debug.debug_is_occupational_disease_enabled", T, 0, 1, 0, 0, false,
 				"직업병이 생기는지를 정하는 값으로 보인다(원래 켜져 있다)" },
+
+			// 연구 시간(research/12). 도서관 관리자의 get_learn_time(지식, 영주, 불리언)이 11.9 를 돌려주는 것을 봤다. 그 수에 배율을 곱한다.
+			// 배율을 건 뒤로는 그 함수가 불리지 않아 효과를 보지 못했다(연구를 새로 시작할 때 불리는 것으로 보인다).
+			{ "research_time", Area::Knowledge, "연구 시간 배율", "inst:o_game_map_controller.__library_manager.get_learn_time", HS, 0.1, 0, 0.01, 1, false,
+				"영주가 지식을 익히는 데 드는 시간에 곱한다(0.1 이면 열 배 빨리). 새로 시작하는 연구부터 먹을 것으로 보인다" },
 
 			{ "combat_no_injuries", Area::Army, "부상 없는 전투", "inst:o_debug.is_combat_without_injuries", T, 1, 0, 0, 0, false,
 				"전투에서 부상이 생기지 않게 하는 개발자 스위치로 보인다" },
