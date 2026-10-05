@@ -6,6 +6,7 @@
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
+#include "core/CostBook.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
@@ -597,6 +598,26 @@ int main(int argc, char** argv)
 	});
 
 
+	Test("건설비 장부: 처음 본 값을 기억하고 0 은 기억하지 않는다", [] {
+		CostBook book;
+		CHECK(book.Empty());
+		book.Remember("altar", 1, 1, 30);
+		book.Remember("altar", 1, -1, 0);			// 0 인 자리는 바꿀 것이 없다
+		book.Remember("hut_6x10", 2, 32, 5);
+		book.Remember("altar", 1, 1, 0);			// 0 으로 쓴 뒤 다시 보면 0 이 보인다. 처음 본 30 을 지킨다
+		book.Remember("altar", 1, 1, 99);			// 이미 기억한 자리는 바꾸지 않는다
+		CHECK(book.Size() == 2 && !book.Empty());
+		CHECK(book.Entries()[0].Building == "altar" && book.Entries()[0].Level == 1 && book.Entries()[0].Slot == 1 && book.Entries()[0].Value == 30);
+		CHECK(book.Entries()[1].Building == "hut_6x10" && book.Entries()[1].Slot == 32 && book.Entries()[1].Value == 5);
+		book.Remember("altar", 2, 1, 7);			// 등급이 다르면 다른 자리다
+		book.Remember("altar", 1, -1, 12);			// 금화(-1)도 한 자리다
+		CHECK(book.Size() == 4);
+		book.Clear();
+		CHECK(book.Empty() && book.Entries().empty());
+		book.Remember("altar", 1, 1, std::numeric_limits<double>::quiet_NaN());		// 수가 아니면 기억하지 않는다
+		CHECK(book.Empty());
+	});
+
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;
 		state.On = { "instant_build", "no_dodge" };
@@ -654,12 +675,16 @@ int main(int argc, char** argv)
 			CHECK(ids.insert(cheat.Id).second);
 			CHECK(std::string(cheat.Id).find_first_of(" =") == std::string::npos);
 			CHECK(cheat.Label[0] != 0 && cheat.Help[0] != 0);
-			if (cheat.Kind == CheatKind::Toggle)
-				CHECK(cheat.On != cheat.Off);
-			else
+			if (cheat.Kind == CheatKind::Number)
 				CHECK(cheat.Min < cheat.Max);
+			else
+				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 30);
+		CHECK(Cheats().size() == 33);
+		// 건설 조건과 건설비(research/09). 조건은 게임의 함수가 돌려주는 값을 바꾸는 훅이고, 비용은 모듈이 건물 종류를 돌며 0 으로 쓴다.
+		CHECK(FindCheat("build_any") && FindCheat("build_any")->Kind == CheatKind::Hook && FindCheat("build_any")->On == 1 && FindCheat("build_any")->Verified);
+		CHECK(FindCheat("build_marks") && FindCheat("build_marks")->Kind == CheatKind::Hook && !FindCheat("build_marks")->Verified);
+		CHECK(FindCheat("build_free") && FindCheat("build_free")->Kind == CheatKind::Custom && FindCheat("build_free")->Where == Area::Build);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
 		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
@@ -700,6 +725,11 @@ int main(int argc, char** argv)
 		CHECK(kept.Numbers.size() == 1 && kept.Numbers.at("rest_decrease") == FindCheat("rest_decrease")->Max);
 		CHECK(kept.Pins == state.Pins && kept.Locks.size() == 1);
 		CHECK(FindCheat("nope") == nullptr && FindCheat("instant_build")->Kind == CheatKind::Toggle);
+		// 훅과 모듈 항목도 켠 채로 저장되고 불러와진다(수 항목만 On 에서 빠진다).
+		CheatState hooks;
+		hooks.On = { "build_any", "build_free", "rest_decrease" };
+		const CheatState kept_hooks = KeepKnown(hooks);
+		CHECK(kept_hooks.On == (std::set<std::string>{ "build_any", "build_free" }));
 	});
 
 	Test("흐름: 일정하게 느는 값의 빠르기를 잰다", [] {
@@ -1012,6 +1042,11 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("economy all amount=100").Error.empty());
 		const RemoteCommand page = ParseRemoteLine("page economy");
 		CHECK(page.Error.empty() && page.Verb == "page" && page.Target == "economy");
+		const RemoteCommand cheat = ParseRemoteLine("cheat build_free on");
+		CHECK(cheat.Error.empty() && cheat.Verb == "cheat" && cheat.Target == "build_free" && cheat.Number == 1);
+		CHECK(ParseRemoteLine("cheat build_free off").Number == 0 && ParseRemoteLine("cheat build_free off").Error.empty());
+		CHECK(!ParseRemoteLine("cheat").Error.empty() && !ParseRemoteLine("cheat build_free").Error.empty()
+			&& !ParseRemoteLine("cheat build_free maybe").Error.empty() && !ParseRemoteLine("cheat no_such_cheat on").Error.empty());
 		const RemoteCommand statics = ParseRemoteLine("statics inst:o_building.generic max=200");
 		CHECK(statics.Error.empty() && statics.Verb == "statics" && statics.Target == "inst:o_building.generic" && OptionNumber(statics, "max", 400) == 200);
 	});

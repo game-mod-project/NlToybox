@@ -15,6 +15,7 @@ add_library(nlcore STATIC
   src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
+  src/core/CostBook.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
   src/core/Rate.cpp
@@ -43,6 +44,7 @@ endif()
 add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Access.cpp
+  src/Build.cpp
   src/Cheats.cpp
   src/Dump.cpp
   src/Economy.cpp

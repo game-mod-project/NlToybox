@@ -30,7 +30,10 @@ namespace NlCore
 	// Key 로 찾는다. 없으면 nullptr.
 	const AreaInfo* FindArea(const std::string& Key);
 
-	enum class CheatKind { Toggle, Number };
+	// Toggle: 주소에 On/Off 를 써 넣는다. Number: 주소에 고른 수를 써 넣는다.
+	// Hook: Path(메서드의 주소나 스크립트의 이름)의 함수가 돌려주는 값을 불리언 On 으로 바꾼다(NlRecorder::Override). 끄면 원래대로 지나간다.
+	// Custom: 모듈의 코드가 Id 로 알아보고 한다(NlCheats::IsOn). Path 는 그것이 다루는 것이 놓인 자리다(보여 주기만 한다).
+	enum class CheatKind { Toggle, Number, Hook, Custom };
 
 	struct Cheat
 	{
@@ -39,7 +42,7 @@ namespace NlCore
 		const char* Label;		// 창에 보이는 이름
 		const char* Path;		// AskPath 의 주소
 		CheatKind Kind;
-		double On, Off;			// Toggle: 켤 때와 끌 때 써 넣는 값
+		double On, Off;			// Toggle: 켤 때와 끌 때 써 넣는 값. Hook: 바꿔 돌려줄 불리언(On)
 		double Min, Max;		// Number: 범위
 		bool Verified;			// 플레이에서 효과를 봤는가
 		const char* Help;		// 변수 이름에서 읽은 뜻. Verified 가 아니면 추정이다

@@ -20,6 +20,7 @@
 //   economy <gold_add|gold_set|all> amount=<수>     금화를 더한다·맞춘다, 모든 자원을 더한다(경제 패널과 같은 길)
 //   economy <add|set> resource=<번호> amount=<수>   자원 하나를 더한다·맞춘다
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
+//   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close
 // 인자: n:<수>  s:<글> 또는 s:{공백이 든 글}  b:0|1  u(undefined)  p:<주소>(그 주소의 값)
 

@@ -1,6 +1,7 @@
 #include "Remote.hpp"
 
 #include "Access.hpp"
+#include "Cheats.hpp"
 #include "Economy.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
@@ -428,6 +429,8 @@ namespace
 			DoAbout(C);
 		else if (C.Verb == "economy")
 			DoEconomy(C);
+		else if (C.Verb == "cheat")
+			Say(NlCheats::Set(C.Target, C.Number != 0) ? "  cheat " + C.Target + (C.Number != 0 ? " on" : " off") : "  : not a switch: " + C.Target);
 		else if (C.Verb == "page")
 			Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
 		else if (C.Verb == "list")

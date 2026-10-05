@@ -264,6 +264,14 @@ namespace NlCore
 			if (!NeedsResource(act) && given != command.Options.end())
 				return fail("economy " + tokens[1] + " takes no resource");
 		}
+		else if (verb == "cheat")
+		{
+			// cheat <치트의 Id> on|off
+			if (count != 3 || !FindCheat(tokens[1]) || (tokens[2] != "on" && tokens[2] != "off"))
+				return fail("cheat needs the id of a cheat and on or off");
+			command.Target = tokens[1];
+			command.Number = tokens[2] == "on" ? 1 : 0;
+		}
 		else if (verb == "page")
 		{
 			if (count != 2 || !FindArea(tokens[1]))

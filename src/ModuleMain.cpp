@@ -3,6 +3,7 @@
 // 처음 여섯 줄의 형식은 tools/common.ps1 의 Get-NlLoadFailures 가 그대로 찾는다 (Phase 0 스펙 §4.3). 바꾸면 그쪽도 바꾼다.
 
 #include <YYTK_Shared.hpp>
+#include "Build.hpp"
 #include "Dump.hpp"
 #include "Economy.hpp"
 #include "Game.hpp"
@@ -21,7 +22,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.6.2";
+	constexpr const char* k_Version = "0.7.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -142,6 +143,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlEconomy::Init([](const std::string& Line) { LogLine(Line); });
+	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::SetContent(NlMenu::Draw);
 

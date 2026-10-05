@@ -268,6 +268,20 @@ bool NlAccess::Open(const AskPath& Path, RValue& Out, Holder& Kind, std::string&
 	return true;
 }
 
+bool NlAccess::Follow(const RValue& From, const std::vector<PathStep>& Steps, RValue& Out, std::string& Why)
+{
+	Cursor at{ Classify(From), From };
+	for (const PathStep& step : Steps)
+	{
+		Cursor next;
+		if (!Step(at, step, next, Why))
+			return false;
+		at = next;
+	}
+	Out = at.Value;
+	return true;
+}
+
 bool NlAccess::Read(const AskPath& Path, RValue& Out, std::string& Why)
 {
 	Holder ignored = Holder::None;
