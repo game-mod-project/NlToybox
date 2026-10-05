@@ -12,6 +12,7 @@ endif()
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
   src/core/AskPath.cpp
+  src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
   src/core/Knobs.cpp

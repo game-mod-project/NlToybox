@@ -2,6 +2,7 @@
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
 #include "core/AskPath.hpp"
+#include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
 #include "core/Knobs.hpp"
@@ -903,6 +904,37 @@ int main(int argc, char** argv)
 				g_Failed++;
 			}
 		}
+	});
+
+
+	Test("호출 기록: 처음 몇 개와 처음 보는 꼴만 글로 남긴다", [] {
+		const int one[] = { 0 }, two[] = { 0, 1 };
+		CHECK(ShapeKey(one, 1) != ShapeKey(two, 2) && ShapeKey(one, 1) == ShapeKey(one, 1) && ShapeKey(nullptr, 0) != ShapeKey(one, 1));
+		CallLog log(2, 10);
+		const uint64_t a = ShapeKey(one, 1), b = ShapeKey(two, 2);
+		CHECK(log.Note(a) == 1);
+		log.Sample(1, a, "(number)", "(50)", "undefined");
+		CHECK(log.Note(a) == 2);
+		log.Sample(2, a, "(number)", "(60)", "undefined");
+		CHECK(log.Note(a) == 0 && log.Note(a) == 0);				// 셋째부터는 세기만 한다
+		CHECK(log.Note(b) == 5);									// 처음 보는 꼴은 남긴다
+		log.Sample(5, b, "(number, string)", "(-20, \"tax\")", "1");
+		CHECK(log.Calls() == 5 && log.ShapeCount() == 2);
+		CHECK_STR(log.Format("  "), "  calls 5, shapes 2\n  shape (number) x4\n  shape (number, string) x1\n"
+			"  #1 (50) -> undefined\n  #2 (60) -> undefined\n  #5 (-20, \"tax\") -> 1\n");
+		log.Clear();
+		CHECK(log.Calls() == 0 && log.Note(a) == 1);
+	});
+
+	Test("호출 기록: 글로 남기는 수에 한도가 있다", [] {
+		CallLog log(100, 3);
+		const int kind[] = { 0 };
+		const uint64_t key = ShapeKey(kind, 1);
+		for (int i = 0; i < 10; i++)
+			if (const size_t index = log.Note(key))
+				log.Sample(index, key, "(number)", "(1)", "undefined");
+		CHECK(log.Calls() == 10);
+		CHECK(log.Format("").find("#3 ") != std::string::npos && log.Format("").find("#4 ") == std::string::npos);
 	});
 
 
