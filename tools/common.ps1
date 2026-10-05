@@ -94,6 +94,12 @@ function Get-NlDataSnapshotDir {
     Join-Path (Get-NlRepoRoot) "backups\data\$((Get-NlExeInfo).Version)"
 }
 
+# 데이터 오버레이의 상태(마지막에 입힌 프리셋과 그때 쓴 파일의 해시)를 두는 곳. 게임 버전별로 나눈다.
+# 스냅샷 폴더 안에 두지 않는다: data-restore.ps1 은 스냅샷 폴더의 모든 파일을 게임 폴더로 복사한다.
+function Get-NlOverlayStateDir {
+    Join-Path (Get-NlRepoRoot) "backups\overlay\$((Get-NlExeInfo).Version)"
+}
+
 # 세이브·설정 폴더. 이 레포의 도구는 여기에 쓰지 않는다(읽어서 사본을 뜰 뿐이다). 시험은 NORLAND_SAVES_DIR 로 바꾼다.
 function Get-NlSavesDir {
     if ($env:NORLAND_SAVES_DIR) { $env:NORLAND_SAVES_DIR } else { Join-Path $env:LOCALAPPDATA 'Strategy' }
