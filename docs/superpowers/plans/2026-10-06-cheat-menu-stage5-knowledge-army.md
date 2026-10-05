@@ -70,6 +70,12 @@
 - [ ] 확인 실행: 적재 판정, 새 항목마다 효과를 본다(값, 게임의 화면).
 - [ ] `research/12`, `CLAUDE.md`, `README.md`, 스펙 §8·§10. 빌드·시험 넷·적재 판정 뒤 `git merge --no-ff feat/cheat-knowledge-army` → `develop`.
 
+### 결과 (2026-10-06)
+
+- Task 1: 조사 실행 한 번(`stage5-session1`). 답은 `research/12-knowledge-army.md`. 군대는 재지 못했다(세이브에 병영과 병사가 없다).
+- Task 2: 지식·아이템 패널, 명령 넷(`knowledge_all`, `knowledge_add`, `money_add`, `item_add`), 표의 연구 시간 배율(모듈 0.11.0, 커밋 `a546c6f`).
+- Task 3: 독립 검토와 확인 실행(`stage5-session2`). 결과는 `research/12`의 "확인 실행".
+
 ## Self-Review
 
 - **스펙 대조**: §8 의 지식 두 줄, 아이템 한 줄, 군대·전투 네 줄이 Task 1·2 에 있다. 이미 표에 있는 전투 스위치의 확인은 전투가 있는 세이브가 있어야 한다(없으면 다음으로 넘긴다).

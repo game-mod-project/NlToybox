@@ -320,8 +320,9 @@ namespace NlCore
 			const auto name = command.Options.find("name");
 			if (name != command.Options.end())
 				person.Text = name->second;
-			if (NeedsIndex(person.Act) && (person.Index < 0 || person.Index >= IndexLimit(person.Act)))
-				return fail(std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(IndexLimit(person.Act) - 1) + ">");
+			const int first = person.Act == PersonAct::ItemAdd ? 1 : 0;		// 0 번 자원은 건드리지 않는다
+			if (NeedsIndex(person.Act) && (person.Index < first || person.Index >= IndexLimit(person.Act)))
+				return fail(std::string("person ") + tokens[2] + " needs index=<" + std::to_string(first) + ".." + std::to_string(IndexLimit(person.Act) - 1) + ">");
 			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
 				return fail(std::string("person ") + tokens[2] + " needs name=<name>");
 			const bool trait = person.Act == PersonAct::TraitAdd || person.Act == PersonAct::TraitRemove;

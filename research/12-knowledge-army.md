@@ -49,7 +49,23 @@
 - 이름만 봤다: `…__solders_barracks_hiring_manager`(`SoldiersBarracksHiringManager`: `try_to_hire(인자 4)`, `instant_spawn_hired_mercenaries(인자 3)`, `get_hiring_time(인자 1)`,
   `__refresh_mercenary_market()`), `…__soldiers_barracks_manager`(`add_soldier`, `fire`, `get_array_of_soldiers`), `…__solders_barracks_new_army_manager`(`add_soldier`, `create_squads`),
   이름 있는 스크립트 `debug_spawn_army`, `rebellion_debug_spawn_player_soldier`, `get_army_strength`.
-- 병사가 있는 세이브에서 다시 잰다.
+- 기계어로 읽은 인자 수(게임 없이): `gml_Script_rebellion_debug_spawn_player_soldier`는 인자를 하나까지(생략할 수 있다. 직접 호출 1곳),
+  `gml_Script_debug_spawn_army`는 여섯까지(직접 호출 8곳), `gml_Script_get_army_strength`는 하나, `battle_squad_max_size`는 없음(직접 호출 0곳).
+  병사를 만드는 첫 후보는 인자 없이 부르는 `rebellion_debug_spawn_player_soldier()`다(부르지 않았다. 다음 조사의 맨 뒤에 따로 부른다).
+- 병사가 있는 세이브에서, 또는 위의 소환 함수로 병사를 만든 뒤 다시 잰다.
+
+## 확인 실행 (모듈 0.11.0, 2026-10-06)
+
+실행 묶음 `stage5-session2`. 인물 패널과 같은 길(원격 `person …`)로 했다.
+
+| 한 것 | 본 것 |
+|---|---|
+| `knowledge_add name=joy_of_education` 두 번 | 지식 3 → 4, 두 번째는 "이미 가진 지식입니다". 없는 이름은 거부 |
+| `knowledge_all`(왕) | 지식 1 → 121. 주민에게는 "지식을 갖는 사람이 아닙니다" |
+| `lords knowledge_all` | 5/5 |
+| `money_add` +1000, −99999, +493 | 소지금 493 → 1493 → 0(가진 것까지만 뺀다) → 493. `change_money(변화량)`가 먹는다 |
+| `item_add` 나무 +50, 철 +7, 나무 −20 | `__inventory.__resources[1]` 30, `[4]` 7: 그 배열이 `get`·`change`가 다루는 자리다 |
+| 표의 "연구 시간 배율" 켜기 | 훅이 걸렸다(`x0.1`). 모든 영주가 모든 지식을 가져 연구가 없었다. 효과는 보지 못했다 |
 
 ## 이 실행이 게임에 남긴 것
 

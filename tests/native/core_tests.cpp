@@ -1378,6 +1378,39 @@ int main(int argc, char** argv)
 			&& !BulkAllowed("lords", PersonAct::ItemAdd) && BulkAllowed("25556c3312bce178", PersonAct::ItemAdd));
 	});
 
+	Test("인물: 소지품의 번호는 1부터, 착용 중인 장비는 빼지 않는다", [] {
+		std::string why;
+		PersonCommand c;
+		c.Who = "25556c3312bce178";
+		c.Act = PersonAct::ItemAdd;
+		c.Amount = 5;
+		c.Index = 0;				// 0 번(룬)은 창도 내지 않는다. 원격으로도 건드리지 않는다
+		CHECK(!CheckPersonCommand(c, why) && !why.empty());
+		c.Index = 1;
+		CHECK(CheckPersonCommand(c, why));
+		c.Index = 199;
+		CHECK(CheckPersonCommand(c, why));
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=0 amount=5").Error.empty());
+
+		// "0 으로" 단추는 -k_GiftMax 를 보낸다(가진 것까지만 빠진다). 그 수는 받아야 하고, 그것을 넘는 수는 받지 않는다.
+		c.Index = 1;
+		c.Amount = -k_GiftMax;
+		CHECK(CheckPersonCommand(c, why));
+		c.Amount = k_GiftMax;
+		CHECK(CheckPersonCommand(c, why));
+		c.Amount = k_GiftMax + 1;
+		CHECK(!CheckPersonCommand(c, why));
+		c.Amount = -(k_GiftMax + 1);
+		CHECK(!CheckPersonCommand(c, why));
+
+		// 착용 중인 장비의 자원 번호(__equipment.__cached_armor·first_arm·second_arm 의 __resource. 없으면 -1 이나 읽지 못한 수).
+		// 그 칸은 소지품에서 빼지 않는다: 수만 줄고 착용은 그대로라 어긋난다(게임이 어떻게 받는지 재지 않았다).
+		const std::vector<double> equipped = { 6, 10, -1 };
+		CHECK(IsEquipped(6, equipped) && IsEquipped(10, equipped));
+		CHECK(!IsEquipped(1, equipped) && !IsEquipped(-1, equipped) && !IsEquipped(0, {}));
+		CHECK(!IsEquipped(6, { -1e9, std::numeric_limits<double>::quiet_NaN() }));
+	});
+
 	Test("인물: 주는 수는 정수로, 가진 것보다 많이 빼지 않는다", [] {
 		double delta = 0;
 		CHECK(GiftDelta(493, 1000, delta) && delta == 1000);

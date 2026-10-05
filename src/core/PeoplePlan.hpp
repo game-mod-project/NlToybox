@@ -25,7 +25,7 @@ namespace NlCore
 	constexpr double k_FillAll = 1e9;		// "상한까지 채운다"로 보내는 수(NeedValue 가 상한으로 당긴다). 읽은 상한을 보내지 않는다: 읽지 못했으면 0 이 쓰인다
 
 	constexpr double k_GiftMax = 1e6;		// 소지금·소지품을 한 번에 주거나 빼는 수의 한도
-	constexpr int k_ItemIndexMax = 200;		// 자원 번호의 한도(실제 자원의 수는 부르는 쪽이 게임에서 읽어 본다. 39개였다)
+	constexpr int k_ItemIndexMax = 200;		// 자원 번호의 한도(실제 칸의 수는 부르는 쪽이 그 사람의 소지품에서 읽어 본다. 39개였다). 0 번(룬)은 받지 않는다
 
 	// KnowledgeAll: 모든 지식을 준다. KnowledgeAdd: 이름으로 지식 하나를 준다. MoneyAdd: 소지금을 더하거나 뺀다. ItemAdd: 소지품의 자원을 더하거나 뺀다(research/12).
 	enum class PersonAct
@@ -61,6 +61,9 @@ namespace NlCore
 	bool IsBulkWho(const std::string& Who);
 	// 그 대상에게 그 일을 해도 되는가. 한 사람에게는 무엇이든. 여럿에게는 능력치 최대·욕구·행복·치료, 영주 전원에게는 모든 지식도.
 	bool BulkAllowed(const std::string& Who, PersonAct Act);
+
+	// 그 자원 번호가 착용 중인 장비인가. Equipped: 착용 중인 것들의 자원 번호(없는 자리는 음수나 수가 아닌 값).
+	bool IsEquipped(int Index, const std::vector<double>& Equipped);
 
 	// 소지금·소지품에 더할 정수. 가진 것보다 많이 빼지 않는다(0 아래로 내려가지 않는다). 할 것이 없거나(0) 수가 아니면 거짓.
 	bool GiftDelta(double Current, double Asked, double& Delta);

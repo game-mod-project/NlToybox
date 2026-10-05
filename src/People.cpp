@@ -44,6 +44,7 @@ namespace
 		std::vector<std::string> Traits;
 		double Money = k_Unknown, KnowledgeCount = k_Unknown;		// 소지금, 가진 지식의 수(지식을 갖지 않는 사람은 k_Unknown)
 		std::vector<double> Items;									// 소지품: 자원 번호 → 수
+		std::vector<double> Equipped;								// 착용 중인 장비의 자원 번호(갑옷, 첫째 손, 둘째 손. 없으면 음수)
 	};
 
 	struct KnowledgeName
@@ -78,6 +79,7 @@ namespace
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
 	char g_KnowledgeFilter[48] = "";
+	bool g_BulkKnowledgeArmed = false;	// "영주 전원에게 모든 지식"은 이것을 켠 뒤에만 눌린다(되돌릴 수 없다)
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
 	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
@@ -176,7 +178,14 @@ namespace
 		g_Now.Resources.clear();
 		if (NlAccess::Read(NlCore::ParseAskPath(k_ResourceCaptions), captions, why) && captions.IsArray())
 			NlAccess::ForEachChild(captions, Holder::Array, [&](const PathStep& step, const RValue& caption) {
-				g_Now.Resources.push_back(caption.IsString() ? NlCore::ResourceLabel(NlCore::ResourceKey(caption.ToString())) : "#" + Shortest(step.Index));
+				// 번호의 자리에 놓는다. 읽지 못해 건너뛴 칸이 있어도 이름과 번호가 어긋나지 않는다.
+				const size_t at = step.Index >= 0 ? static_cast<size_t>(step.Index) : g_Now.Resources.size();
+				if (at >= 1000)
+					return false;
+				while (g_Now.Resources.size() <= at)
+					g_Now.Resources.push_back("#" + std::to_string(g_Now.Resources.size()));
+				if (caption.IsString())
+					g_Now.Resources[at] = NlCore::ResourceLabel(NlCore::ResourceKey(caption.ToString()));
 				return true;
 			});
 		Log("people: " + std::to_string(g_Now.Knowledge.size()) + " knowledge names, " + std::to_string(g_Now.Resources.size()) + " resources");
@@ -320,6 +329,18 @@ namespace
 		});
 	}
 
+	// 착용 중인 장비의 자원 번호들(값 읽기). __soul.__equipment.__cached_armor·__cached_first_arm·__cached_second_arm 의 __resource(research/12: 6, 10, -1).
+	void ReadEquipped(const RValue& Soul, std::vector<double>& Out)
+	{
+		Out.clear();
+		for (const char* slot : { "__cached_armor", "__cached_first_arm", "__cached_second_arm" })
+		{
+			double resource = -1;
+			FollowNumber(Soul, { { '.', "__equipment", 0 }, { '.', slot, 0 }, { '.', "__resource", 0 } }, resource);
+			Out.push_back(resource);
+		}
+	}
+
 	// 한 사람의 값을 읽는다.
 	bool ReadDetail(const PersonRow& Row, Detail& Out)
 	{
@@ -354,6 +375,7 @@ namespace
 		// 소지금과 소지품은 값으로 읽는다. 가진 지식의 수는 ComponentKnowledge.get_knowledge_count()(인자 없음. 3, 4, 121 을 돌려줬다).
 		FollowNumber(soul, { { '.', "__inventory", 0 }, { '.', "__money", 0 } }, Out.Money);
 		ReadNumbers(soul, { { '.', "__inventory", 0 }, { '.', "__resources", 0 } }, Out.Items);
+		ReadEquipped(soul, Out.Equipped);
 		CallNumber(base + ".__character_soul.__knowledge.get_knowledge_count", Out.KnowledgeCount);
 		Out.Ready = true;
 		return true;
@@ -630,9 +652,18 @@ namespace
 		}
 		case PersonAct::ItemAdd:
 		{
-			if (static_cast<size_t>(C.Index) >= g_Now.Resources.size())
+			// 한도는 그 사람의 소지품 칸의 수다(영주에서 39칸을 봤다. 주민의 것은 재지 않았다).
+			std::vector<double> items, equipped;
+			ReadNumbers(soul_value, { { '.', "__inventory", 0 }, { '.', "__resources", 0 } }, items);
+			if (static_cast<size_t>(C.Index) >= items.size() || static_cast<size_t>(C.Index) >= g_Now.Resources.size())
 			{
-				Note = "없는 자원입니다";
+				Note = "그 사람에게 없는 자원 칸입니다";
+				return false;
+			}
+			ReadEquipped(soul_value, equipped);
+			if (C.Amount < 0 && NlCore::IsEquipped(C.Index, equipped))
+			{
+				Note = "착용 중인 장비는 소지품에서 빼지 않습니다";		// 수만 줄고 착용은 그대로라 어긋난다
 				return false;
 			}
 			// ComponentInventory.get(자원 번호) -> 수, change(자원 번호, 변화량): 게임이 (수), (수, 수)로 불렀다. change(1, 50) 뒤 get(1) 이 50 이었다.
@@ -1162,10 +1193,11 @@ void NlPeople::DrawKnowledge()
 		return;
 
 	const PersonRow* row = DrawWho(true);		// 지식은 영주가 가진다
+	if (row && !(NlCore::IsPlayers(*row) && row->Character))
+		row = nullptr;							// 다른 패널에서 주민이나 손님을 골라 둔 채 왔다
 	ImGui::BeginChild("one", ImVec2(0, 0));
-	if (ImGui::Button("영주 전원에게 모든 지식 주기"))
-		Push(PersonAct::KnowledgeAll, "lords");
-	Hint("지식은 영주가 가집니다. 준 지식은 되돌릴 수 없고 세이브에 남습니다. 교과서 지식은 능력치도 올립니다. 모든 지식을 가진 영주가 하나 있으면 지식으로 잠긴 건물이 풀립니다.");
+	Hint("지식은 영주가 가집니다. 준 지식은 되돌릴 수 없고 세이브에 남습니다. 교과서 지식은 능력치도 올리고 재능과 별명이 붙을 수 있습니다. "
+		"모든 지식을 가진 영주가 있으면 지식으로 잠겨 있던 건물(창고, 사원, 무기고에서 봤습니다)을 지을 수 있습니다.");
 	if (!row)
 		ImGui::TextDisabled("왼쪽에서 영주를 고르세요.");
 	else if (!DetailPending(*row))
@@ -1202,6 +1234,18 @@ void NlPeople::DrawKnowledge()
 				ImGui::TextDisabled("그런 이름의 지식이 없습니다(화면의 이름이나 게임의 영문 이름. 예: 광산, mine).");
 		}
 	}
+
+	// 영주 전원에게 주는 것은 맨 아래에 따로, 두 단계로 둔다(한 번의 잘못된 클릭으로 모든 영주가 바뀌지 않게).
+	ImGui::SeparatorText("영주 전원");
+	ImGui::Checkbox("되돌릴 수 없다는 것을 압니다", &g_BulkKnowledgeArmed);
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!g_BulkKnowledgeArmed);
+	if (ImGui::Button("영주 전원에게 모든 지식 주기"))
+	{
+		Push(PersonAct::KnowledgeAll, "lords");
+		g_BulkKnowledgeArmed = false;
+	}
+	ImGui::EndDisabled();
 	DrawLast();
 	ImGui::EndChild();
 }
@@ -1229,7 +1273,8 @@ void NlPeople::DrawItems()
 				Push(PersonAct::MoneyAdd, who, -1, amount);
 			ImGui::PopID();
 		}
-		Hint("소지품과 소지금은 게임의 함수로 바꿉니다(게임의 인물 창에 보입니다). 영지 창고의 자원은 '경제'에 있습니다. 장비는 아직 없습니다.");
+		Hint("소지품과 소지금은 게임의 함수로 바꿉니다(게임의 인물 창에 보입니다). 세이브에 남습니다. 영지 창고의 자원은 '경제'에 있습니다. "
+			"갑옷과 무기는 수만 바뀌고 착용은 바뀌지 않습니다. 착용 중인 것은 뺄 수 없습니다.");
 
 		ImGui::SeparatorText("소지품");
 		if (ImGui::BeginTable("items", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
@@ -1249,7 +1294,7 @@ void NlPeople::DrawItems()
 						Push(PersonAct::ItemAdd, who, static_cast<int>(i), amount);
 					ImGui::SameLine();
 				}
-				ImGui::BeginDisabled(!(one.Items[i] > 0));
+				ImGui::BeginDisabled(!(one.Items[i] > 0) || NlCore::IsEquipped(static_cast<int>(i), one.Equipped));		// 착용 중인 장비는 빼지 않는다
 				if (ImGui::SmallButton("0 으로"))
 					Push(PersonAct::ItemAdd, who, static_cast<int>(i), -NlCore::k_GiftMax);
 				ImGui::EndDisabled();
