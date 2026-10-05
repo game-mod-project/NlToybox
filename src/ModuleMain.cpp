@@ -5,6 +5,8 @@
 #include <YYTK_Shared.hpp>
 #include "Dump.hpp"
 #include "Game.hpp"
+#include "Tweaks.hpp"
+#include "Ui.hpp"
 
 #include <atomic>
 #include <fstream>
@@ -15,7 +17,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.2.0";
+	constexpr const char* k_Version = "0.3.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -80,13 +82,15 @@ namespace
 	{
 		ProbeOnce("object_call");
 		NlDump::Tick(std::get<2>(CodeContext.Arguments()));
+		NlUi::GameTick();
+		NlTweaks::GameTick();
 	}
 
 	// 게임 창이 메시지를 받을 때마다 온다.
 	void WndProcCallback(FWWndProc& WndProcContext)
 	{
-		UNREFERENCED_PARAMETER(WndProcContext);
 		ProbeOnce("wndproc");
+		NlUi::WndProc(WndProcContext);
 	}
 
 	AurieStatus Register(AurieModule* Module, EventTriggers Trigger, PVOID Routine, const char* Name)
@@ -127,6 +131,9 @@ EXPORTED AurieStatus ModuleInitialize(
 	// 요청 파일이 있을 때만 덤프를 준비한다 (스펙: 데이터 오버레이 §3.2, §3.7).
 	NlGame::Init(g_Yytk);
 	NlDump::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
+	NlUi::Init(Module, module_dir, [](const std::string& Line) { LogLine(Line); });
+	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
+	NlUi::SetContent(NlTweaks::Draw);
 
 	AurieStatus status = Register(Module, EVENT_OBJECT_CALL, CodeCallback, "object_call");
 	if (!AurieSuccess(status))

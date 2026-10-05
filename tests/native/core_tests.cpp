@@ -1,6 +1,7 @@
 // 러너에 기대지 않는 코어(src/core)의 시험. 게임을 켜지 않는다.
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
+#include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Request.hpp"
 #include "core/Schedule.hpp"
@@ -11,6 +12,7 @@
 #include <filesystem>
 #include <fstream>
 #include <limits>
+#include <map>
 #include <sstream>
 #include <string>
 
@@ -230,6 +232,44 @@ int main(int argc, char** argv)
 		CHECK_STR(paths.Path(item), "global.a[3]");
 		CHECK_STR(paths.Path(root), "global");
 		CHECK_STR(paths.Path(-1), "");
+	});
+
+	Test("배율: 정수였던 값은 정수로 맞추고 반은 올린다", [] {
+		CHECK(Scale(30, 0.5) == 15);
+		CHECK(Scale(5, 0.5) == 3);			// 2.5 는 3
+		CHECK(Scale(15, 0.5) == 8);			// 7.5 는 8
+		CHECK(Scale(300, 3) == 900);
+		CHECK(Scale(10, 1) == 10);
+		CHECK(Scale(-6, 2) == -12);
+	});
+
+	Test("배율: 0 보다 큰 정수는 0 이 되지 않는다", [] {
+		CHECK(Scale(5, 0.05) == 1);
+		CHECK(Scale(1, 0.1) == 1);
+		CHECK(Scale(0, 3) == 0);			// 원래 0 인 값은 0 이다
+	});
+
+	Test("배율: 소수였던 값은 그대로 곱한다", [] {
+		CHECK(Scale(0.5, 3) == 1.5);
+		CHECK(Scale(2.5, 0.5) == 1.25);
+	});
+
+	Test("배율은 허용 범위 안으로 당긴다", [] {
+		CHECK(ClampFactor(0) == k_MinFactor);
+		CHECK(ClampFactor(-3) == k_MinFactor);
+		CHECK(ClampFactor(1000) == k_MaxFactor);
+		CHECK(ClampFactor(0.5) == 0.5);
+		CHECK(ClampFactor(std::nan("")) == 1);
+	});
+
+	Test("설정 파일: 쓴 것을 그대로 읽고, 읽을 수 없는 줄은 버린다", [] {
+		std::istringstream in("# 주석\nbuilding_cost=0.5\n start_resources = 3 \nbroken\nbad=abc\nhuge=999\n=1\n");
+		const std::map<std::string, double> values = ParseSettings(in);
+		CHECK(values.size() == 3);
+		CHECK(values.at("building_cost") == 0.5 && values.at("start_resources") == 3 && values.at("huge") == k_MaxFactor);
+
+		std::istringstream again(FormatSettings(values));
+		CHECK(ParseSettings(again) == values);
 	});
 
 	// 요청 파일의 오타로 게임 실행 한 번을 버리지 않는다.

@@ -24,6 +24,11 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 
 `check-load.ps1`은 게임을 켜고 `mods\Aurie\NlToyBox.log`를 읽어 `PASS`/`FAIL`을 낸 뒤 게임을 끈다.
 
+## 게임 안에서 배율 조절하기
+
+모듈을 놓고(`setup-aurie.ps1`, `build.ps1`, `deploy.ps1`) 게임을 켠 뒤 **F8**을 누르면 모드창이 뜬다.
+슬라이더로 배율을 바꾸면 실행 중인 게임의 값에 바로 써 넣는다. 설정은 자동으로 저장된다.
+
 ## 데이터 파일에 프리셋 입히기
 
 모듈 없이도 된다(exe를 패치하지 않는다). 게임을 끈 상태에서:
@@ -53,4 +58,5 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 - `research/00-game-structure.md` — 게임 구조와 실측 기록
 - `research/03-data-files.md` — 데이터 파일의 모양과 키별 근거
 - `research/04-overlay-verify.md` — 프리셋의 값이 런타임에 올라오는지 잰 결과
+- `research/05-mod-window.md` — 게임 안의 모드창
 - `CLAUDE.md` — 레포 규칙

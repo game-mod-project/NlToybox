@@ -39,7 +39,9 @@ $ours = @(
     'mods\Aurie\NlToyBox.dll',
     'mods\Aurie\NlToyBox.log',
     'mods\Aurie\NlToyBox.probe.txt',
-    'mods\Aurie\NlToyBox.dump.json'
+    'mods\Aurie\NlToyBox.dump.json',
+    'mods\Aurie\NlToyBox.ui.txt',
+    'mods\Aurie\NlToyBox.ui.bmp'
 )
 foreach ($rel in $ours) {
     $p = Join-Path $gameDir $rel
