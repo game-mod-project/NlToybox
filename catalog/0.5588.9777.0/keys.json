@@ -90,7 +90,7 @@
       "paths": ["group_cooldown_days.*", "group_min_spawn_days.EPIDEMY", "group_super_priority_days.EPIDEMY"],
       "runtime": "SEEN",
       "effect": "UNKNOWN",
-      "note": "group_cooldown_days 의 나머지 10개는 o_data 의 같은 자리에 같은 값이 있다. EPIDEMY 의 두 값은 ds_map 의 EPIDEMY.__min_spawn_day(15), __super_priority_days(30) 로 있다 (research/03)"
+      "note": "group_cooldown_days 의 나머지 10개는 o_data 의 같은 자리에 같은 값이 있다. EPIDEMY 의 두 값은 ds_map 의 EPIDEMY.__min_spawn_day, __super_priority_days 에 파일과 같은 값으로 있다. 런타임 이름이 파일의 키와 다르고 흔한 수라, 이 둘의 근거는 다른 SEEN 보다 약하다 (research/03)"
     },
     {
       "file": "director_params.json",

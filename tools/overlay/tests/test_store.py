@@ -1,5 +1,6 @@
 """store.py 의 시험. 임시 폴더의 가짜 게임으로 돈다."""
 import json
+import os
 import pathlib
 import sys
 import tempfile
@@ -9,6 +10,7 @@ import unittest.mock
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import support
 import catalog
+import compose
 import preset
 import store
 from store import StoreError
@@ -123,10 +125,36 @@ class StoreTests(unittest.TestCase):
         self.assertEqual(support.game_bytes(self.dirs), applied)
 
     def test_a_preset_that_cannot_be_applied_writes_nothing(self):
-        with self.assertRaises(Exception):
+        with self.assertRaises(compose.ComposeError):
             self.apply(make({"path": "budget_money", "set": 5000}, {"path": "no_such_key", "set": 1}))
         self.assertEqual(support.game_bytes(self.dirs), self.vanilla)
-        self.assertFalse((self.dirs.state / "state.json").exists())
+        self.assertFalse(self.dirs.state.exists())
+        self.assertFalse(self.dirs.snapshot.exists())                      # 스냅샷도 뜨지 않는다
+
+    def test_only_files_that_change_get_a_snapshot(self):
+        self.apply(BOOKS)                                                  # books/b.json 에는 바뀔 값이 없다
+        self.assertTrue((self.dirs.snapshot / "books" / "a.json").is_file())
+        self.assertFalse((self.dirs.snapshot / "books" / "b.json").exists())
+
+    def test_a_game_file_that_changed_after_it_was_classified_is_not_taken_for_vanilla(self):
+        status = store.classify(self.dirs, self.cat)                       # 이때는 바닐라였다
+        (self.dirs.game / "debug.json").write_bytes(self.vanilla["debug.json"].replace(b"2000", b"2001"))
+        for action in (lambda: store.vanilla_bytes(self.dirs, self.cat, "debug.json", status),
+                       lambda: store.ensure_snapshot(self.dirs, self.cat, "debug.json", status)):
+            with self.assertRaises(StoreError) as caught:
+                action()
+            self.assertIn("바뀌었다", str(caught.exception))
+        self.assertFalse(self.dirs.snapshot.exists())
+
+    def test_restore_also_brings_back_the_modification_time(self):
+        target = self.dirs.game / "debug.json"
+        steam = 1_700_000_000_000_000_000                                  # Steam 이 파일을 쓴 때
+        os.utime(target, ns=(steam, steam))
+        self.apply(GOLD)
+        self.assertEqual((self.dirs.snapshot / "debug.json").stat().st_mtime_ns, steam)
+        self.assertNotEqual(target.stat().st_mtime_ns, steam)              # 고친 파일은 지금 쓴 것이다
+        store.restore(self.dirs, self.cat, support.VERSION)
+        self.assertEqual(target.stat().st_mtime_ns, steam)
 
     def test_plan_writes_nothing(self):
         status, data, edits = store.plan(self.dirs, self.cat, GOLD, support.VERSION)
@@ -146,15 +174,16 @@ class StoreTests(unittest.TestCase):
             self.apply(GOLD)
             calls = []
 
-            def flaky(path, data):
+            def flaky(path, data, *rest):
                 calls.append(path)
                 if len(calls) == crash_at:
                     raise OSError("죽었다")
-                real(path, data)
+                real(path, data, *rest)
 
             with unittest.mock.patch.object(store, "write", flaky):
-                with self.assertRaises(OSError):
+                with self.assertRaises(StoreError) as caught:
                     self.apply(both)
+            self.assertIn("쓰는 도중에 실패했다", str(caught.exception))
             self.assertNotIn("unknown", store.classify(self.dirs, self.cat).values(), f"{crash_at}번째 쓰기")
             store.restore(self.dirs, self.cat, support.VERSION)
             self.assertEqual(support.game_bytes(self.dirs), self.vanilla, f"{crash_at}번째 쓰기")

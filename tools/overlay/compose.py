@@ -35,8 +35,13 @@ def targets(preset, cat):
 
 
 def multiply(old, factor, rounding):
-    """곱한 값. 유효숫자 12자리로 다듬은 뒤(0.1×3 = 0.30000000000000004 를 0.3 으로) 올림·내림한다."""
-    value = float(format(old * factor, ".12g"))
+    """곱한 값. 1 을 곱하면 그대로이고 정수끼리의 곱은 정확하다. 그 밖에는 유효숫자 15자리로 다듬은 뒤
+    (0.1×3 = 0.30000000000000004 를 0.3 으로) 올림·내림한다."""
+    if factor == 1:
+        return old
+    value = old * factor
+    if isinstance(value, float):
+        value = float(format(value, ".15g"))
     if rounding == "ceil":
         return math.ceil(value)
     if rounding == "floor":

@@ -5,7 +5,8 @@
   restore        이 도구가 쓴 파일을 바닐라로 되돌린다
   status         카탈로그의 파일마다 지금의 상태
   keys           카탈로그의 파일에 든 수를 모두 적는다(경로, 값, 등급). 탭으로 나눈 표
-  pin            keys.json 의 파일 패턴을 게임 폴더에서 찾아 files.json 을 만든다(게임 파일이 바닐라일 때만 쓴다)
+  pin            keys.json 의 파일 패턴을 게임 폴더에서 찾아 지금의 해시로 files.json 을 만든다. 지금의 파일이
+                 바닐라인지는 이 도구가 알 수 없다. Steam 무결성 검사 직후에만 돌린다(프리셋이 입혀져 있으면 거부한다)
   scan           게임 폴더의 모든 *.json 을 읽어 본다. 읽기 전용
   probe-request  프리셋이 쓰는 값을 런타임에서 찾는 요청 파일을 만든다
   verify         덤프에서 프리셋의 값을 찾아 판정한다
@@ -74,9 +75,22 @@ def cmd_status(args):
         if name != "vanilla":
             for rel in rels:
                 print(f"    {rel}")
-    applied = any(value == "applied" for value in status.values())
-    print(f"프리셋: {state.get('preset') if applied else '(없음. 바닐라)'}")
-    return 1 if any(value in ("unknown", "missing") for value in status.values()) else 0
+    recorded = sorted(state["files"])
+    applied = sorted(rel for rel, value in status.items() if value == "applied")
+    broken = any(value in ("unknown", "missing") for value in status.values())
+    if applied and applied != recorded:
+        # apply 가 도중에 실패했다: 상태에는 적혔는데 아직 바닐라인 파일이 있다
+        print(f"프리셋: {state.get('preset')} — 부분 적용이다(상태에 적힌 {len(recorded)}개 가운데 {len(applied)}개만 입혀져 있다). "
+              "다시 apply 하거나 restore 로 되돌린다")
+        return 1
+    if broken:
+        print("프리셋: (알 수 없다. 모르는 파일이나 없는 파일이 있다)")
+        return 1
+    if applied:
+        print(f"프리셋: {state.get('preset')}")
+    else:
+        print("프리셋: (없음. 바닐라)" + (f" — 상태 파일에는 {state.get('preset')} 이 남아 있다(밖에서 되돌린 것이다)" if recorded else ""))
+    return 0
 
 
 def cmd_keys(args):
@@ -87,7 +101,7 @@ def cmd_keys(args):
     for rel in sorted(cat.files):
         if args.file and not catalog.file_matches(args.file, rel):
             continue
-        _, text = jsonedit.decode(store.vanilla_bytes(dirs, cat, rel, status, False))
+        _, text = jsonedit.decode(store.vanilla_bytes(dirs, cat, rel, status))
         for slot in jsonedit.scan(text):
             if slot.kind != "number":
                 continue
@@ -111,6 +125,15 @@ def cmd_pin(args):
     version, groups = catalog.parse_keys(catalog.read_json(directory / "keys.json"))
     if version != args.game_version:
         raise OverlayError(f"keys.json 은 {version} 의 것이고 게임은 {args.game_version} 이다")
+    # 프리셋이 입혀진 채 핀하면 고친 파일이 바닐라로 적힌다. 이 버전이든 옛 버전이든 상태에 파일이 남아 있으면 하지 않는다.
+    for state in sorted(pathlib.Path(args.state_dir).parent.glob(f"*/{store.STATE_NAME}")):
+        try:
+            leftover = json.loads(state.read_text(encoding="utf-8")).get("files")
+        except (OSError, ValueError, AttributeError):
+            leftover = True
+        if leftover:
+            raise OverlayError(f"프리셋이 입혀져 있다(게임 버전 {state.parent.name} 의 상태: {state}). 지금 핀하면 고친 파일이 바닐라로 적힌다. "
+                               "먼저 restore 한다. 게임이 갱신돼 restore 할 수 없으면 Steam 무결성 검사로 되돌린 뒤 그 상태 파일을 지운다")
     game = pathlib.Path(args.game_dir)
     files = {}
     for group in groups:
@@ -181,16 +204,30 @@ def cmd_probe_request(args):
 def cmd_verify(args):
     cat = catalog.load(args.catalog_dir)
     _, _, edits = store.plan(_dirs(args), cat, presets.load(args.preset), args.game_version)
-    with open(args.dump, encoding="utf-8") as f:
-        dump = json.load(f)
-    counts = {"anchored": 0, "value-only": 0, "absent": 0}
+    try:
+        with open(args.dump, encoding="utf-8") as f:
+            dump = json.load(f)
+        if not isinstance(dump, dict):
+            raise ValueError("객체가 아니다")
+    except (OSError, ValueError) as error:
+        raise OverlayError(f"덤프를 읽을 수 없다: {args.dump}: {error}") from None
+    doubts = verify.problems(dump)
+    for doubt in doubts:
+        print(f"주의: {doubt} — 이 덤프의 '없다'는 믿을 수 없다. 못 찾은 값은 unknown 으로 적는다")
+    counts = {"anchored": 0, "value-only": 0, "absent": 0, "unknown": 0}
     for edit, verdict, where in verify.verdicts(edits, dump):
+        if verdict == "absent" and doubts:
+            verdict = "unknown"
         counts[verdict] += 1
         print(f"{verdict:10}  {edit.file}  {paths.show(edit.path)} = {edit.new_text}")
         for path in where[:5]:
             print(f"              {path}")
-    print(f"anchored {counts['anchored']}, value-only {counts['value-only']}, absent {counts['absent']}")
-    return 1 if counts["absent"] else 0
+        if len(where) > 5:
+            print(f"              … 모두 {len(where)}곳")
+    print(", ".join(f"{name} {count}" for name, count in counts.items()))
+    if edits and not counts["anchored"]:
+        print("주의: anchored 가 하나도 없다. 이 덤프가 이 프리셋의 값을 찾은 것인지(요청 파일, 프리셋이 입혀진 채 켰는지) 확인한다")
+    return 1 if doubts or counts["absent"] or counts["unknown"] or not counts["anchored"] else 0
 
 
 COMMANDS = {"check": cmd_check, "apply": cmd_apply, "restore": cmd_restore, "status": cmd_status, "keys": cmd_keys,

@@ -19,7 +19,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/test-native.ps1`·
   `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests`와 `py -3.14 -m unittest discover -s tools/overlay/tests` 통과,
   `tools/check-load.ps1` 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
-  앞의 넷은 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
+  `check-load.ps1`을 뺀 나머지는 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
 - 머지한 브랜치는 지운다(`git branch -d`).
 
 ## 경로
@@ -115,15 +115,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 게임의 데이터 파일을 쓰는 코드는 `tools/overlay/store.py` 하나다. 바닐라인지는 `catalog/<게임 버전>/files.json`의 SHA256으로
   판정한다. 바닐라도 아니고 이 도구가 마지막에 쓴 것도 아닌 파일이 하나라도 있으면 아무것도 쓰지 않는다.
 - 상태는 `backups\overlay\<게임 버전>\state.json`, 스냅샷은 `backups\data\<게임 버전>\`에 있다(추적 안 함).
+- **`restore-game.ps1`과 `game-status.ps1`은 exe와 `mods\`만 본다.** 데이터 파일이 바닐라인지는 `overlay.ps1 status`로 본다.
+  바닐라로 되돌릴 때는 `overlay.ps1 restore`와 `restore-game.ps1`을 둘 다 돌린다.
+- `apply`가 쓰는 도중에 실패하면(읽기 전용 파일 등) `status`가 "부분 적용"이라고 알린다. 원인을 없애고 다시 `apply`하거나 `restore`한다.
 - 카탈로그의 `runtime` 등급은 이 레포가 이 빌드에서 잰 것만 올린다: 흔치 않은 값을 쓰는 프리셋을 입히고
-  `overlay.ps1 probe-request` → `tools/probe.ps1` → `overlay.ps1 verify`. **`SEEN`은 "반영된다"가 아니다**(같은 이름·값이 런타임에
+  `overlay.ps1 probe-request` → `tools/probe.ps1` → `overlay.ps1 verify`. 값은 게임 JSON 어디에도 없는 수로 고르고, 이미 `VERIFIED`인
+  키 하나를 양성 대조로 함께 바꾼다(`presets/verify-stage1.json`이 본이다). `verify`의 `anchored`만 올린다. **`SEEN`은 "반영된다"가 아니다**(같은 이름·값이 런타임에
   있었을 뿐이고 코드의 기본값과 가려지지 않는다). 커뮤니티의 보고는 `effect_by: community`와 출처로 따로 적는다.
 - 카탈로그와 프리셋에는 게임 파일의 값을 옮겨 적지 않는다(키 이름, 등급, 해시만). 값이 든 표는
   `overlay.ps1 keys -Out refs\registry\<버전>.tsv`로 뽑는다(추적 안 함).
 - 수정기(`tools/overlay/jsonedit.py`)는 값의 글자만 바꾼다. 게임 파일에 한 번도 없던 문법(주석, 작은따옴표, `NaN`, 같은 키의 중복)은
   추측해서 읽지 않고 오류를 낸다. 문법의 근거는 `research/03-data-files.md`.
-- 게임이 갱신되면 그 버전의 카탈로그가 없어 `overlay.ps1`이 거부한다. Steam이 파일을 쓴 직후에 `catalog/<새 버전>/keys.json`을 놓고
-  `overlay.ps1 pin`으로 `files.json`을 만든 뒤 `overlay.ps1 scan`과 `check`로 키가 그대로인지 본다. 등급은 새 빌드에서 다시 잰다.
+- 게임이 갱신되면 그 버전의 카탈로그가 없어 `overlay.ps1`이 거부한다. **Steam 무결성 검사 직후에** `catalog/<새 버전>/keys.json`을 놓고
+  `overlay.ps1 pin`으로 `files.json`을 만든 뒤(프리셋을 입혀 둔 채 갱신됐으면 고친 파일이 남아 있을 수 있다. `pin`은 상태 파일이 남아 있으면 거부한다) `overlay.ps1 scan`과 `check`로 키가 그대로인지 본다. 등급은 새 빌드에서 다시 잰다.
 
 ## 의존
 

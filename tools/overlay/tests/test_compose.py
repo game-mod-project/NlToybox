@@ -46,6 +46,18 @@ class ComposeTests(unittest.TestCase):
         self.assertEqual(compose.multiply(0.1, 3, ""), 0.3)             # 0.30000000000000004 가 아니다
         self.assertEqual(compose.multiply(0.1, 30, "ceil"), 3)          # 3.0000000000000004 를 4 로 올리지 않는다
 
+    def test_multiplying_by_one_gives_back_the_same_number(self):
+        self.assertEqual(compose.multiply(0.20000000298023224, 1, ""), 0.20000000298023224)   # 유효숫자가 12자리를 넘는 값
+        self.assertEqual(compose.multiply(1234567890123, 1, ""), 1234567890123)
+        long_value = DEBUG.replace('"factor": 0.5', '"factor": 0.20000000298023224')
+        p = preset.parse({"name": "T", "game_version": support.VERSION, "changes": [change("factor", mul=1)]})
+        self.assertEqual(compose.compose(p, support.make_catalog(), {"debug.json": long_value}), ({}, []))
+
+    def test_mul_keeps_integers_exact_and_floats_to_fifteen_digits(self):
+        self.assertEqual(compose.multiply(1234567890123, 2, ""), 2469135780246)
+        self.assertEqual(compose.multiply(0.20000000298023224, 2, ""), 0.400000005960464)
+        self.assertEqual(compose.multiply(0.7, 3, ""), 2.1)                                    # 2.0999999999999996 이 아니다
+
     def test_a_long_float_is_rewritten_only_when_its_value_changes(self):
         texts, edits = run(change("production_cost.coal", set=0.9))     # 파일에는 0.90000000000000002 로 적혀 있다
         self.assertEqual((texts, edits), ({}, []))

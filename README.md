@@ -36,7 +36,10 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 
 ## 바닐라로 되돌리기
 
-    pwsh -File tools/restore-game.ps1
+    pwsh -File tools/overlay.ps1 restore     # 데이터 파일에 입힌 프리셋
+    pwsh -File tools/restore-game.ps1        # exe 와 mods\
+
+`restore-game.ps1`과 `game-status.ps1`은 exe와 `mods\`만 본다. 데이터 파일의 상태는 `tools/overlay.ps1 status`로 본다.
 
 ## 상태 보기
 
