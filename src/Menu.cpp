@@ -80,6 +80,8 @@ namespace
 			return;
 		}
 
+		// 처음 쓰는 빌트인이 게임을 끝내면 어느 쓰기였는지 남게, 쓰기 전에 한 줄 적는다.
+		Log("poke " + path + ": old " + Shortest(old) + ", writing " + Shortest(wanted));
 		std::string why, why_back;
 		const bool stuck = NlAccess::WriteNumber(path, wanted, why);
 		const bool have = NlAccess::ReadNumber(path, read);
@@ -99,6 +101,7 @@ namespace
 			return;
 		g_TestsDone = true;
 
+		Log("ui tests start");
 		for (const std::string& path : g_Asks)
 			Ask(path);
 		for (const std::string& line : g_Pokes)

@@ -59,6 +59,7 @@ namespace
 	std::vector<NlAccess::RootObject> g_Roots;
 	bool g_Stale = true;				// 다음 틱에 다시 읽는다
 	bool g_FocusBrowse = false;			// 다음에 그릴 때 "훑기" 탭을 앞에 낸다
+	bool g_Trace = false;				// 주소를 옮겼다. 처음 늘어놓을 때 로그에 적는다
 	double g_NextView = 0, g_NextWatch = 0, g_NextLock = 0;
 
 	// 즐겨찾기·잠금
@@ -167,9 +168,27 @@ namespace
 		}
 		if (path.Root == "inst")
 			g_Instances = NlAccess::InstanceCount(path.Object);
+
+		// 주소를 옮긴 뒤 처음 늘어놓을 때 앞뒤로 한 줄씩 적는다. 늘어놓다가 게임이 끝나면 어디였는지 남는다.
+		bool trace = false;
+		if (g_Trace)
+		{
+			YYTK::RValue value;		// 이 함수 안에서만 든다
+			Holder kind = Holder::None;
+			std::string ignored;
+			trace = NlAccess::Open(path, value, kind, ignored);
+			if (trace)
+				Log("explorer view " + g_Address + ": listing");
+		}
+
 		std::string why;
 		if (!NlAccess::List(path, g_As, k_MaxRows, g_Rows, g_Total, why))
 			g_Error = why;
+		if (trace)
+		{
+			g_Trace = false;
+			Log("explorer view " + g_Address + ": " + (g_Error.empty() ? std::to_string(g_Total) + " children" : g_Error));
+		}
 	}
 
 	void Snapshot(Watch& W)
@@ -210,6 +229,7 @@ namespace
 			g_Filter[0] = 0;
 			std::snprintf(g_AddressBox, sizeof(g_AddressBox), "%s", g_Address.c_str());
 			g_Stale = true;
+			g_Trace = true;
 			break;
 
 		case Command::Kind::Refresh:
