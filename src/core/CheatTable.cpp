@@ -87,6 +87,7 @@ namespace NlCore
 
 			// 거래(research/10). 거래 탁자의 상품은 값을 들고 있지 않다. TradeManager 의 buy_default_get(자원)·sell_default_get(자원)이 돌려주는
 			// 기본 가격(__fair_trade_default_price_buy·_sell)에서 그때그때 셈한다(__get_raw_price(방향)). 그 함수가 돌려주는 수에 배율을 곱한다.
+			// 켠 채 그 함수를 부르면 곱한 값이 나온다(룬 100 → 50, 당근 판매 5 → 15, 나무의 시장 깊이 130 → 1300). 상인과의 거래 창에서는 보지 못했다(상단이 없었다).
 			{ "buy_price", Area::Economy, "구매가 배율", "inst:o_game_map_controller.__trade_manager.buy_default_get", HS, 0.5, 1, 0.01, 1, false,
 				"상인에게서 살 때의 기본 가격에 곱한다(0.5 면 반값). 거래 창을 다시 열면 보인다" },
 			{ "sell_price", Area::Economy, "판매가 배율", "inst:o_game_map_controller.__trade_manager.sell_default_get", HS, 2, 1, 1, 50, false,
@@ -103,16 +104,19 @@ namespace NlCore
 
 			// 생산(research/10). 물건 하나를 만드는 데 드는 생산 점수는 resource_production_points_cost_get(자원)이 돌려준다
 			// (o_province_controller.production_cost[자원] × 3600). 그 수에 배율을 곱한다.
-			{ "production_time", Area::Build, "생산 시간 배율", "gml_Script_resource_production_points_cost_get", HS, 0.1, 1, 0.01, 1, false,
+			// 플레이에서 봤다(2026-10-05, 0.9.0): 생산 시간 0.1·작업 효율 5·생산량 5 를 함께 켠 하루에 광산이 다섯 시간이 안 되는 동안 철 1,176개를 만들었다
+			// (바닐라는 시간당 1.4개쯤). 셋 가운데 둘만 먹었다면 많아야 350개다. 따로는 함수 수준에서 봤다: 게임이 받은 비용 1260 => 126, 모은 점수 72초에 107 → 380.
+			{ "production_time", Area::Build, "생산 시간 배율", "gml_Script_resource_production_points_cost_get", HS, 0.1, 1, 0.01, 1, true,
 				"물건 하나를 만드는 데 드는 일의 양에 곱한다(0.1 이면 열 배 빨리 만든다)" },
 			// BuildingComponentProduction.get_worker_base_performance_factor(일꾼) → 1. 생성자의 정적 메서드라 건물이 없어도 이름으로 건다
 			// (이름의 번호는 이 게임 버전의 것이다).
 			{ "worker_performance", Area::Build, "작업 효율 배율",
 				"gml_Script_anon_BuildingComponentProduction_gml_GlobalScript_BuildingComponentProduction_2239513882_BuildingComponentProduction_gml_GlobalScript_BuildingComponentProduction",
-				HS, 5, 0, 1, 20, false, "생산 건물에서 일꾼의 기본 작업 효율에 곱한다" },
+				HS, 5, 0, 1, 20, true, "생산 건물에서 일꾼의 기본 작업 효율에 곱한다" },
 			// 조리법: 건물 종류의 __production.__map_of_production(ds_map: 만드는 자원 → { 재료의 배열, 만들어지는 수 }). src/Production.cpp 가 돌며 쓴다.
-			{ "production_amount", Area::Build, "생산량 배율", "inst:o_building.generic.__production", CS, 2, 0, 1, 100, false,
+			{ "production_amount", Area::Build, "생산량 배율", "inst:o_building.generic.__production", CS, 2, 0, 1, 100, true,
 				"한 번에 만들어지는 수에 곱한다. 끄면 원래 수로 되돌린다" },
+			// 켜면 철·목재가 0 인데도 작업장의 is_can_produce_product(칼)가 참이 되고, 끄면 거짓이 되는 것까지 봤다. 재료가 드는 물건이 실제로 만들어지는 것은 보지 못했다.
 			{ "production_free", Area::Build, "생산 재료 없음", "inst:o_building.generic.__production", C, 1, 0, 0, 0, false,
 				"모든 조리법의 재료를 0 으로 쓴다. 끄면 원래 재료로 되돌린다" },
 

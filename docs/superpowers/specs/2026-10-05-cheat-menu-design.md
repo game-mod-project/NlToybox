@@ -120,12 +120,11 @@ Present 훅 (게임 스레드)                 EVENT_OBJECT_CALL 콜백 (게임 
 | `src/core/CheatTable` | 치트 표(§6): 항목의 이름·영역·주소·종류 | `AskPath` |
 | `src/core/CheatState` | 치트 상태 파일(`NlToyBox.cheats.txt`)을 읽고 쓴다 | 없음 |
 | `src/core/Rate` | 흐름의 빠르기를 잰다(게임 시간이 실제 1초에 얼마나 느는가) | 없음 |
-| `src/core/SpeedTrial` | 게임 속도의 손잡이를 시험으로 고르는 상태 기계(§9). 값을 읽고 쓰는 일은 바깥이 한다 | `Rate` |
-| `src/core/SpeedControl` | 게임 속도를 건다: 흐름 재기, 시험, 배율 쓰기, 되돌리기. 읽고 쓰는 일은 함수로 받는다(가짜 세계로 시험한다) | `Rate`, `SpeedTrial` |
 | `src/Access` | 주소를 따라가 읽고, 쓰고, 자식을 늘어놓는다. 값을 글로 적는다 | 러너, `AskPath` |
 | `src/Search` | 이름·값으로 찾기, 다시 거르기 | `Access` |
 | `src/Explorer` | 탐색기(§7): 훑기, 고치기, 즐겨찾기와 잠금, 찾기 | `Access`, `Search` |
-| `src/Cheats` | 치트 표의 항목을 적용하고(켜기, 수) 영역의 패널을 그린다. 속도는 `SpeedControl`에 맡긴다 | `Access`, `CheatTable`, `SpeedControl` |
+| `src/Cheats` | 치트 표의 항목을 적용하고(켜기, 수, 훅, 배율) 영역의 패널을 그린다. 속도는 게임의 함수로 걸고 흐름은 `Rate`로 잰다 | `Access`, `CheatTable`, `Recorder`, `Rate` |
+| `src/Production` | 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법). 3나-3 | `Access`, `Cheats`, `core/CostBook` |
 | `src/Menu` | 왼쪽 목록과 오른쪽 패널, 상태 줄, 상태 파일 | `Explorer`, `Cheats`, `Tweaks`, `CheatState` |
 
 `src/core`의 것은 `tests/native`에서 시험한다. 기존 `Tweaks`(배율 7개)는 2단계에서는 "배율" 항목으로 그대로 두고 3단계에서 영역으로 옮긴다.
@@ -224,7 +223,7 @@ lock inst:o_character:0.starving_hours=0
 
 ## 8. 메뉴 구조와 영역별 항목
 
-왼쪽 목록: 탐색기 · 경제 · 건설·생산 · 인물 · 영주 · 인구·욕구 · 지식 · 아이템 · 군대·전투 · 외교 · 종교 · 시간 · 월드 · 이벤트 · 유틸 · 프리셋 · 배율(3단계에서 없어진다).
+왼쪽 목록: 탐색기 · 경제 · 건설·생산 · 인물 · 영주 · 인구·욕구 · 지식 · 아이템 · 군대·전투 · 외교 · 종교 · 시간 · 월드 · 이벤트 · 유틸 · 프리셋. ("배율"은 3나-3 에서 없앴다. 배율 7개는 제 영역의 패널에 그린다.)
 아직 채우지 않은 영역은 흐리게 보이고 몇 단계인지 적는다.
 
 "손잡이"는 §2에서 이름을 본 것이다. "찾는다"는 그 단계에서 탐색기의 찾기로 주소를 찾는다는 뜻이다.
@@ -233,12 +232,12 @@ lock inst:o_character:0.starving_hours=0
 |---|---|---|---|
 | 경제 | 금화 추가·설정 | C `budget_money_change`. 금화의 자리는 값으로 찾는다 | 3 |
 | | 자원 추가(전부·하나), 최대치 | A `is_resources_edit_mode`, C `add_resource`, B 창고(`get_warehouse`, `__warehouse`) | 2(A), 3 |
-| | 구매가 감소, 판매가 증가, 거래량 | B `__trade_manager.__fair_trade_default_price_buy/_sell`(배열 39) | 3 |
-| | 세금, 임금, 유지비 | B `__salary_manager_new`, `__economics_manager` 안에서 찾는다 | 3 |
+| | 구매가 감소, 판매가 증가, 거래량 | D 배율: `__trade_manager.buy_default_get`·`sell_default_get`, `__prices_manager.get_market_depth`가 돌려주는 수에 곱한다(`research/10`) | 3 |
+| | 세금, 임금, 유지비 | `__salary_manager_new.__salary[4]`·`__slave_salary[11]`. 조사한 세이브에 값이 없어 재지 못했다(봉신·군대가 있는 세이브에서 다시 본다) | 4 이후 |
 | 건설·생산 | 건설 즉시, 모든 건물 건설 | A `is_instant_build_buildings`, `is_can_build_all_buildings` | 2 |
 | | 건설 시간 | B `o_debug.debug_building_duration_factor` | 2 |
 | | 건설비 무료, 업그레이드 무료·즉시 | B 건설 비용의 자리를 찾는다(`building_resources`의 게임 안 자리). 안 되면 D. C `set_level` | 3 |
-| | 생산량·생산 속도·재료 소비·생산비 | B `o_province_controller.production_cost`(배열 39), 건물의 `c_production`. 소비 0 은 D | 3 |
+| | 생산량·생산 속도·재료 소비·작업 효율 | D 배율: `resource_production_points_cost_get`, `get_worker_base_performance_factor`. B: 조리법(`__production.__map_of_production`)의 수와 재료 | 3 |
 | | 작업 효율, 노동력 무시 | B 건물의 `c_workplace`, `__cached_efficiency` 둘레에서 찾는다. 안 되면 D | 3 |
 | 인물 | 능력치 올리기·내리기·설정·최대, 경험치 | B `__soul` → `get_skills`가 읽는 자리를 찾는다 | 4 |
 | | 건강, 피로, 스트레스, 행복, 충성, 관계, 욕구 | B `get_minds`·`get_motive`가 읽는 자리. 부상·질병은 C `cure_all_disease` | 4 |
@@ -300,7 +299,7 @@ lock inst:o_character:0.starving_hours=0
 | 3가 | 원격 질의(§14)와 호출 기록기. 켜져 있는 게임에 파일로 묻고, 쓰고, 스크립트의 호출을 기록한다 | 메뉴에서 묻기·쓰기·기록·화면 뜨기가 된다. 계획: `plans/2026-10-05-cheat-menu-stage3a-remote.md` |
 | 3나-1 | 경제 패널: 금화와 영지 창고의 자원을 게임의 함수로 바꾼다. 게임 속도를 게임의 함수로 건다. 계획: `plans/2026-10-05-cheat-menu-stage3b-economy.md` | 금화·자원·게임 속도의 효과를 화면에서 봤다(`research/08`. 0.6.1 까지 확인) |
 | 3나-2 | 건설비 무료, 건설 조건 제거, 업그레이드 조건 제거, 즉시 업그레이드. 계획: `plans/2026-10-05-cheat-menu-stage3c-build.md` | 됐다(모듈 0.8.1, `research/09`). 조건은 지식의 판정 함수를 바꿔 풀고, 비용은 건물 종류의 등급별 비용을 0 으로 쓰고, 업그레이드는 게임의 `build_instantly()`로 끝낸다. 사용자가 잠긴 건물을 짓고 자원 없이 올리는 것을 봤다. 건설 창의 잠금 표시 지우기만 확인 전 |
-| 3나-3 | 거래, 임금, 창고 용량, 생산. 기존 배율 7개를 표로 옮긴다. 속도 시험(`SpeedTrial`)의 정리 | 그 항목들의 효과를 본다 |
+| 3나-3 | 거래, 창고 용량, 생산. 배율 7개를 제 영역으로, 속도 시험의 정리. 계획: `plans/2026-10-05-cheat-menu-stage3d-production.md` | 됐다(모듈 0.9.1, `research/10`). 창고 용량과 생산 배율 셋(시간·작업 효율·생산량)은 플레이에서 확인. 거래 배율은 함수까지만(상단이 없었다), 생산 재료 없음은 게임의 판정까지만. 임금·세금·유지비·노동력은 재지 못해 만들지 않았다 |
 | 4 | 인물, 영주, 인구·욕구 | 고른 인물의 편집과 일괄 버튼의 효과를 본다 |
 | 5 | 지식, 아이템, 군대·전투 | 해금, 아이템 지급, 병사·전투 항목의 효과를 본다 |
 | 6 | 외교, 종교, 이벤트, 월드 | 관계 설정, 종교 값, 이벤트 강제 실행, 지도 공개의 효과를 본다 |
