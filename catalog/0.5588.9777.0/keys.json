@@ -1,0 +1,224 @@
+{
+  "game_version": "0.5588.9777.0",
+  "groups": [
+    {
+      "file": "debug_params.json",
+      "paths": ["budget_money"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "2345 로 바꾸자 ds_map 의 budget_money 와, 게임을 시작한 뒤 o_province_controller.default_budget_money 가 2345 가 됐다. 화면의 시작 금화는 3000 이었다. 이 키가 시작 금화를 그대로 정하지는 않는다 (research/02)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": ["product_count.*"],
+      "runtime": "SEEN",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "시작 자원. Steam 글 'Tested some Modding'(DexteR, 2024-07-25, 옛 빌드)이 바꿔서 통했다고 적었다. 이 빌드에서는 효과를 재지 않았다. 런타임: ds_map 에 세 값이 그대로 있다 (research/03)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": [
+        "production_cost.*", "fair_trade.fair_trade_purchase.*", "fair_trade.fair_trade_sale.*",
+        "fair_trade.migrants_limit_dummy", "fair_trade.migrants_1_migrant_hours_reduce",
+        "fair_trade.migrants_1_migrant_hours_min"
+      ],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "note": "메뉴의 ds_map 에 이름과 값이 파일과 같게 있다: 35 + 39 + 39 + 3개 (research/03)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": [
+        "building_duration_factor", "romantic_slowdown_factor", "romantic_decrease_factor", "matching_by_opinion",
+        "dialogue_chitchat_count", "dialogue_random_threshold"
+      ],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "note": "게임을 시작한 뒤 o_debug.debug_<이름> 에 같은 값이 있다 (matching_by_opinion 은 debug_matching_by_opinion_value) (research/03)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": ["building_resources.*[*][1]"],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "건물 101개의 묶음은 메뉴의 ds_map 에 있다. 안의 수는 보지 못했다 (research/03)"
+    },
+    {
+      "file": "debug_params.json",
+      "paths": ["bet.*"],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "찾아보지 않았다"
+    },
+    {
+      "file": "battle_params.json",
+      "paths": ["battle_dodge_base"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "23 으로 바꾸자 ds_map 과, 게임을 시작한 뒤 o_debug.battle_dodge_base 가 23 이 됐다 (research/02)"
+    },
+    {
+      "file": "battle_params.json",
+      "paths": [
+        "battle_dodge_shift_better", "battle_dodge_shift_worse", "soldier_hiring_price_skill_factor",
+        "number_of_most_painful_mind"
+      ],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "note": "게임을 시작한 뒤 o_debug 의 같은 이름에 같은 값이 있다 (research/03)"
+    },
+    {
+      "file": "battle_params.json",
+      "paths": [
+        "debug_right_team_mind_modify", "debug_left_team_mind_modify", "is_hide_extra_traits", "debug_battle.*",
+        "unit_skill_stage.*", "limit.*", "patrol_setup.*", "pain.*", "attack.*.*", "defence.*.*"
+      ],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "스칼라 셋은 o_debug 에 그 이름이 없었다. 나머지는 찾아보지 않았다 (research/03)"
+    },
+    {
+      "file": "director_params.json",
+      "paths": ["group_cooldown_days.EPIDEMY"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "3391 로 바꾸자 ds_map 의 EPIDEMY.__cooldown_days 와 o_data.__game_director_events_data.__params.group_cooldown_days.EPIDEMY 가 3391 이 됐다 (research/02)"
+    },
+    {
+      "file": "director_params.json",
+      "paths": ["group_cooldown_days.*", "group_min_spawn_days.EPIDEMY", "group_super_priority_days.EPIDEMY"],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "note": "group_cooldown_days 의 나머지 10개는 o_data 의 같은 자리에 같은 값이 있다. EPIDEMY 의 두 값은 ds_map 의 EPIDEMY.__min_spawn_day(15), __super_priority_days(30) 로 있다 (research/03)"
+    },
+    {
+      "file": "director_params.json",
+      "paths": [
+        "group_min_spawn_days.*", "group_super_priority_days.*", "events.*.tickets", "events.*.min_population",
+        "events.*.max_population", "events.*.cooldown_days.min", "events.*.cooldown_days.max"
+      ],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "찾아보지 않았다"
+    },
+    {
+      "file": "knowledge/technology/cultural_knowledge/addiction_resist.json",
+      "paths": ["available_parameters[0].population"],
+      "runtime": "VERIFIED",
+      "effect": "UNKNOWN",
+      "note": "3767 로 바꾸자 ds_map 의 addiction_resist.__available_parameters[0].__population 과 o_data.__knowledge_data.__array_of_population_tiers[6] 이 3767 이 됐다 (research/02)"
+    },
+    {
+      "file": "knowledge/technology/textbooks/*.json",
+      "paths": ["upgrade_skill[*].value"],
+      "runtime": "UNSEEN",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "Steam 글 'Any way to edit stats (cheat/hack)?'(2024-08-10, 옛 빌드)이 value 를 99 로 올려 책으로 얻는 경험치가 늘었다고 적었다. 이 빌드에서는 재지 않았다"
+    },
+    {
+      "file": "knowledge/technology/*/*.json",
+      "paths": ["available_parameters[*].population", "technology_effects[*].value", "allow_to_upgrade[*].value"],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "population 은 addiction_resist 한 파일에서만 확인했다. 나머지 파일과 나머지 키는 보지 않았다"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": ["global_map.ai_economy.initial_budget"],
+      "runtime": "VERIFIED",
+      "effect": "TESTED",
+      "effect_by": "nltoybox",
+      "note": "745 로 바꾸자 global.__gameplay_vars.global_map_ai_economy_initial_budget 가 745 가 됐고, 새 게임에서 AI 도시들의 __initial_wealth 가 745 였다 (research/01, 02)"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": [
+        "bribe.give_rings", "free_lord.ring_by_n_levels", "church.max_capacity", "tavern.max_capacity",
+        "pregnancy.from_dummy_chance"
+      ],
+      "runtime": "SEEN",
+      "effect": "TESTED",
+      "effect_by": "community",
+      "note": "Steam 글 'Tested some Modding'(DexteR, 2024-07-25, 옛 빌드)이 바꿔서 통했다고 적었다. 이 빌드에서는 효과를 재지 않았다. 런타임: global.__gameplay_vars 에 이름과 값이 같게 있다 (research/01)"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": [
+        "slave.cost", "slave.sex_dayly_chance", "slave.combat_level_cost", "slave.sex_auto_luck",
+        "slave.pregnant_chance", "slave.slowdown_cost", "slave.without_free_mind_cost", "slave.fertility_cost",
+        "slave.age_cost", "slave.trauma_cost"
+      ],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "experimental": true,
+      "note": "사용자 참조 문서(Norland_Modding_Reference.md §7)의 방침으로 실험 키로 둔다: 값을 크게 바꾸면 충돌했다는 보고가 있다고 한다. 그 보고의 원문은 찾지 못했다"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": [
+        "global_map.trade_paper_cost.easy", "global_map.trade_paper_cost.normal",
+        "global_map.trade_paper_cost.hard", "global_map.ai_economy.gdp_k1",
+        "global_map.ai_economy.soldier_discount", "global_map.ai_economy.soldier_support_price",
+        "global_map.ai_economy.army_budget_factor", "global_map.attack_one_target_cooldown_turns",
+        "global_map.sir_gdp_factor", "global_map.defence_alliance_create_cooldown", "global_map.ai_force.cooldown",
+        "global_map.ai_force.cooldown_before_onboard", "global_map.ai_force.cooldown_faceless",
+        "global_map.vassal.tribute_factor", "global_map.trade_quests_chance", "global_map.ai_king_abuse_chance",
+        "actor.bravery_threshold_loyalty_factor", "actor.battle_skill_increase_in_fight",
+        "actor.nectar_rage_chance_max", "actor.matching_for_love_threshold", "actor.patrol_view_cells",
+        "actor.child.education_exp_factor", "actor.talent_expirience_gain", "squad.banner_size.min",
+        "squad.banner_size.max", "building.open_zoom", "pregnancy.chance", "game.death_chance_mult",
+        "inspection.performance.progressive", "inspection.performance.base_factor", "inspection.performance.base",
+        "executor_work.intimidation_duration", "wolves.max_distance_in_cells", "skill.increase_in_use.command",
+        "skill.increase_in_use.education", "skill.increase_in_use.negotiation", "skill.increase_in_use.oratory",
+        "skill.increase_in_use.management", "skill.increase_in_use.knowledge", "bush.berry_renew_percent",
+        "bush.renew_percent", "render.border_offset", "render.quest_token_size", "render.border_width",
+        "render.border_radius_factor", "render.quest_avatar_scale", "free_lord.stay_duration",
+        "combat_training.exp_per_trainer_level", "combat_training.skill_points", "farm.hop.duration",
+        "farm.hop.grow_cost", "farm.carrot.duration", "farm.carrot.grow_cost", "farm.swede.duration",
+        "farm.swede.grow_cost", "farm.rye.duration", "farm.rye.grow_cost", "genius_king.contempt_strength",
+        "genius_king.gdp_factor", "genius_king.appear_chance", "genius_king.number_on_start",
+        "genius_king.army_multiply_factor", "genius_king.max_number_in_world", "genius_king.army_budget_factor",
+        "dummy.leave_to_forest_chance", "dummy.thug_combat_level.min", "dummy.thug_combat_level.max",
+        "dummy.join_to_thug_when_punish", "dummy.turn_to_bandit_chance", "dummy.criminal_days_to_thug",
+        "battle.skill_tickets.change_factor", "battle.skill_tickets.enabled", "battle.skill_tickets.zero_factor",
+        "paper[\"messenger_cost \"]", "mind.crime_not_punished_modify", "mind.limit_most_powerful_minds",
+        "soldier.bow.prepare_time", "soldier.cost_for_combat_level"
+      ],
+      "runtime": "SEEN",
+      "effect": "UNKNOWN",
+      "note": "global.__gameplay_vars 에 키 경로를 _ 로 이은 이름으로, 파일과 같은 값이 있다 (research/01)"
+    },
+    {
+      "file": "gameplay_variables.json",
+      "paths": [
+        "global_map.bandit_camp.gold_for_one_bandit",
+        "global_map.global_map_defence_alliance_create_cooldown_before_onboard",
+        "global_map.decoration_per_day.max", "actor.panic_run", "actor.child.age_exp_limit",
+        "bandits.maximum_command_skill_level", "squad.collision_push.min", "squad.collision_push.max",
+        "prestige.for_knowledge_mid", "prestige.for_population", "prestige.for_knowledge_low",
+        "prestige.for_allias_population", "prestige.for_decoration", "prestige.for_knowledge_high",
+        "trait.insightful_call_chance", "building.breakdown_chance", "migration.happiness_base",
+        "migration.happiness_factor", "migration.workplaces_factor", "gallows.punishment_watch_radius",
+        "trees.number_of_woods", "trees.number_of_woods_hard", "loyalty.increase_default",
+        "loyalty.king_relations_factor", "loyalty.increase_happy", "loyalty.decrease_unhappy",
+        "loyalty.bribe_factor", "executor_work.intimidate_talk_minutes", "executor_work.witness_talk_minutes",
+        "executor_work.witness_count", "wolves.wolves_max_distance_to_atack_in_cells", "bribe.cooldown",
+        "bribe.leave_chance", "bribe.add_opinion", "bribe.loss_loyalty", "skill.increase_in_use.manners",
+        "dummy.steal_minimal_val", "dummy.steal_maximal_val", "dialogue.zoom_border",
+        "battle.lottery_tickets.shield_defence_from_arrows_tanaya",
+        "battle.lottery_tickets.shield_defence_from_arrows", "book.rewrite_paper_cost", "moral.leaving_to_forest",
+        "knowledge.price_trader", "knowledge.price_our", "mind.crime_victim",
+        "mind.battle_enemy_commander_retreat.modify", "mind.quality_of_life_high.modify",
+        "mind.battle_enemy_commander_dead.modify", "mind.fatigue_from_inspection.modify",
+        "mind.fatigue_from_work.modify", "mind.fatigue_from_work.duration",
+        "mind.battle_enemy_soldier_retreat.modify", "mind.battle_commander_bonus_factor",
+        "camera.smooth_move_speed", "soldier.distance_to_patrol"
+      ],
+      "runtime": "UNSEEN",
+      "effect": "UNKNOWN",
+      "note": "global.__gameplay_vars 에 그 이름이 없다. 다른 자리로 읽히는지, 쓰이지 않는 키인지 모른다 (research/01)"
+    }
+  ]
+}
