@@ -22,6 +22,7 @@ add_library(nlcore STATIC
   src/core/Rate.cpp
   src/core/RemoteCommand.cpp
   src/core/Text.cpp
+  src/core/WorldPlan.cpp
   src/core/Request.cpp
   src/core/Schedule.cpp
 )
@@ -58,6 +59,7 @@ add_library(nltoybox SHARED
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp
+  src/World.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
   "${IMGUI_ROOT}/imgui.cpp"
   "${IMGUI_ROOT}/imgui_draw.cpp"

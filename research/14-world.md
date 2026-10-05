@@ -51,8 +51,31 @@
 - 끝내기: `gm.__endgame_manager.__is_conquest_declared` 0, `__is_endgame_achieved` 0.
 - 시간: `inst:o_time_controller.time_speed_variants[4]`, `time_warp_max` 100, `is_important_notification_pause_enabled` 1(이야기 창이 뜰 때 멈추는 것으로 보인다. 추정).
 
+## 둘째 실행 (모듈 0.13.1, 2026-10-06)
+
+실행 묶음 `stage6-session2`(답: `refs/runtime/stage6-session2.answer.txt`). 06:00 ~ 10:40. **이 실행도 내가 부른 함수 때문에 GML 오류로 끝났다**(아래 "궁수 매복"). 저장하지 않는 실행이었다.
+
+- 게임이 부른 꼴(기록. 06:00 ~ 10:18): `Faction.get_relation_with(세력 구조체) -> 수`(280번: 0, 2 …), `Faction.is_enemy_with(세력 구조체) -> 불리언`(270번: true 와 false 가 모두 나왔다),
+  `ReligiosityManager.get_bishop_opinion() -> 0`(5번). 같은 동안 0번: `is_friend_with`, `attach_opinion_about_faction`, `force_neutrality`, `get_strength`,
+  감독의 `is_event_cooldown_is_ready`·`get_event_cooldown_days_left`·`apply_event_cooldowns`·`__try_to_determine_and_start_event`, 습격의 `is_raids_enabled`·`is_can_set_raid`·`try_to_set_raid`,
+  충성도의 넷, `attach_opinion_to_bishop`, `is_crisis_active`(하루의 다른 시각에 불리는지는 모른다).
+- 게임의 세계 지도(아래 단추 줄의 맨 오른쪽)에 이웃 영지 옆의 "−7"이 보였다(`refs/ui/c2-map.png`). `pv.__other_faction_relation_cache`의 −7 과 같은 수다(같은 것인지는 재지 않았다).
+- **이벤트 쿨다운은 써진다**: `write …__events_cooldowns.u_guest_dog_seller=0`(19 → 0), `…__events_groups_cooldowns.GUEST=0`(2 → 0). 다시 읽어도 0 이었다. 이벤트가 더 일찍 오는지는 보지 못했다.
+- **주교 부르기**: `ReligiosityManager.debug_force_send_bishop()`(인자 없음) → `-> undefined`, `o_character` 5 → 6, `is_has_bishop()` false → true, `__bishop_uuid` "" → 그 인물의 uuid.
+  온 사람: `o_character`, 진영 `holy_synod`, 갈래 3("Setptakh"). 20분(게임 시간) 뒤에도 그대로였다.
+- **궁수 매복은 게임을 끝낸다**: `AmbushManager.debug_start_ambush_archers()`(본문이 `argc`를 옮기지 않는다)를 인자 없이 부르자
+  `REAL argument incorrect type undefined`(`gml_Script_battle_squad_generate` ← 그 메서드). 인자가 없는 함수도 안에서 쓰는 값이 비어 있으면 죽는다. 다시 부르지 않는다.
+- 기계어로 읽은 인자 수(부르지 않았다): 날씨 `get_days_without_rain`·`is_rain_started`(없음), `__start_rain`(3), `__start_snow`(1), `__start_dust_storm`·`__start_snow_storm`(2 까지).
+  계절(`ExtremeSeasonManager`. `gm.__current_local_map.__season_manager`: `__current_phase` 3, `__start_phase_time` 28800) `is_extreme`·`get_extreme_season`·`get_current_phase`·`get_remain_time_to_extreme_season`·`get_snow_progress`(없음), `__set_phase`(3), `override_biome`(1).
+  늑대 `get_max_number_of_wolves`·`night_call`(없음), `spawn_wolf`(1). 습격 `is_raids_enabled`·`get_current_raid`·`get_budget_for_raid`(없음), `is_can_set_raid`(1), `try_to_set_raid`(2 까지), `try_to_remove_raid`(1).
+  충성도 `on_battle_win`(없음). 정치 `unrest_start`(가변), `is_unrest_active`(1). 감독 `get_adaptation`(없음).
+- 이벤트의 자료: `inst:o_data.__game_director_events_data`: `__debug_forced_event`(undefined), `__events`·`__events_by_name`·`__groups`(ds_map), `__params`.
+  지금 국면의 뽑기: `gm.__game_director.__current_phase.__events_weighted_random.__array_of_elements[8]` = 0, 200, 1, 60, 2, 80, 3, 70(번호와 무게가 번갈아 든 것으로 보인다. 추정).
+
 ## 확인하지 못한 것
 
-- 게임이 위의 함수들을 부르는 꼴(기록을 걸었지만 받기 전에 게임이 끝났다).
-- 인자 없는 디버그 함수(`debug_start_ambush_archers`, `start_ambush_wolves`, `debug_force_send_bishop`, `on_battle_win`)를 불렀을 때 일어나는 일.
-- 이벤트 쿨다운과 게임 조건의 값을 썼을 때의 효과. 계절·날씨 관리자의 꼴.
+- 이벤트 쿨다운을 0 으로 쓴 효과(이벤트가 일찍 오는가). 이벤트를 골라 일으키는 길(`__debug_forced_event`에 무엇을 쓰는가).
+- `is_enemy_with`를 false 로 바꾼 효과. 관계의 수(−7)를 바꾸는 길, 동맹·전쟁·평화를 강제하는 길(`force_neutrality`, `add_to_alliance_with_leader`, `vassalise_by_faction`의 꼴).
+- 주교의 평판을 바꾸는 길(`attach_opinion_to_bishop`의 꼴), 신앙·설교·예언.
+- 계절·날씨를 바꾸는 길(인자가 있는 함수들의 꼴), 지도 공개, 난이도(`__difficulty` 1)와 게임 조건을 쓴 효과.
+- 싸움을 붙이는 길: `start_ambush_wolves()`(인자 없음)는 부르지 않았다(궁수 매복이 죽은 뒤라 넘겼다).

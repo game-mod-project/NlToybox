@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
+#include "World.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
 #include "Recorder.hpp"
@@ -406,6 +407,19 @@ namespace
 		Say("  " + NlEconomy::Do(command));
 	}
 
+	// 종교·이벤트 패널의 단추와 같은 길(NlWorld::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoWorld(const RemoteCommand& C)
+	{
+		NlCore::WorldAct act = NlCore::WorldAct::CooldownsClear;
+		if (!NlCore::ParseWorldAct(C.Target, act))
+		{
+			Say("  : world needs cooldowns_clear or bishop");
+			return;
+		}
+		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
+		Say("  " + NlWorld::Do(act));
+	}
+
 	// 인물 패널과 같은 길로 사람을 고친다(NlPeople::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoPerson(const RemoteCommand& C)
 	{
@@ -477,6 +491,8 @@ namespace
 			DoEconomy(C);
 		else if (C.Verb == "person")
 			DoPerson(C);
+		else if (C.Verb == "world")
+			DoWorld(C);
 		else if (C.Verb == "cheat")
 		{
 			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
