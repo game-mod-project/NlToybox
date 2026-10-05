@@ -15,6 +15,7 @@ add_library(nlcore STATIC
   src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
+  src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
   src/core/Rate.cpp
   src/core/RemoteCommand.cpp

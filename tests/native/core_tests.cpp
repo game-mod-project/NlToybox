@@ -6,6 +6,7 @@
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
+#include "core/EconomyPlan.hpp"
 #include "core/Knobs.hpp"
 #include "core/PathTable.hpp"
 #include "core/Rate.hpp"
@@ -486,6 +487,19 @@ int main(int argc, char** argv)
 		}
 	});
 
+	Test("Thousands 는 정수로 맞춰 세 자리마다 쉼표를 넣는다", [] {
+		// Shortest 는 큰 수를 지수로 쓴다(100000 → "1e+05"). 창에 보이는 금화와 자원의 수는 이것으로 쓴다.
+		CHECK_STR(Thousands(0), "0");
+		CHECK_STR(Thousands(999), "999");
+		CHECK_STR(Thousands(1000), "1,000");
+		CHECK_STR(Thousands(3600.4), "3,600");
+		CHECK_STR(Thousands(100000), "100,000");
+		CHECK_STR(Thousands(1e6), "1,000,000");
+		CHECK_STR(Thousands(-1250000), "-1,250,000");
+		CHECK_STR(Thousands(-0.2), "0");
+		CHECK_STR(Thousands(std::numeric_limits<double>::infinity()), "inf");
+	});
+
 	Test("ScriptRoutineName 은 접두 없는 이름에 gml_Script_ 를 붙인다", [] {
 		// 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(research/07). 부르거나 훅을 걸 이름은 하나뿐이어야 한다.
 		CHECK_STR(ScriptRoutineName("budget_money_get"), "gml_Script_budget_money_get");
@@ -495,6 +509,59 @@ int main(int argc, char** argv)
 		CHECK_STR(ScriptRoutineName(""), "");
 		CHECK_STR(ScriptRoutineName("a b"), "");
 	});
+
+	Test("경제: 자원의 이름과 갈래의 이름", [] {
+		CHECK_STR(ResourceKey("resource.wood"), "wood");
+		CHECK_STR(ResourceKey("wood"), "wood");
+		CHECK_STR(ResourceKey(""), "");
+		CHECK_STR(ResourceLabel("wood"), "나무 (wood)");
+		CHECK_STR(ResourceLabel("something_new"), "something_new");
+		CHECK_STR(CategoryLabel("food"), "음식");
+		CHECK_STR(CategoryLabel("unknown"), "unknown");
+	});
+
+	Test("경제: 명령을 변화량으로 푼다", [] {
+		const std::vector<double> counts = { 0, 300, 0, 5 };
+		const std::vector<int> stocked = { 1, 2, 3 };
+		const auto one = [&](EconomyAct act, int resource, double amount, double gold = 3000) {
+			return PlanEconomy({ act, resource, amount }, gold, counts, stocked);
+		};
+		// 금화: 더하기는 그대로, 맞추기는 차이만큼
+		const auto add = one(EconomyAct::GoldAdd, -1, 1000);
+		CHECK(add.size() == 1 && add[0].Resource == -1 && add[0].Delta == 1000);
+		CHECK(one(EconomyAct::GoldSet, -1, 5000)[0].Delta == 2000 && one(EconomyAct::GoldSet, -1, 100)[0].Delta == -2900);
+		CHECK(one(EconomyAct::GoldSet, -1, 3000).empty());					// 이미 그 수다
+		CHECK(one(EconomyAct::GoldSet, -1, -50)[0].Delta == -3000);			// 음수로 맞추지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -5000)[0].Delta == -3000);		// 0 아래로 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -1000, 0).empty());				// 0 에서 더 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, -10, -50).empty());				// 이미 음수면 더 내리지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, 100, -50)[0].Delta == 100);
+		CHECK(one(EconomyAct::GoldAdd, -1, 0.4).empty() && one(EconomyAct::GoldAdd, -1, 1.6)[0].Delta == 2);	// 정수로
+		// 자원
+		const auto wood = one(EconomyAct::ResourceAdd, 1, 50);
+		CHECK(wood.size() == 1 && wood[0].Resource == 1 && wood[0].Delta == 50);
+		CHECK(one(EconomyAct::ResourceAdd, 3, -100)[0].Delta == -5);
+		CHECK(one(EconomyAct::ResourceSet, 1, 120)[0].Delta == -180 && one(EconomyAct::ResourceSet, 2, 7)[0].Delta == 7);
+		CHECK(one(EconomyAct::ResourceAdd, 4, 10).empty() && one(EconomyAct::ResourceAdd, -1, 10).empty() && one(EconomyAct::ResourceSet, 99, 10).empty());
+		// 모든 자원: 갈래에 든 것만(0번은 들지 않았다), 변화가 있는 것만
+		const auto all = one(EconomyAct::AllAdd, -1, 100);
+		CHECK(all.size() == 3 && all[0].Resource == 1 && all[1].Resource == 2 && all[1].Delta == 100 && all[2].Resource == 3);
+		const auto less = one(EconomyAct::AllAdd, -1, -5);
+		CHECK(less.size() == 2 && less[0].Resource == 1 && less[0].Delta == -5 && less[1].Resource == 3 && less[1].Delta == -5);
+		// 수가 아니거나 터무니없으면 아무것도 하지 않는다
+		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::quiet_NaN()).empty());
+		CHECK(one(EconomyAct::GoldAdd, -1, std::numeric_limits<double>::infinity()).empty() && one(EconomyAct::AllAdd, -1, 1e12).empty());
+	});
+
+	Test("경제: 원격 명령의 낱말", [] {
+		EconomyAct act = EconomyAct::GoldAdd;
+		CHECK(ParseEconomyAct("gold_set", act) && act == EconomyAct::GoldSet && !NeedsResource(act));
+		CHECK(ParseEconomyAct("add", act) && act == EconomyAct::ResourceAdd && NeedsResource(act));
+		CHECK(ParseEconomyAct("set", act) && act == EconomyAct::ResourceSet && NeedsResource(act));
+		CHECK(ParseEconomyAct("all", act) && act == EconomyAct::AllAdd && !NeedsResource(act));
+		CHECK(ParseEconomyAct("gold_add", act) && act == EconomyAct::GoldAdd && !ParseEconomyAct("gold", act) && !ParseEconomyAct("", act));
+	});
+
 
 	Test("치트 상태: 읽고 쓰면 같다", [] {
 		CheatState state;

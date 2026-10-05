@@ -90,6 +90,17 @@ namespace NlCore
 		return std::string(buf, result.ptr);
 	}
 
+	std::string Thousands(double Value)
+	{
+		if (!std::isfinite(Value))
+			return Shortest(Value);
+		const double rounded = std::round(Value);
+		std::string digits = Fixed(std::fabs(rounded), 0);
+		for (int at = static_cast<int>(digits.size()) - 3; at > 0; at -= 3)
+			digits.insert(static_cast<size_t>(at), ",");
+		return (rounded < 0 ? "-" : "") + digits;
+	}
+
 	bool ParseNumber(const std::string& Text, double& Out)
 	{
 		if (Text.empty())
