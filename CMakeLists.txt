@@ -42,6 +42,7 @@ add_library(nltoybox SHARED
   src/Dump.cpp
   src/Finder.cpp
   src/Game.cpp
+  src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
