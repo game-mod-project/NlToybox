@@ -332,19 +332,23 @@ lock inst:o_character:0.starving_hours=0
   전역 스크립트는 이름으로(`gml_Script_budget_money_get`), 메서드는 주소로(`inst:o_building.set_level`) 가리킨다.
   메서드가 묶인 스크립트는 `script_get_name`으로 묻는다. 함수는 YYToolkit 의 `GetScriptData` → `CScript::m_Functions->m_ScriptFunction`에서 얻는다
   (`CallGameScriptEx`가 쓰는 길이고, 단계 0 에서 이 길로 스크립트를 불렀다. `research/01`).
-  한 번 건 훅은 떼지 않는다(그 함수가 호출 스택에 있을 때 떼면 죽는다). 기록만 멈춘다. 동시에 24개까지.
-- **부르기의 규칙**: `call`과 `method`는 기록으로 인자의 수와 형을 확인한 함수에만 쓴다(§3). 부르기 전에 답 파일에 한 줄을 남긴다(죽으면 어디였는지 남는다).
+  한 번 건 훅은 떼지 않는다(그 함수가 호출 스택에 있을 때 떼면 죽는다). 기록만 멈춘다. 한 실행에 64개까지(자리는 다시 쓰지 않는다. 24개는 첫 실행에서 다 썼다).
+- **부르기의 규칙**: `call`과 `method`는 인자의 수와 형을 확인한 함수에만 쓴다(§3). 수는 기록이나 본문의 기계어로, 형은 기록으로 본다(`research/07`).
+  부르기 전에 답 파일에 한 줄을 남긴다(죽으면 어디였는지 남는다). 스크립트는 `gml_Script_` 이름으로만 부른다(접두 없는 이름은 다른 루틴이다).
+  메서드는 `NlAccess::CallMethod`로 부른다: 묶인 곳이 없는 정적 메서드는 주소의 부모에 묶는다. `about <주소>`가 부르지 않고 그것을 알려 준다.
+- **잡히는 함수인가**: 이름 있는 스크립트인데 exe 에 직접 호출이 0곳이면 훅에 게임의 호출이 오지 않는다. `tools/re/script_calls.py`로 먼저 센다.
 - **실행 묶음**: `tools/session.ps1 start`가 사용자의 배율·치트 설정을 `*.kept`로 치우고 게임을 켠다(값을 재는 동안 치트가 걸려 있으면 안 된다).
   `stop`이 게임을 끄고, 설정을 되돌리고, 답과 로그를 `refs\runtime\`으로 옮긴다.
 
 ## 13. 모르는 것
 
 - §2.2의 스위치와 함수가 실제로 무엇을 하는가. 이름에서 읽은 뜻뿐이다.
-- `is_debug_enabled`를 켜면 게임의 디버그 창이 뜨는가. `current_debug_mode`와의 관계.
+- ~~`is_debug_enabled`를 켜면 게임의 디버그 창이 뜨는가~~ → 그것만으로는 뜨지 않았다(`research/07`). `current_debug_mode`와의 관계는 모른다.
 - ~~`variable_instance_set`, `array_set`, `variable_global_set`이 이 러너에서 되는가~~ → 된다(`research/06-cheat-menu.md`).
   `instance_exists`에 ref 를 넘기는 길은 아직 보지 못했다.
 - 게임 속도의 손잡이(§9). 일시정지와의 관계.
-- 게임 스크립트에 `MmCreateHook`이 걸리는가(3단계).
-- 금화, 창고, 능력치, 욕구가 앉은 자리(찾기로 찾는다).
+- ~~게임 스크립트에 `MmCreateHook`이 걸리는가~~ → 걸린다(`research/07`).
+- ~~금화, 창고, 능력치가 앉은 자리~~ → `research/07`. 금화는 `budget_money_change`로 바꾼다(화면에서 확인). 욕구의 자리는 아직 모른다.
+- 영지 창고의 `change`를 묶어 부르면 화면이 따라오는가. 거래·임금·건설비·생산의 자리에 쓴 값을 게임이 따르는가.
 - 세이브를 불러올 때의 흐름, 치트로 바뀐 값이 세이브에 굳는가.
 - 모드창을 누른 클릭이 밑의 게임에 전달되는가(`research/05`의 "확인하지 못한 것").
