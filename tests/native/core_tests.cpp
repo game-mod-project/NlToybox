@@ -878,9 +878,18 @@ int main(int argc, char** argv)
 		floor_on.On = { "resource_floor" };
 		floor_on.Floors = { { "wood", 100 } };
 		CHECK(FindCheat("resource_floor")->Verified && KeepKnown(floor_on).On.count("resource_floor") == 1 && KeepKnown(floor_on).Floors.size() == 1);
-		// 전투(research/16): 영혼의 두 함수에 아군과 적의 배율을 따로 건다(모듈의 코드가 한다: CustomScale). 실제 싸움에서 확인하기 전이다.
+		// 전투(research/16, 23): 영혼의 두 함수에 아군과 적의 배율을 따로 건다(모듈의 코드가 한다: CustomScale).
 		for (const char* id : { "ally_power", "enemy_power", "ally_toughness", "enemy_toughness" })
-			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale && FindCheat(id)->Where == Area::Army && !FindCheat(id)->Verified);
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale && FindCheat(id)->Where == Area::Army);
+		// 전투 기술의 둘은 실제 싸움 둘에서 봤다(두 진영의 수가 바뀌고 공격 추첨의 배율이 그 수를 따른다. research/23. 사용자가 확인으로 올리기로 했다).
+		// 맷집의 둘은 다음 싸움으로 미뤘다(적이 낮춘 한도에서 죽는지를 2초 간격의 읽기로는 가리지 못했다).
+		CHECK(FindCheat("ally_power")->Verified && FindCheat("enemy_power")->Verified);
+		CHECK(!FindCheat("ally_toughness")->Verified && !FindCheat("enemy_toughness")->Verified);
+		CheatState battle;
+		battle.Numbers = { { "ally_power", 2 }, { "enemy_power", 0.5 }, { "ally_toughness", 3 }, { "enemy_toughness", 0.3 } };
+		const CheatState kept_battle = KeepKnown(battle);
+		CHECK(kept_battle.Numbers.count("ally_power") == 1 && kept_battle.Numbers.count("enemy_power") == 1);			// 확인된 것은 다음 실행에서도 걸린 채
+		CHECK(kept_battle.Numbers.count("ally_toughness") == 0 && kept_battle.Numbers.count("enemy_toughness") == 0);	// 확인 전의 것은 꺼진 채로 시작한다
 		CHECK(FindCheat("ally_power")->Min >= 1 && FindCheat("ally_toughness")->Min >= 1);			// 아군의 것은 올리기만
 		CHECK(FindCheat("enemy_power")->Max <= 1 && FindCheat("enemy_toughness")->Max <= 1 && FindCheat("enemy_power")->Min > 0);		// 적의 것은 내리기만(0 은 아니다)
 		// 외교(research/14): 세력의 적대 판정 Faction.is_enemy_with(세력) -> 불리언을 false 로. 모든 세력에 걸린다. 효과는 보지 못했다.
@@ -1682,6 +1691,15 @@ int main(int argc, char** argv)
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "build_free", 0 }, { "build_free", 0 } } }, why));
 		CHECK(!CheckPreset(Preset{ "x", "x", "", { { "daily_migrants", 5 } } }, why));			// 세이브에 남는 값을 쓰는 항목은 묶음에 넣지 않는다
 		CHECK(CheckPreset(Preset{ "x", "x", "", { { "build_free", 0 }, { "production_time", 0.5 } } }, why));
+
+		// 확인된 전투 기술의 배율은 신 묶음에 든다(research/23). 맷집의 배율은 확인 전이라 들지 않는다.
+		const auto in_god = [](const char* id) {
+			for (const PresetItem& item : FindPreset("god")->Items)
+				if (std::string(item.Id) == id)
+					return item.Number;
+			return -1.0;
+		};
+		CHECK(in_god("ally_power") == 2 && in_god("enemy_power") == 0.5 && in_god("ally_toughness") == -1.0 && in_god("enemy_toughness") == -1.0);
 
 		// god 는 sandbox 가 켜는 것을 모두 켠다
 		for (const PresetItem& item : FindPreset("sandbox")->Items)
@@ -2730,6 +2748,49 @@ int main(int argc, char** argv)
 		for (const char* bad : { "traits max=inf", "traits max=1e30", "traits max=2.5", "traits max=-3", "traits max=100001" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 		CHECK(ParseRemoteLine("traits max=100000").Error.empty());
+	});
+
+	Test("경제: 최소값 칸의 편집 - 치는 동안은 들고 있다가 칸을 떠날 때 한 번 넣는다", [] {
+		// 사용자 보고(2026-10-06): 자원마다의 최소값을 칸에서 정할 수 없다. 칸이 "Enter 를 눌렀을 때만 참"에 기대고 있었는데
+		// Dear ImGui 의 수 입력 칸은 그것을 지원하지 않는다(InputScalar 의 단언). Enter 말고는 수를 넣을 길이 없었고 칸을 떠나면 친 수가 버려졌다.
+		FloorEdit edit;
+		double out = -1;
+		// 2, 20, 200 을 치는 동안에는 넣지 않는다(치는 도중의 수로 창고를 채우지 않게)
+		CHECK(!StepFloorEdit(edit, true, 2, false, true, out));
+		CHECK(!StepFloorEdit(edit, true, 20, false, true, out));
+		CHECK(!StepFloorEdit(edit, false, 20, false, true, out));		// 잡혀 있기만 한 프레임
+		CHECK(!StepFloorEdit(edit, true, 200, false, true, out));
+		CHECK(edit.Has && edit.Value == 200);
+		// 칸을 떠나면(Enter, Tab, 다른 곳을 누름) 마지막에 친 수를 한 번 넣는다
+		CHECK(StepFloorEdit(edit, false, 0, true, false, out) && out == 200);
+		CHECK(!edit.Has);
+		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));			// 두 번 넣지 않는다
+		// 치는 프레임에 바로 떠나도 넣는다
+		CHECK(StepFloorEdit(edit, true, 7, true, false, out) && out == 7 && !edit.Has);
+		// 치지 않고 떠나면 넣지 않는다
+		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));
+		// 0 도 친 수다(지운다는 뜻). 넣는다
+		CHECK(!StepFloorEdit(edit, true, 0, false, true, out));
+		CHECK(StepFloorEdit(edit, false, 99, true, false, out) && out == 0);
+		// 치다 만 수가 남았는데 칸이 잡혀 있지도 떠나지도 않았으면(창이 닫혔다) 버린다
+		CHECK(!StepFloorEdit(edit, true, 55, false, true, out));
+		CHECK(!StepFloorEdit(edit, false, 0, false, false, out) && !edit.Has);
+	});
+
+	Test("원격: 모드창에 입력을 넣는 줄(ui click, type, key)", [] {
+		// 창의 입력 칸을 시험하려고 둔다: Dear ImGui 의 입력 큐에 넣을 뿐 게임 창과 진짜 마우스·키보드는 건드리지 않는다.
+		RemoteCommand c = ParseRemoteLine("ui click x=640 y=355.5");
+		CHECK(c.Error.empty() && c.Verb == "ui" && c.Target == "click" && c.Options.at("x") == "640" && c.Options.at("y") == "355.5");
+		c = ParseRemoteLine("ui type text=200");
+		CHECK(c.Error.empty() && c.Verb == "ui" && c.Target == "type" && c.Options.at("text") == "200");
+		c = ParseRemoteLine("ui key name=enter");
+		CHECK(c.Error.empty() && c.Verb == "ui" && c.Target == "key" && c.Options.at("name") == "enter");
+		for (const char* name : { "tab", "escape", "backspace" })
+			CHECK(ParseRemoteLine(std::string("ui key name=") + name).Error.empty());
+		for (const char* bad : { "ui", "ui click", "ui click x=1", "ui click x=a y=2", "ui click x=-5 y=2", "ui click x=1 y=99999", "ui click x=1 y=2 z=3",
+				"ui type", "ui type text=", "ui type text=<b>", "ui type text=1 x=2", "ui key", "ui key name=f8", "ui key name=enter extra=1", "ui hover x=1 y=2" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
+		CHECK(!ParseRemoteLine("ui type text=" + std::string(40, '1')).Error.empty());		// 길이의 한도(32자)
 	});
 
 	Test("인물의 역할 프리셋: 표, 할 일, 결과의 글", [] {

@@ -222,6 +222,46 @@ namespace NlCore
 				return fail("window needs open or close");
 			command.Target = tokens[1];
 		}
+		else if (verb == "ui")
+		{
+			// ui click x=<수> y=<수> | ui type text=<글> | ui key name=<enter|tab|escape|backspace>
+			// 모드창(Dear ImGui)의 입력 큐에 넣는다. 게임 창과 진짜 마우스·키보드는 건드리지 않는다(창의 입력 칸을 시험하려고 둔다).
+			if (count < 2 || (tokens[1] != "click" && tokens[1] != "type" && tokens[1] != "key"))
+				return fail("ui needs click, type or key");
+			command.Target = tokens[1];
+			if (!options(2))
+				return command;
+			const auto only = [&](std::initializer_list<const char*> keys) {
+				if (command.Options.size() != keys.size())
+					return false;
+				for (const char* key : keys)
+					if (!command.Options.count(key))
+						return false;
+				return true;
+			};
+			if (command.Target == "click")
+			{
+				double x = 0, y = 0;
+				if (!only({ "x", "y" }) || !ParseNumber(command.Options["x"], x) || !ParseNumber(command.Options["y"], y)
+					|| !std::isfinite(x) || !std::isfinite(y) || x < 0 || y < 0 || x > 10000 || y > 10000)
+					return fail("ui click needs x=<0..10000> y=<0..10000>");
+			}
+			else if (command.Target == "type")
+			{
+				const std::string text = only({ "text" }) ? command.Options["text"] : std::string();
+				bool good = !text.empty() && text.size() <= 32;
+				for (const char c : text)
+					good = good && ((c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '.' || c == '-' || c == '_');
+				if (!good)
+					return fail("ui type needs text=<1..32 letters, digits, '.', '-', '_'>");
+			}
+			else
+			{
+				const std::string name = only({ "name" }) ? command.Options["name"] : std::string();
+				if (name != "enter" && name != "tab" && name != "escape" && name != "backspace")
+					return fail("ui key needs name=<enter|tab|escape|backspace>");
+			}
+		}
 		else if (verb == "treecall")
 		{
 			// treecall <인자 없는 스크립트의 이름> [depth=N] [max=N]

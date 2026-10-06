@@ -112,6 +112,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 게임의 화면이 보이는 자원의 수는 예약되지 않은 수(`__no_reserve__` = `__total__` − 예약)다. 패널도 그 수를 보이고 그 수를 기준으로 맞춘다.
     청한 만큼 바뀌었는지는 `__total__`의 앞뒤로 본다(함수의 반환값에 기대지 않는다). `change`는 용량을 보지 않는다.
   - 원격 명령 `economy`와 `page`가 같은 길을 창 없이 태운다. 패널을 고치면 실행 묶음에서 `economy …`와 화면으로 확인한다.
+  - **수 입력 칸(`InputDouble`·`InputInt`)에 `ImGuiInputTextFlags_EnterReturnsTrue`를 주지 않는다.** Dear ImGui 가 지원하지 않는다(`InputScalar`의 단언. 릴리스 빌드에서는 조용히 지나간다):
+    Enter 로만 들어가고 칸을 떠나면 친 수가 버려진다(최소값 칸이 그랬다. `research/18`의 끝). 치는 동안의 수는 들고 있다가 `IsItemDeactivatedAfterEdit()`에 넣는다(`NlCore::StepFloorEdit`).
+  - **창의 입력 칸은 글자를 쳐 넣어 확인한다**: 원격 `ui click x= y=`, `ui type text=`, `ui key name=<enter|tab|escape|backspace>`가 Dear ImGui 의 입력 큐에만 넣는다
+    (게임 창과 진짜 마우스·키보드는 건드리지 않는다. 자리는 `shot`으로 본다. Tab 은 다음 입력 칸으로 옮기며 그 칸을 보이는 데로 끌어온다). 원격 명령만으로 확인한 칸은 확인한 것이 아니다.
 - 게임의 판정을 바꿀 때는 그 함수가 돌려주는 값을 훅으로 바꾼다(`NlRecorder::Override`. 스펙 §3 의 수단 D. `research/09`).
   - 바꾸기 전에 `statics <주소>`로 이름을 찾고 `record`로 그 함수가 무엇을 받고 무엇을 돌려주는지 본다. 불리언·수를 돌려주는 함수만 바꾼다
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.
@@ -193,6 +197,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     게임이 부르는 꼴: `battle_hit(구조체, 배열, undefined, 정수, 수) -> 구조체`, `ComponentBattle.attack(ref, undefined, undefined, 불리언)`, `set_current_battle(구조체, 구조체)`, `set_surrender(불리언)`,
     `get_close_combat_support_power() -> 수`, `SoulBasic.get_bravery_threshold() -> 수`, `__get_dodge_chance(구조체) -> 수`, `get_battle_lottery_tickets_factor() -> 수`, `is_pain_shock() -> 불리언`.
     아군의 전투 기술이 실제 싸움에서 두 배(상한 20)로 넘어가는 것을 봤다(12·13 → 20). **배율의 효과는 아직 말할 수 없다**(대조가 없고 26명이 일곱을 상대했다).
+    전투 기술의 둘(`ally_power`, `enemy_power`)은 사용자가 확인으로 올렸다(0.24.2. 신 묶음에도 든다). 맷집의 둘은 다음 싸움으로 미뤘다.
     둘째 싸움(도적 기지. 딴 지도이고 거기 있는 동안 `game_time`이 멈춰 있다)에서 적의 표본도 받았다: 4 → 2, 5 → 3, 3 → 2. **추첨의 배율(`get_battle_lottery_tickets_factor`)이 배율을 곱한 뒤의
     전투 기술과 맞아떨어진다**(값 넷에 맞춘 식 `0.1 + 0.09 x 기술`: 20 → 1.9, 2 → 0.28, 3 → 0.37, 4 → 0.46. 추정). `take_damage`의 셋째 인자는 훈련에서 `true`, 실전에서 `false`였다.
     지도를 떠나면 분대의 주소가 없어진다: 그 주소로 건 기록은 스크립트 이름으로 멈춘다.
@@ -278,7 +283,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
-  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`,
+  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.

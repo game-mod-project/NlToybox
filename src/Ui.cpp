@@ -555,6 +555,42 @@ void NlUi::SetVisible(bool Visible)
 	g_Visible = Visible;
 }
 
+bool NlUi::InjectClick(float X, float Y)
+{
+	if (!g_Ready)
+		return false;
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddMousePosEvent(X, Y);
+	io.AddMouseButtonEvent(0, true);
+	io.AddMouseButtonEvent(0, false);		// 같은 단추의 두 번째 바뀜은 ImGui 가 다음 프레임으로 넘긴다
+	Log("ui test click " + std::to_string(static_cast<int>(X)) + "," + std::to_string(static_cast<int>(Y)));
+	return true;
+}
+
+bool NlUi::InjectText(const std::string& Text)
+{
+	if (!g_Ready)
+		return false;
+	ImGui::GetIO().AddInputCharactersUTF8(Text.c_str());
+	Log("ui test type " + Text);
+	return true;
+}
+
+bool NlUi::InjectKey(const std::string& Name)
+{
+	if (!g_Ready)
+		return false;
+	const ImGuiKey key = Name == "enter" ? ImGuiKey_Enter : Name == "tab" ? ImGuiKey_Tab : Name == "escape" ? ImGuiKey_Escape
+		: Name == "backspace" ? ImGuiKey_Backspace : ImGuiKey_None;
+	if (key == ImGuiKey_None)
+		return false;
+	ImGuiIO& io = ImGui::GetIO();
+	io.AddKeyEvent(key, true);
+	io.AddKeyEvent(key, false);
+	Log("ui test key " + Name);
+	return true;
+}
+
 void NlUi::WndProc(FWWndProc& Context)
 {
 	// 입력은 직접 건 창 프로시저(HkWndProc)가 받는다. 여기서는 이 콜백이 오는지만 센다.

@@ -659,6 +659,22 @@ namespace
 			NlUi::SetVisible(C.Target == "open");
 			Say("  window " + C.Target);
 		}
+		else if (C.Verb == "ui")
+		{
+			// 모드창의 입력 큐에 넣는다(게임 창과 진짜 마우스·키보드는 건드리지 않는다). 다음 프레임들에 차례로 먹는다.
+			const auto option = [&](const char* key) {
+				const auto found = C.Options.find(key);
+				return found != C.Options.end() ? found->second : std::string();
+			};
+			bool ok = false;
+			if (C.Target == "click")
+				ok = NlUi::InjectClick(static_cast<float>(NlCore::OptionNumber(C, "x", 0)), static_cast<float>(NlCore::OptionNumber(C, "y", 0)));
+			else if (C.Target == "type")
+				ok = NlUi::InjectText(option("text"));
+			else
+				ok = NlUi::InjectKey(option("name"));
+			Say(ok ? "  ui " + C.Target + " queued" : "  : the mod window is not ready");
+		}
 	}
 }
 
