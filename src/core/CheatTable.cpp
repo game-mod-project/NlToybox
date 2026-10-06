@@ -303,10 +303,20 @@ namespace NlCore
 				"전역 지도에서 하는 행동을 빨리 끝내는 개발자 스위치로 보인다" },
 			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, false,
 				"나무의 성장을 끄는 개발자 스위치로 보인다" },
+			// 계절 붙들기(research/25): 게임은 지금 단계의 남은 시간을 시작 시각(__start_phase_time)에서 셈한다(시작을 하루 뒤로 쓰자 남은 시간이 하루 늘었다).
+			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons"). 단계가 넘어가지 않는 것까지는 아직 보지 못했다.
+			{ "season_hold", Area::World, "계절 붙들기 (지금 단계에 머문다)", "inst:o_game_map_controller.__current_local_map.__season_manager.__start_phase_time", C, 1, 0, 0, 0, false,
+				"지금 계절 단계의 시작 시각을 시간이 흐른 만큼 따라 밀어 가혹한 계절까지 남은 시간이 줄지 않게 한다. 끄면 그때부터 다시 흐른다(밀린 만큼은 되돌리지 않는다). 효과는 확인 전" },
+			// 세계 지도 관리자(inst:o_global_map.__m_global_map, GlobalMapManager)의 디버그 깃발. 뜻은 이름에서 읽은 것이다. 세이브에 그 열쇠는 없다.
+			{ "fast_map_moving", Area::World, "세계 지도의 이동을 빠르게", "inst:o_global_map.__m_global_map.__debug_fast_moving", T, 1, 0, 0, 0, false,
+				"세계 지도에서 움직이는 것을 빠르게 하는 개발자 스위치로 보인다" },
 
 			{ "hide_events", Area::Events, "이벤트 표시 끔", "inst:o_debug.is_display_event_disabled", T, 1, 0, 0, 0, false,
 				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다)" },
 
+			// 게임의 저장을 끄는 디버그 깃발로 보인다. 세이브에 그 열쇠는 없다. 자동 저장이 그 깃발을 보는지는 아직 재지 않았다.
+			{ "no_autosave", Area::Util, "게임의 저장 끄기", "inst:o_debug.is_save_disabled", T, 1, 0, 0, 0, false,
+				"게임의 저장을 끄는 개발자 스위치로 보인다(자동 저장도 꺼지는지는 확인 전). 켜 둔 동안에는 직접 하는 저장도 되지 않을 수 있다" },
 			{ "game_debug", Area::Util, "게임의 디버그 모드", "inst:o_debug.is_debug_enabled", T, 1, 0, 0, 0, false,
 				"게임에 들어 있는 디버그 기능의 큰 스위치로 보인다. 켜면 게임의 디버그 창이 뜰 수 있다" },
 			{ "debug_managers", Area::Util, "게임의 디버그 창: 매니저", "inst:o_debug.is_show_debug_managers", T, 1, 0, 0, 0, false,

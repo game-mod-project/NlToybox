@@ -84,6 +84,18 @@ namespace NlCore
 		Hold = SeasonHold{};
 	}
 
+	bool RemainMoved(bool Later, double Before, double After)
+	{
+		if (!Finite(Before, After))
+			return false;
+		return Later ? After > Before + 1 : After < Before - 1;
+	}
+
+	std::string PhaseNote(double Phase, double Remain)
+	{
+		return "단계 " + std::to_string(static_cast<long long>(Phase) + 1) + ", 이 단계는 " + SpanText(Remain) + " 남음";
+	}
+
 	std::string SeasonLine(bool Extreme, const std::string& Name, double ToExtreme, double ToEnd)
 	{
 		const std::string what = Name.empty() ? std::string("가혹한 계절") : "가혹한 계절(" + Name + ")";

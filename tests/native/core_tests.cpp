@@ -815,7 +815,14 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 66);
+		CHECK(Cheats().size() == 69);
+		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
+		// 셋 다 효과를 보기 전이다.
+		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);
+		CHECK(FindCheat("fast_map_moving") && FindCheat("fast_map_moving")->Kind == CheatKind::Toggle && FindCheat("fast_map_moving")->Where == Area::World
+			&& std::string(FindCheat("fast_map_moving")->Path) == "inst:o_global_map.__m_global_map.__debug_fast_moving");
+		CHECK(FindCheat("no_autosave") && FindCheat("no_autosave")->Kind == CheatKind::Toggle && FindCheat("no_autosave")->Where == Area::Util
+			&& std::string(FindCheat("no_autosave")->Path) == "inst:o_debug.is_save_disabled" && FindCheat("no_autosave")->On == 1 && FindCheat("no_autosave")->Off == 0);
 		// 종교(research/21): 신앙심 채워 두기, 성스러운 보호 유지(수 1 을 돌려주게 한다), 종교 반란 없음, 종교 비용 없음, 신앙 회복 배율, 설교 전환 계수.
 		CHECK(FindCheat("piety_full") && FindCheat("piety_full")->Kind == CheatKind::Custom && FindCheat("piety_full")->Where == Area::Religion);
 		// 신앙심 채워 두기는 플레이에서 봤다(켜고 40분 뒤 플레이어의 사람 14명이 모두 100, 플레이어의 사람이 아닌 둘은 평소대로 줄었다. research/21)
@@ -1749,6 +1756,17 @@ int main(int argc, char** argv)
 		CHECK(ParseWorldAct("cooldowns_clear", act) && act == WorldAct::CooldownsClear);
 		CHECK(!ParseWorldAct("ambush", act) && !ParseWorldAct("", act));		// 궁수 매복은 불러서 게임이 끝났다(research/14). 넣지 않는다
 		CHECK(std::string(WorldActWord(WorldAct::BishopSend)) == "bishop" && std::string(WorldActWord(WorldAct::CooldownsClear)) == "cooldowns_clear");
+		// 계절의 일(research/25): 보기, 미루기, 지금 단계 끝내기. 날씨를 일으키는 함수(__start_rain 들)는 꼴을 보지 못해 넣지 않는다.
+		CHECK(ParseWorldAct("season", act) && act == WorldAct::SeasonShow);
+		CHECK(ParseWorldAct("season_delay", act) && act == WorldAct::SeasonDelay);
+		CHECK(ParseWorldAct("season_end", act) && act == WorldAct::SeasonEnd);
+		CHECK(std::string(WorldActWord(WorldAct::SeasonShow)) == "season" && std::string(WorldActWord(WorldAct::SeasonEnd)) == "season_end");
+		CHECK(!ParseWorldAct("rain", act) && !ParseWorldAct("season_", act));
+		// 낱말의 목록(틀린 낱말에 답할 글)은 표에서 만든다.
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end");
+		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
+		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
+			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend));
 
 		// 이벤트 쿨다운 한 칸: 0 보다 큰 수에만 0 을 쓴다
 		CHECK(ShouldClearCooldown(true, 19) && ShouldClearCooldown(true, 0.5));
@@ -1775,6 +1793,9 @@ int main(int argc, char** argv)
 		RemoteCommand c = ParseRemoteLine("world bishop");
 		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
 		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());
+		for (const char* word : { "season", "season_delay", "season_end" })
+			CHECK(ParseRemoteLine(std::string("world ") + word).Error.empty() && ParseRemoteLine(std::string("world ") + word).Target == word);
+		CHECK(ParseRemoteLine("world rain").Error.find("season_delay") != std::string::npos);		// 틀린 낱말에는 되는 낱말을 알려 준다
 		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
 	});
 
@@ -3209,10 +3230,17 @@ int main(int argc, char** argv)
 		ForgetSeasonHold(moved);
 		CHECK(!StepSeasonHold(moved, true, 1000, 900, 0, out) && moved.Elapsed == 100);
 
+		// 쓴 뒤의 확인: 게임의 함수가 돌려주는 남은 시간이 바라던 쪽으로 움직였는가(1초 넘게). 시작 시각이 써졌다는 것만으로 됐다고 하지 않는다.
+		CHECK(RemainMoved(true, 182678, 269078) && !RemainMoved(true, 182678, 182678) && !RemainMoved(true, 182678, 182678.5) && !RemainMoved(true, 182678, 100));
+		CHECK(RemainMoved(false, 182678, 60) && !RemainMoved(false, 182678, 182678) && !RemainMoved(false, 60, 182678));
+		CHECK(!RemainMoved(true, std::nan(""), 5) && !RemainMoved(false, 5, std::nan("")));
+
 		// 상태의 글: 가혹한 계절이 아닐 때는 올 때까지, 가혹한 계절일 때는 끝날 때까지. 이름이 없으면 이름 없이.
 		CHECK(SeasonLine(false, "가뭄", 528278.17, 873878.17) == "가혹한 계절(가뭄)까지 6일 2시간");
 		CHECK(SeasonLine(true, "가뭄", 0, 100000) == "가혹한 계절(가뭄) 중입니다. 끝나기까지 1일 3시간");
 		CHECK(SeasonLine(false, "", 7200, 0) == "가혹한 계절까지 2시간");
+		// 단계의 글: 게임의 단계는 0 부터다. 창에는 1 부터 센다.
+		CHECK(PhaseNote(0, 182678.17) == "단계 1, 이 단계는 2일 2시간 남음" && PhaseNote(2, 3000) == "단계 3, 이 단계는 1시간 미만 남음");
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

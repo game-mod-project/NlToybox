@@ -11,10 +11,14 @@ namespace NlCore
 		{
 			WorldAct Act;
 			const char* Word;
+			bool Changes;		// 게임의 자료를 바꾸는가
 		};
 		constexpr ActInfo k_Acts[] = {
-			{ WorldAct::CooldownsClear, "cooldowns_clear" },
-			{ WorldAct::BishopSend, "bishop" },
+			{ WorldAct::CooldownsClear, "cooldowns_clear", true },
+			{ WorldAct::BishopSend, "bishop", true },
+			{ WorldAct::SeasonShow, "season", false },
+			{ WorldAct::SeasonDelay, "season_delay", true },
+			{ WorldAct::SeasonEnd, "season_end", true },
 		};
 	}
 
@@ -26,6 +30,22 @@ namespace NlCore
 				Out = act.Act;
 				return true;
 			}
+		return false;
+	}
+
+	std::string WorldActWords()
+	{
+		std::string out;
+		for (const ActInfo& act : k_Acts)
+			out += std::string(out.empty() ? "" : ", ") + act.Word;
+		return out;
+	}
+
+	bool WorldActChanges(WorldAct Act)
+	{
+		for (const ActInfo& act : k_Acts)
+			if (act.Act == Act)
+				return act.Changes;
 		return false;
 	}
 

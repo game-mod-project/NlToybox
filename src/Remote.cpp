@@ -421,7 +421,7 @@ namespace
 		NlCore::WorldAct act = NlCore::WorldAct::CooldownsClear;
 		if (!NlCore::ParseWorldAct(C.Target, act))
 		{
-			Say("  : world needs cooldowns_clear or bishop");
+			Say("  : world needs one of: " + NlCore::WorldActWords());
 			return;
 		}
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다

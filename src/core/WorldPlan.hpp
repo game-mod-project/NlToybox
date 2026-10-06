@@ -7,9 +7,14 @@
 namespace NlCore
 {
 	// 창의 단추와 원격 `world <낱말>`이 같은 길을 탄다. 불러서 게임이 끝난 것(궁수 매복)은 넣지 않는다.
-	enum class WorldAct { CooldownsClear, BishopSend };
+	// 계절의 일(research/25): 보기(읽기만), 미루기(시작 시각을 하루 뒤로), 지금 단계 끝내기(남은 시간을 줄인다). 셈은 core/SeasonPlan.
+	enum class WorldAct { CooldownsClear, BishopSend, SeasonShow, SeasonDelay, SeasonEnd };
 	bool ParseWorldAct(const std::string& Word, WorldAct& Out);
 	const char* WorldActWord(WorldAct Act);
+	// 되는 낱말을 쉼표로 이은 글(틀린 낱말에 답한다).
+	std::string WorldActWords();
+	// 게임의 자료를 바꾸는 일인가. 보기는 읽기만 한다.
+	bool WorldActChanges(WorldAct Act);
 
 	// 이벤트 쿨다운(남은 날)의 한 칸에 0 을 쓸지: 0 보다 큰 수에만 쓴다(수가 아닌 칸과 이미 0 인 칸은 건드리지 않는다).
 	bool ShouldClearCooldown(bool IsNumber, double Value);

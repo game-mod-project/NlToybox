@@ -164,7 +164,7 @@ void NlMenu::GameTick()
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
 	NlProduction::GameTick(now);
-	NlWorld::GameTick();
+	NlWorld::GameTick(now, visible && page == Area::World);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
 	NlCourt::GameTick(now, visible && (page == Area::Lord || page == Area::Religion));		// 종교 패널의 주교와의 평판도 같은 모듈이 한다
 	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
@@ -259,6 +259,11 @@ void NlMenu::Draw()
 		break;
 	case Area::Presets:
 		NlCheats::DrawPresets();
+		break;
+	case Area::World:
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		NlWorld::DrawWorld();
 		break;
 	case Area::Events:
 		NlCheats::DrawArea(page);

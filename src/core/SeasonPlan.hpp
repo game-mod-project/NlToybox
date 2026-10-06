@@ -32,6 +32,12 @@ namespace NlCore
 	// 밖에서 시작 시각을 바꿨다(미루기, 끝내기): 다음 틱에 다시 기억하게 한다.
 	void ForgetSeasonHold(SeasonHold& Hold);
 
+	// 시작 시각을 쓴 뒤 게임의 함수가 돌려주는 남은 시간이 바라던 쪽으로(Later: 늘었다, 아니면 줄었다) 1초 넘게 움직였는가.
+	bool RemainMoved(bool Later, double Before, double After);
+
+	// "단계 1, 이 단계는 2일 2시간 남음". 게임의 단계는 0 부터이고 창에는 1 부터 센다.
+	std::string PhaseNote(double Phase, double Remain);
+
 	// 상태의 한 줄. Name 은 가혹한 계절의 화면 이름(없으면 빈 글). ToExtreme: 올 때까지, ToEnd: 끝날 때까지의 초.
 	std::string SeasonLine(bool Extreme, const std::string& Name, double ToExtreme, double ToEnd);
 }

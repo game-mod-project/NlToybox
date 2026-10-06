@@ -428,10 +428,11 @@ namespace NlCore
 		}
 		else if (verb == "world")
 		{
-			// world <cooldowns_clear|bishop>      한 번 하는 일: 이벤트 쿨다운 지우기, 주교 부르기(core/WorldPlan)
+			// world <cooldowns_clear|bishop|season|season_delay|season_end>      한 번 하는 일(core/WorldPlan): 이벤트 쿨다운 지우기, 주교 부르기,
+			// 계절 보기·가혹한 계절 하루 미루기·지금 단계 끝내기
 			WorldAct act = WorldAct::CooldownsClear;
 			if (count != 2 || !ParseWorldAct(tokens[1], act))
-				return fail("world needs cooldowns_clear or bishop");
+				return fail("world needs one of: " + WorldActWords());
 			command.Target = tokens[1];
 		}
 		else if (verb == "diplomacy")
