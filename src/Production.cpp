@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/FamilyPlan.hpp"
 #include "core/WorldPlan.hpp"
 #include "core/CostBook.hpp"
 #include "core/Knobs.hpp"
@@ -208,6 +209,11 @@ namespace
 	// 기도와 예배가 신앙심을 되돌리는 양(게임 변수 넷).
 	bool WalkPietyRestore(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::PietyRestoreVars(), Why); }
 
+	// 임신·출산의 게임 변수(research/24): 임신 확률 둘, 유산 확률 하나, 출산 중 사망 확률 둘.
+	bool WalkPregnancyChance(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::PregnancyChanceVars(), Why); }
+	bool WalkMiscarriage(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::MiscarriageVars(), Why); }
+	bool WalkChildbirthDeath(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::ChildbirthDeathVars(), Why); }
+
 	bool WalkAmounts(const Visit& V, std::string& Why) { return WalkRecipes(V, false, Why); }
 	bool WalkInputs(const Visit& V, std::string& Why) { return WalkRecipes(V, true, Why); }
 
@@ -247,6 +253,9 @@ namespace
 		{ "religion_free", "religion costs", true, &WalkReligionCosts, nullptr, 15 },
 		{ "piety_restore", "piety restore", false, &WalkPietyRestore, nullptr, 15 },
 		{ "preach_conversion", "preach conversion", false, &WalkPreachFactor, nullptr, 15 },
+		{ "pregnancy_chance", "pregnancy chance", false, &WalkPregnancyChance, nullptr, 15 },
+		{ "no_miscarriage", "miscarriage chance", true, &WalkMiscarriage, nullptr, 15 },
+		{ "safe_childbirth", "childbirth death chance", true, &WalkChildbirthDeath, nullptr, 15 },
 	};
 
 	std::string Place(const std::string& Key, int Level, int Slot)

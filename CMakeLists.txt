@@ -23,6 +23,7 @@ add_library(nlcore STATIC
   src/core/Localization.cpp
   src/core/PeoplePlan.cpp
   src/core/Presets.cpp
+  src/core/FamilyPlan.cpp
   src/core/Rate.cpp
   src/core/RolePlan.cpp
   src/core/RemoteCommand.cpp

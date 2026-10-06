@@ -22,6 +22,7 @@
 #include "core/Rate.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Request.hpp"
+#include "core/FamilyPlan.hpp"
 #include "core/Retry.hpp"
 #include "core/RolePlan.hpp"
 #include "core/Schedule.hpp"
@@ -813,7 +814,7 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 63);
+		CHECK(Cheats().size() == 66);
 		// 종교(research/21): 신앙심 채워 두기, 성스러운 보호 유지(수 1 을 돌려주게 한다), 종교 반란 없음, 종교 비용 없음, 신앙 회복 배율, 설교 전환 계수.
 		CHECK(FindCheat("piety_full") && FindCheat("piety_full")->Kind == CheatKind::Custom && FindCheat("piety_full")->Where == Area::Religion);
 		// 신앙심 채워 두기는 플레이에서 봤다(켜고 40분 뒤 플레이어의 사람 14명이 모두 100, 플레이어의 사람이 아닌 둘은 평소대로 줄었다. research/21)
@@ -2791,6 +2792,90 @@ int main(int argc, char** argv)
 				"ui type", "ui type text=", "ui type text=<b>", "ui type text=1 x=2", "ui key", "ui key name=f8", "ui key name=enter extra=1", "ui hover x=1 y=2" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 		CHECK(!ParseRemoteLine("ui type text=" + std::string(40, '1')).Error.empty());		// 길이의 한도(32자)
+	});
+
+	Test("임신·출생·성장: 단계는 특성으로, 다음 단계 함수를 부른 뒤의 판정, 명령", [] {
+		// 임신의 단계는 특성으로 보인다(research/24): pregnant_st1, st2, st3. 임신이 아니면 0.
+		CHECK(PregnancyStage({ "human", "gifted" }) == 0 && PregnancyStage({}) == 0);
+		CHECK(PregnancyStage({ "human", "pregnant_st1" }) == 1 && PregnancyStage({ "pregnant_st2", "human" }) == 2 && PregnancyStage({ "state_immobilization", "pregnant_st3" }) == 3);
+		CHECK(PregnancyStage({ "pregnant_forbid" }) == 0);				// 출산 뒤에 붙는 특성은 임신이 아니다
+		CHECK(IsKid({ "human", "kid" }) && !IsKid({ "human", "untitled_lord" }) && !IsKid({}));
+		CHECK(k_GrownAge == 18);		// 15, 16 에서는 아이 그대로였고 18 에서 게임이 kid 를 떼고 untitled_lord 를 붙였다
+
+		// 다음 단계 함수를 한 번 부른 뒤: 앞뒤의 단계로 가른다
+		CHECK(AfterStageCall(1, 2) == StageOutcome::Advanced && AfterStageCall(2, 3) == StageOutcome::Advanced);
+		CHECK(AfterStageCall(3, 0) == StageOutcome::Born);
+		CHECK(AfterStageCall(1, 1) == StageOutcome::Stuck && AfterStageCall(3, 3) == StageOutcome::Stuck && AfterStageCall(2, 1) == StageOutcome::Stuck);
+		CHECK(AfterStageCall(1, 0) == StageOutcome::Stuck && AfterStageCall(1, 3) == StageOutcome::Stuck);		// 본 적 없는 건너뜀은 된 것으로 치지 않는다
+		// "바로 출산": 임신 중이고 세 번을 넘기지 않았을 때만 더 부른다
+		CHECK(BirthNeedsCall(1, 0) && BirthNeedsCall(3, 2) && !BirthNeedsCall(0, 0) && !BirthNeedsCall(0, 3) && !BirthNeedsCall(1, 3) && !BirthNeedsCall(2, 5));
+
+		// 결과의 글
+		CHECK_STR(StageReport("Kira", 1, 2, 1, ""), "Kira: 임신 2/3기가 됐습니다");
+		CHECK_STR(StageReport("Kira", 2, 3, 1, ""), "Kira: 임신 3/3기가 됐습니다");
+		CHECK_STR(StageReport("Kira", 3, 0, 1, ""), "Kira: 출산했습니다 (다음 단계 함수를 1번 불렀습니다)");
+		CHECK_STR(StageReport("Kira", 1, 0, 3, ""), "Kira: 출산했습니다 (다음 단계 함수를 3번 불렀습니다)");
+		CHECK_STR(StageReport("Kira", 0, 0, 0, ""), "Kira: 임신 중이 아닙니다");
+		CHECK_STR(StageReport("Kira", 2, 2, 1, ""), "Kira: 단계가 바뀌지 않았습니다 (임신 2/3기 그대로)");
+		CHECK_STR(StageReport("Kira", 1, 2, 3, "no member"), "Kira: 임신 2/3기에서 멈췄습니다 (no member)");
+		CHECK_STR(StageReport("Kira", 1, 0, 1, "본 적 없는 바뀜"), "Kira: 임신이 끝났습니다 (본 적 없는 바뀜)");		// 출산이라고 말하지 않는다
+
+		// 임신을 시작할 수 있는가(누르기 전의 판정. 게임의 is_can_pregant 는 틱이 따로 묻는다): 여성(성별 1)이고 아이가 아니고 임신 중이 아니고 출산 뒤의 금지가 없다
+		std::string why;
+		CHECK(CanConceive(1, { "human" }, why) && why.empty());
+		CHECK(!CanConceive(0, { "human" }, why) && !why.empty());					// 남성
+		CHECK(!CanConceive(1, { "human", "kid" }, why));							// 아이
+		CHECK(!CanConceive(1, { "human", "pregnant_st1" }, why));					// 이미 임신 중
+		CHECK(!CanConceive(1, { "human", "pregnant_forbid" }, why));				// 출산 뒤
+		CHECK(!CanConceive(-1e9, { "human" }, why));								// 성별을 읽지 못했다
+		// 아버지: 남성(성별 0)이고 아이가 아니다
+		CHECK(CanFather(0, { "human" }) && !CanFather(1, { "human" }) && !CanFather(0, { "human", "kid" }) && !CanFather(-1e9, {}));
+
+		// 게임 변수의 열쇠(값은 게임에서 읽는다): 임신 확률 둘, 유산 하나, 출산 중 사망 둘
+		const auto has = [](const std::vector<const char*>& list, const char* key) {
+			return std::find_if(list.begin(), list.end(), [&](const char* item) { return std::string(item) == key; }) != list.end();
+		};
+		CHECK(PregnancyChanceVars().size() == 2 && has(PregnancyChanceVars(), "pregnancy_chance") && has(PregnancyChanceVars(), "pregnancy_from_dummy_chance"));
+		CHECK(MiscarriageVars().size() == 1 && has(MiscarriageVars(), "pregnancy_miscarriage_chance"));
+		CHECK(ChildbirthDeathVars().size() == 2 && has(ChildbirthDeathVars(), "pregnancy_mother_die") && has(ChildbirthDeathVars(), "trait_death_in_childbirth"));
+
+		// 치트 표: 게임 변수를 쓰는 셋(모듈의 일). 게임이 그 값을 따르는지는 보지 못했다(확인 전)
+		CHECK(FindCheat("pregnancy_chance") && FindCheat("pregnancy_chance")->Kind == CheatKind::CustomScale && FindCheat("pregnancy_chance")->Where == Area::People
+			&& !FindCheat("pregnancy_chance")->Verified && FindCheat("pregnancy_chance")->Min >= 1 && FindCheat("pregnancy_chance")->Max <= 2);
+		for (const char* id : { "no_miscarriage", "safe_childbirth" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People && !FindCheat(id)->Verified);
+
+		// 명령의 낱말과 검사
+		PersonAct act = PersonAct::SkillSet;
+		CHECK(ParsePersonAct("pregnancy_next", act) && act == PersonAct::PregnancyNext && std::string(PersonActWord(PersonAct::PregnancyNext)) == "pregnancy_next");
+		CHECK(ParsePersonAct("birth", act) && act == PersonAct::Birth && ParsePersonAct("grow_up", act) && act == PersonAct::GrowUp);
+		CHECK(ParsePersonAct("conceive", act) && act == PersonAct::Conceive);
+		for (const PersonAct one : { PersonAct::PregnancyNext, PersonAct::Birth, PersonAct::GrowUp })
+			CHECK(!NeedsText(one) && !NeedsAmount(one) && !NeedsIndex(one));
+		CHECK(NeedsText(PersonAct::Conceive) && !NeedsAmount(PersonAct::Conceive));
+		// 여럿에게는 "임신한 영주 모두 출산"만. 주민에게는 불러 보지 않았다
+		CHECK(BulkAllowed("lords", PersonAct::Birth) && !BulkAllowed("people", PersonAct::Birth));
+		for (const PersonAct one : { PersonAct::PregnancyNext, PersonAct::GrowUp, PersonAct::Conceive })
+			CHECK(!BulkAllowed("lords", one) && !BulkAllowed("people", one) && BulkAllowed("25556c3312bce178", one));
+		PersonCommand c;
+		c.Act = PersonAct::Conceive;
+		c.Who = "a34ba8b605c96ab7";
+		c.Text = "8f2bfdb1951cc39c";
+		CHECK(CheckPersonCommand(c, why) && why.empty());
+		c.Text = "a34ba8b605c96ab7";
+		CHECK(!CheckPersonCommand(c, why));			// 자기 자신은 아버지가 아니다
+		c.Text = "king";
+		CHECK(!CheckPersonCommand(c, why));			// 아버지는 uuid 로 짚는다
+		c.Text = "";
+		CHECK(!CheckPersonCommand(c, why));
+		CHECK(GoodUuid("8f2bfdb1951cc39c") && !GoodUuid("8f2bfdb1951cc39") && !GoodUuid("8F2BFDB1951CC39C") && !GoodUuid("zzzzzzzzzzzzzzzz") && !GoodUuid(""));
+
+		// 원격의 줄
+		CHECK(ParseRemoteLine("person a34ba8b605c96ab7 pregnancy_next").Error.empty() && ParseRemoteLine("person a34ba8b605c96ab7 birth").Error.empty());
+		CHECK(ParseRemoteLine("person lords birth").Error.empty() && ParseRemoteLine("person 514213d4ae16f161 grow_up").Error.empty());
+		CHECK(ParseRemoteLine("person a34ba8b605c96ab7 conceive name=8f2bfdb1951cc39c").Error.empty());
+		CHECK(!ParseRemoteLine("person people birth").Error.empty() && !ParseRemoteLine("person lords grow_up").Error.empty()
+			&& !ParseRemoteLine("person a34ba8b605c96ab7 conceive").Error.empty() && !ParseRemoteLine("person a34ba8b605c96ab7 conceive name=daven").Error.empty());
 	});
 
 	Test("인물의 역할 프리셋: 표, 할 일, 결과의 글", [] {

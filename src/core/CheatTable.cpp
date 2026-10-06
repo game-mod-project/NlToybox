@@ -184,6 +184,16 @@ namespace NlCore
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
 				N, 0, 0, 0, 50, true, "다음 이주 때(하루에 한 번, 저녁) 이 수만큼 더 온다. 값을 정해 두면 날마다 그만큼 더 온다" },
 
+			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/Production.cpp 의 WalkVars. 열쇠는 core/FamilyPlan).
+			// global.__gameplay_vars 에 pregnancy_chance, pregnancy_from_dummy_chance, pregnancy_miscarriage_chance, pregnancy_mother_die, trait_death_in_childbirth 가 있다.
+			// 값이 써지는 것까지만 봤다. 게임이 그 값을 따르는지는 보지 못했다(확률이라 한두 번으로는 가리지 못한다).
+			{ "pregnancy_chance", Area::People, "임신 확률 배율", "global.__gameplay_vars.pregnancy_chance", CS, 2, 0, 1, 2, false,
+				"임신 확률의 게임 변수 둘(영주끼리, 주민과)에 곱한다. 이름으로 보아 임신이 더 잘 될 것으로 보인다" },
+			{ "no_miscarriage", Area::People, "유산 없음", "global.__gameplay_vars.pregnancy_miscarriage_chance", C, 1, 0, 0, 0, false,
+				"유산 확률의 게임 변수를 0 으로 쓴다. 이름으로 보아 유산이 없어질 것으로 보인다" },
+			{ "safe_childbirth", Area::People, "출산 중 사망 없음", "global.__gameplay_vars.pregnancy_mother_die", C, 1, 0, 0, 0, false,
+				"출산 중 어머니가 죽을 확률의 게임 변수 둘(바탕, 난산 특성)을 0 으로 쓴다. 이름으로 보아 출산으로 죽지 않을 것으로 보인다" },
+
 			{ "rest_decrease", Area::People, "휴식 감소(시간당)", "inst:o_debug.debug_rest_decrease_per_hour", N, 0, 0, 0, 20, false,
 				"한 시간에 휴식이 줄어드는 양으로 보인다(원래 3). 0 이면 피로가 쌓이지 않을 것으로 보인다" },
 			{ "no_occupational_disease", Area::People, "직업병 끔", "inst:o_debug.debug_is_occupational_disease_enabled", T, 0, 1, 0, 0, false,

@@ -26,6 +26,8 @@
 //                                                   인물 패널과 같은 길로 고친다. 할 일: skill_set, skill_add, skills_max, need_set, needs_fill,
 //                                                   age_set, happy, cure, trait_add, trait_remove, knowledge_all, knowledge_add,
 //                                                   money_add, item_add, equip name=<장비 묶음> (core/PeoplePlan)
+//   person <uuid> pregnancy_next | birth | grow_up,  person lords birth,  person <uuid> conceive name=<아버지의 uuid>
+//                                                   임신의 다음 단계, 출산까지, 아이를 어른으로(나이 18), 임신 시작(core/FamilyPlan. research/24)
 //   person <uuid> role name=<king|steward|scholar|instructor|general|duelist|politician|schemer|socialite|priest|trader|producer|teacher>
 //                                                   역할 프리셋을 입힌다(한 사람을 짚어서만): 능력치를 올리고(내리지 않는다) 해로운 특성을 떼고
 //                                                   재능을 붙인다(core/RolePlan). 답은 한 것과 하지 못한 것의 수다

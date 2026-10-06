@@ -616,7 +616,9 @@ void NlEconomy::Draw()
 		Log("economy floors cleared");
 		g_Now.Last = "최소값을 모두 지웠습니다";
 	}
+	ImGui::PushTextWrapPos(0.0f);		// 긴 글이 창의 오른쪽에서 잘렸다(0.24.2 의 화면). 창의 너비에서 줄을 바꾼다
 	ImGui::TextDisabled("'최소' 칸에 수를 적고 Enter 를 누르거나 칸을 떠나면(Tab, 다른 곳을 누름) 들어갑니다. 위의 '최소값 유지'가 켜져 있는 동안 그 수보다 적어질 때마다 그 수까지 채웁니다. 0 은 유지하지 않습니다.");
+	ImGui::PopTextWrapPos();
 	if (!g_Now.Last.empty())
 		ImGui::TextDisabled("%s", g_Now.Last.c_str());
 

@@ -7,6 +7,7 @@
 #include "core/AskPath.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/FamilyPlan.hpp"
 #include "core/Localization.hpp"
 #include "core/RolePlan.hpp"
 #include "core/Text.hpp"
@@ -55,6 +56,7 @@ namespace
 		bool Ready = false;
 		std::string Uuid;
 		double Age = k_Unknown, Moral = k_Unknown, Pain = k_Unknown, MindSum = k_Unknown;
+		double Gender = k_Unknown;				// SoulBasic.get_gender() -> 1(여성) | 0(남성). research/24
 		std::vector<double> Skills, Points;		// 능력치 여덟의 등급과 점수. 그 사람에게 없는 칸은 k_Unknown(주민은 전투만 있다)
 		std::vector<double> Needs, Limits;		// 욕구 여섯과 상한
 		std::vector<std::string> Traits;
@@ -118,6 +120,7 @@ namespace
 	std::unordered_map<std::string, std::string> g_SkillCaptions;
 	int g_RolePick = 0;					// 창의 선택: 역할 프리셋의 자리(core/RolePlan 의 차례)
 	std::string g_RoleLast, g_RoleLastFor;		// 역할 프리셋의 마지막 결과와 그 사람의 uuid(단추 아래에 보인다. 맨 아래의 글까지 내려가지 않아도 되게)
+	std::string g_FatherPick;					// 창의 선택: 임신을 시작할 때의 아버지(uuid)
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
@@ -655,9 +658,10 @@ namespace
 		if (g_DetailLogged != Row.Uuid)
 		{
 			g_DetailLogged = Row.Uuid;
-			Log("people call get_age(), get_pain(), get_total_modify(), get_knowledge_count() on " + Base(Row) + " " + Row.Uuid);		// 사람마다 한 번만 남긴다
+			Log("people call get_age(), get_pain(), get_total_modify(), get_knowledge_count(), get_gender() on " + Base(Row) + " " + Row.Uuid);		// 사람마다 한 번만 남긴다
 		}
 		CallNumber(base + ".get_age", Out.Age);
+		CallNumber(base + ".get_gender", Out.Gender);		// 게임이 인자 없이 부른다: () -> 1 | 0 (334번. research/24)
 		CallNumber(base + ".get_pain", Out.Pain);
 		CallNumber(base + ".__minds.get_total_modify", Out.MindSum);
 		// 소지금과 소지품은 값으로 읽는다. 가진 지식의 수는 ComponentKnowledge.get_knowledge_count()(인자 없음. 3, 4, 121 을 돌려줬다).
@@ -951,6 +955,126 @@ namespace
 			}
 			return Attach(Row, C.Text, soul_value, Note);
 		}
+		case PersonAct::PregnancyNext:
+		case PersonAct::Birth:
+		{
+			// 임신의 다음 단계: ComponentPregnancy.debug_pregnancy_next_stage()(인자 없음: 본문이 argc 를 옮기지 않는다. research/24).
+			// 임신 1/3기의 영주에게 세 번 불러 2/3기, 3/3기, 출산(아이가 생기고 어머니에게 pregnant_forbid 가 붙는다)까지 가는 것을 봤다.
+			// 임신 중이 아닌 사람에게는 부르지 않는다(그런 상태에서 불러 본 적이 없다). 부를 때마다 특성을 다시 읽어 단계가 본 대로 바뀌었는지 본다.
+			std::vector<std::string> traits;
+			if (!ReadTraits(soul_value, traits))
+			{
+				Note = Row.Name + ": 특성을 읽지 못했습니다";
+				return false;
+			}
+			const int first = NlCore::PregnancyStage(traits);
+			const int limit = C.Act == PersonAct::Birth ? NlCore::k_StageCallsMax : 1;
+			int stage = first, calls = 0;
+			std::string why;
+			while (calls < limit && NlCore::BirthNeedsCall(stage, calls))
+			{
+				Log("people call debug_pregnancy_next_stage() on " + Row.Uuid + " (stage " + std::to_string(stage) + ")");		// 부르기 전에 남긴다
+				if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__pregnancy.debug_pregnancy_next_stage"), {}, result, why))
+					break;
+				calls++;
+				if (!StillThere(Row, soul_value) || !ReadTraits(soul_value, traits))
+				{
+					why = "부른 뒤 그 사람을 다시 읽지 못했습니다";
+					break;
+				}
+				const int after = NlCore::PregnancyStage(traits);
+				const bool stuck = NlCore::AfterStageCall(stage, after) == NlCore::StageOutcome::Stuck;
+				if (stuck && after != stage)
+					why = "본 적 없는 바뀜: " + std::to_string(stage) + " -> " + std::to_string(after);
+				stage = after;
+				if (stuck)
+					break;
+			}
+			Note = NlCore::StageReport(Row.Name, first, stage, calls, why);
+			return first > 0 && why.empty() && (C.Act == PersonAct::Birth ? stage == 0 : calls == 1 && stage != first);
+		}
+		case PersonAct::GrowUp:
+		{
+			// 아이를 어른으로: 나이를 18 로 맞춘다(SoulBasic.set_age. 15, 16 에서는 아이 그대로였고 18 에서 게임이 kid 를 떼고 untitled_lord 를 붙였다.
+			// 진영은 player_untitled 가 됐다. research/24).
+			std::vector<std::string> traits;
+			if (!ReadTraits(soul_value, traits) || !NlCore::IsKid(traits))
+			{
+				Note = "아이가 아닙니다";
+				return false;
+			}
+			Log("people call set_age(" + Shortest(NlCore::k_GrownAge) + ") on " + Row.Uuid + " (grow up)");
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".set_age"), { RValue(NlCore::k_GrownAge) }, result, Note))
+				return false;
+			if (!StillThere(Row, soul_value) || !ReadTraits(soul_value, traits))
+			{
+				Note = "나이를 맞춘 뒤 그 사람을 다시 읽지 못했습니다";
+				return false;
+			}
+			if (NlCore::IsKid(traits))
+			{
+				Note = "나이를 18 로 맞췄지만 아이 특성이 남아 있습니다";
+				return false;
+			}
+			Note = "어른이 됐습니다. 게임이 소영주로 만듭니다(진영이 바뀌어 영주 목록에서 빠집니다. '주민·손님도 보기'로 보입니다)";
+			return true;
+		}
+		case PersonAct::Conceive:
+		{
+			// 임신 시작: 아버지의 uuid 를 임신 구성요소의 __father_soul_uuid 에 적고 ComponentPregnancy.begin_pregnant()(인자 없음: 기계어)를 부른다.
+			// 임신한 영주의 그 칸에 아버지의 uuid 가 있는 것을 봤다(research/24). 게임이 이 함수를 부르는 것을 기록하지는 못했다.
+			// 부르기 전에 게임의 판정 is_can_pregant()(인자 없음: 기계어)를 묻는다. 되지 않으면 적어 둔 아버지를 지운다.
+			std::vector<std::string> traits;
+			double gender = k_Unknown;
+			std::string why;
+			if (!ReadTraits(soul_value, traits) || !CallNumber(soul + ".get_gender", gender) || !NlCore::CanConceive(gender, traits, why))
+			{
+				Note = why.empty() ? "성별이나 특성을 읽지 못했습니다" : why;
+				return false;
+			}
+			const PersonRow* found = FindRow(C.Text);
+			if (!found || found->Dead)
+			{
+				Note = "아버지로 짚은 사람이 없습니다";
+				return false;
+			}
+			const PersonRow father = *found;		// 사본(아래의 호출이 목록을 바꿀 수 있다)
+			RValue father_soul;
+			std::vector<std::string> father_traits;
+			double father_gender = k_Unknown;
+			if (!StillThere(father, father_soul) || !ReadTraits(father_soul, father_traits) || !CallNumber(Base(father) + ".__soul.get_gender", father_gender)
+				|| !NlCore::CanFather(father_gender, father_traits))
+			{
+				Note = "아버지로 삼을 수 없는 사람입니다 (어른 남성이어야 합니다)";
+				return false;
+			}
+			RValue can;
+			Log("people call is_can_pregant() on " + Row.Uuid);
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__pregnancy.is_can_pregant"), {}, can, Note))
+				return false;
+			if (!can.ToBoolean())
+			{
+				Note = "게임이 임신할 수 없다고 답했습니다 (is_can_pregant 가 거짓)";
+				return false;
+			}
+			const std::string where = soul + ".__pregnancy.__father_soul_uuid";
+			if (!NlAccess::WriteString(where, C.Text, Note))
+				return false;
+			Log("people call begin_pregnant() on " + Row.Uuid + " (father " + C.Text + ")");
+			const bool called = NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__pregnancy.begin_pregnant"), {}, result, Note);
+			const bool there = StillThere(Row, soul_value) && ReadTraits(soul_value, traits);
+			const int stage = there ? NlCore::PregnancyStage(traits) : 0;
+			if (called && stage > 0)
+			{
+				Note = "임신 " + std::to_string(stage) + "/3기가 됐습니다 (아버지 " + father.Name + ")";
+				return true;
+			}
+			std::string ignored;
+			if (there)
+				NlAccess::WriteString(where, "", ignored);		// 되지 않았다. 적어 둔 아버지를 지운다
+			Note = !called ? Note : !there ? "부른 뒤 그 사람을 다시 읽지 못했습니다" : "게임이 임신을 시작하지 않았습니다";
+			return false;
+		}
 		case PersonAct::Role:
 		{
 			const NlCore::RolePreset* role = NlCore::FindRole(C.Text);
@@ -1189,15 +1313,24 @@ namespace
 		const bool bulk = NlCore::IsBulkWho(C.Who);
 		if (bulk && C.Act == PersonAct::Equip)		// 여럿에게 하는 장비 지급은 병사에게만 간다
 			targets.erase(std::remove_if(targets.begin(), targets.end(), [](const PersonRow& row) { return !NlCore::IsSoldier(row); }), targets.end());
+		if (bulk && C.Act == PersonAct::Birth)		// 여럿에게 하는 출산은 임신한 사람에게만 간다
+			targets.erase(std::remove_if(targets.begin(), targets.end(), [](const PersonRow& row) {
+				RValue soul;
+				std::vector<std::string> traits;
+				return !StillThere(row, soul) || !ReadTraits(soul, traits) || NlCore::PregnancyStage(traits) == 0;
+			}), targets.end());
 		if (targets.empty())
-			return bulk && C.Act == PersonAct::Equip ? "병사가 없습니다" : "대상이 없습니다";
+			return bulk && C.Act == PersonAct::Equip ? "병사가 없습니다" : bulk && C.Act == PersonAct::Birth ? "임신한 영주가 없습니다" : "대상이 없습니다";
 
 		size_t done = 0;
-		std::string first_failure, note;
+		std::string first_failure, note, only;
 		for (const PersonRow& row : targets)
 		{
 			std::string one;
-			if (One(C, row, one, bulk))
+			const bool ok = One(C, row, one, bulk);
+			if (targets.size() == 1)
+				only = one;
+			if (ok)
 			{
 				done++;
 				if (targets.size() == 1)
@@ -1211,6 +1344,12 @@ namespace
 			// 역할 프리셋은 그 글이 곧 결과다(이름, 한 것, 하지 못한 것. core 의 RoleReport). 아래의 집계 줄("1/1")은 적지 않는다: 일부만 됐어도 1/1 이 된다.
 			Log("people: role on " + C.Who + ": " + note);
 			return note;
+		}
+		if ((C.Act == PersonAct::PregnancyNext || C.Act == PersonAct::Birth) && !bulk && only.rfind(targets.front().Name + ":", 0) == 0)
+		{
+			// 임신의 단계도 그 글이 곧 결과다(이름과 단계. core 의 StageReport). 됐든 안 됐든 그대로 돌려준다.
+			Log(std::string("people: ") + NlCore::PersonActWord(C.Act) + " on " + C.Who + ": " + only);
+			return only;
 		}
 		Log(std::string("people: ") + NlCore::PersonActWord(C.Act) + " on " + C.Who + ": " + std::to_string(done) + "/" + std::to_string(targets.size())
 			+ (first_failure.empty() ? "" : " (first failure: " + first_failure + ")"));
@@ -1761,6 +1900,62 @@ namespace
 			"한 번에 되돌리는 단추는 없습니다: 붙인 특성은 아래 '특성'에서 하나씩 떼고, 능력치는 아래 '능력치'에서 내립니다.");
 	}
 
+	// 임신·성장(core/FamilyPlan, research/24). 그리는 쪽은 읽어 둔 값으로 판단하고 청만 쌓는다.
+	void DrawFamily(const PersonRow& Row, const Detail& One)
+	{
+		const int stage = NlCore::PregnancyStage(One.Traits);
+		const bool kid = NlCore::IsKid(One.Traits);
+		const bool forbid = Has(One.Traits, NlCore::k_PregnantForbid);
+		const char* gender = One.Gender == NlCore::k_Female ? "여성" : One.Gender == NlCore::k_Male ? "남성" : "성별을 읽지 못했습니다";
+		if (stage > 0)
+			ImGui::Text("%s, 임신 %d/3기", gender, stage);
+		else
+			ImGui::Text("%s%s%s", gender, kid ? ", 아이" : "", forbid ? ", 출산 뒤의 임신 금지가 붙어 있습니다" : "");
+		ImGui::BeginDisabled(stage == 0);
+		if (ImGui::Button("임신 다음 단계"))
+			Push(PersonAct::PregnancyNext, Row.Uuid);
+		ImGui::SameLine();
+		if (ImGui::Button("바로 출산"))
+			Push(PersonAct::Birth, Row.Uuid);
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!kid);
+		if (ImGui::Button("어른으로 (18세)"))
+			Push(PersonAct::GrowUp, Row.Uuid);
+		ImGui::EndDisabled();
+		if (forbid)
+		{
+			ImGui::SameLine();
+			if (ImGui::Button("임신 금지 떼기"))
+				Push(PersonAct::TraitRemove, Row.Uuid, -1, 0, NlCore::k_PregnantForbid);
+		}
+
+		// 임신 시작: 아버지를 고른다(플레이어의 다른 영주. 성별과 나이는 틱이 누를 때 다시 본다).
+		std::string why;
+		if (NlCore::CanConceive(One.Gender, One.Traits, why))
+		{
+			const PersonRow* father = g_FatherPick.empty() ? nullptr : FindRow(g_FatherPick);
+			if (father && (father->Uuid == Row.Uuid || father->Dead || !NlCore::IsPlayers(*father) || !father->Character))
+				father = nullptr;
+			ImGui::SetNextItemWidth(160);
+			if (ImGui::BeginCombo("##father", father ? father->Name.c_str() : "아버지를 고르세요"))
+			{
+				for (const PersonRow& row : g_Now.People)
+					if (NlCore::IsPlayers(row) && row.Character && !row.Dead && row.Uuid != Row.Uuid && ImGui::Selectable((row.Name + "##" + row.Uuid).c_str(), father == &row))
+						g_FatherPick = row.Uuid;
+				ImGui::EndCombo();
+			}
+			ImGui::SameLine();
+			ImGui::BeginDisabled(!father);
+			if (ImGui::Button("임신 시키기") && father)
+				Push(PersonAct::Conceive, Row.Uuid, -1, 0, father->Uuid);
+			ImGui::EndDisabled();
+		}
+		Hint("'임신 다음 단계'는 게임의 디버그 함수를 부릅니다: 1/3기, 2/3기, 3/3기, 출산의 차례이고 '바로 출산'은 출산까지 잇달아 부릅니다. "
+			"태어난 아이는 영주로 나타나고 어머니에게는 임신 금지가 붙습니다. '어른으로'는 나이를 18 로 맞춥니다: 게임이 아이를 소영주로 만들고 진영이 바뀌어 "
+			"영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다). 되돌리는 단추는 없습니다.");
+	}
+
 	void DrawDetail(const PersonRow& Row)
 	{
 		const Detail& one = g_Now.One;
@@ -1803,6 +1998,9 @@ namespace
 
 		ImGui::SeparatorText("역할 프리셋");
 		DrawRole(Row, one);
+
+		ImGui::SeparatorText("임신·성장");
+		DrawFamily(Row, one);
 
 		ImGui::SeparatorText("능력치");
 		if (ImGui::BeginTable("skills", 3, ImGuiTableFlags_SizingFixedFit))
@@ -2261,6 +2459,9 @@ void NlPeople::DrawLords()
 	ImGui::SameLine();
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "lords");
+	ImGui::SameLine();
+	if (ImGui::Button("임신한 영주 모두 출산"))
+		Push(PersonAct::Birth, "lords");
 	Hint("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
 	DrawSpawnHere({ NlCore::SpawnKind::Lord });
 	Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
@@ -2332,7 +2533,8 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 	std::vector<std::string> lines;
 	lines.push_back(row->Name + "  " + (row->Character ? "character" : "dummy") + ":" + std::to_string(row->Index) + "  faction " + row->Faction);
 	lines.push_back("knowledge " + NumberText(one.KnowledgeCount, 0) + "  money " + NumberText(one.Money, 0));
-	lines.push_back("age " + NumberText(one.Age, 0) + "  moral " + NumberText(one.Moral, 2) + "  minds " + NumberText(one.MindSum, 2) + "  pain " + NumberText(one.Pain, 2));
+	lines.push_back("age " + NumberText(one.Age, 0) + "  moral " + NumberText(one.Moral, 2) + "  minds " + NumberText(one.MindSum, 2) + "  pain " + NumberText(one.Pain, 2)
+		+ "  gender " + NumberText(one.Gender, 0) + "  pregnancy " + std::to_string(NlCore::PregnancyStage(one.Traits)));
 	std::string skills = "skills", needs = "needs", traits = "traits";
 	for (size_t i = 0; i < one.Skills.size(); i++)
 		skills += std::string(" ") + NlCore::SkillNames()[i].Key + "=" + NumberText(one.Skills[i], 0);
