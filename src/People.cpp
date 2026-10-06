@@ -1046,8 +1046,9 @@ namespace
 		}
 		case PersonAct::Conceive:
 		{
-			// 임신 시작(확인 전): 아버지의 uuid 를 임신 구성요소의 __father_soul_uuid 에 적고 1/3기의 특성(pregnant_st1)을 붙인다(trait_attach: 본 꼴).
-			// 임신한 영주의 그 칸에 아버지의 uuid 가 있었고 단계는 특성이었다(research/24).
+			// 임신 시작: 아버지의 uuid 를 임신 구성요소의 __father_soul_uuid 에 적고 1/3기의 특성(pregnant_st1)을 붙인다(trait_attach: 본 꼴).
+			// 임신한 영주의 그 칸에 아버지의 uuid 가 있었고 단계는 특성이었다. 이렇게 시작한 임신 49번이 모두 다음 단계 함수로 출산이나 유산까지 갔다(research/24).
+			// 출산 뒤의 pregnant_forbid 를 뗀 바로 뒤에도 됐다(is_can_pregant 가 참이었다).
 			// **ComponentPregnancy.begin_pregnant() 는 부르지 않는다**: 아버지를 적고 불렀는데 게임이 끝났다("I32 argument is undefined").
 			// 붙이기 전에 게임의 판정 is_can_pregant()(인자 없음: 기계어. 한 번 불러 참으로 읽혔다)를 묻는다. 되지 않으면 적어 둔 아버지를 지운다.
 			if (!NlCore::IsPlayersLord(Row))
@@ -2014,15 +2015,13 @@ namespace
 			}
 			ImGui::SameLine();
 			ImGui::BeginDisabled(!father);
-			if (ImGui::Button("임신 시키기 (확인 전)") && father)
+			if (ImGui::Button("임신 시키기") && father)
 				Push(PersonAct::Conceive, Row.Uuid, -1, 0, father->Uuid);
 			ImGui::EndDisabled();
 		}
-		Hint("'임신 다음 단계'는 게임의 디버그 함수를 부릅니다: 1/3기, 2/3기, 3/3기, 출산의 차례이고 '바로 출산'은 끝까지 잇달아 부릅니다. "
-			"게임의 확률을 그대로 탑니다: 유산으로 끝나 아이가 생기지 않을 수 있습니다(결과의 글이 알려 줍니다). 태어난 아이는 영주로 나타나고 어머니에게는 임신 금지가 붙습니다. "
-			"'임신 시키기'는 확인 전입니다: 아버지를 적고 임신 1/3기의 특성을 붙입니다(게임의 임신 시작 함수는 불렀을 때 게임이 끝나서 쓰지 않습니다). "
-			"그렇게 시작한 임신이 출산까지 가는지는 아직 재지 않았습니다. "
-			"'어른으로'는 나이를 18 로 맞춥니다: 게임이 아이를 소영주로 만들고 진영이 바뀌어 영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다). 되돌리는 단추는 없습니다.");
+		Hint("'임신 다음 단계'와 '바로 출산'은 게임의 디버그 함수를 부릅니다(1/3기, 2/3기, 3/3기, 출산). 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다"
+			"('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다). '임신 시키기'는 아버지를 적고 임신 1/3기를 붙입니다. "
+			"'어른으로'는 나이를 18 로 맞춥니다: 게임이 아이를 소영주로 만들어 영주 목록에서 빠집니다. 되돌리는 단추는 없습니다.");
 	}
 
 	void DrawDetail(const PersonRow& Row)
@@ -2539,7 +2538,7 @@ void NlPeople::DrawLords()
 		g_BulkBirthArmed = false;
 	}
 	ImGui::EndDisabled();
-	Hint("임신한 영주마다 게임의 다음 단계 함수를 출산까지 부릅니다. 게임의 확률을 그대로 탑니다: 유산으로 끝나 아이가 생기지 않을 수 있습니다.");
+	Hint("임신한 영주마다 게임의 다음 단계 함수를 출산까지 부릅니다. 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다).");
 	DrawSpawnHere({ NlCore::SpawnKind::Lord });
 	Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
 	DrawLast();

@@ -169,7 +169,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     게임이 부르는 꼴을 `record`로 본 뒤에만 부른다(`rebellion_debug_spawn_player_soldier`는 인자 없이 되는 것을 불러서 본 예외다).
   - **인자가 없는 디버그 함수도 게임을 끝낼 수 있다.** `AmbushManager.debug_start_ambush_archers()`는 본문이 `argc`를 옮기지 않는데도 안에서 빈 값을 써서
     "REAL argument incorrect type undefined"로 죽었다(`research/14`). 게임이 스스로 부르지 않는 함수를 처음 부를 때는 **실행의 맨 마지막에, 그 뒤에 할 일을 남기지 않고** 하나만 부르고,
-    사용자에게 오류 창이 뜰 수 있다고 먼저 알린다. 불러서 된 것: `debug_force_send_bishop()`, 디버그 소환기의 `__spawn_*()`, `rebellion_debug_spawn_player_soldier()`.
+    사용자에게 오류 창이 뜰 수 있다고 먼저 알린다. 불러서 된 것: `debug_force_send_bishop()`, 디버그 소환기의 `__spawn_*()`, `rebellion_debug_spawn_player_soldier()`,
+    `debug_pregnancy_next_stage()`. **불러서 게임이 끝난 것**(다시 부르지 않는다): `get_summary_army_loyalty()`, `debug_start_ambush_archers()`, `start_ambush_wolves()`, `begin_pregnant()`.
 - 군대(`research/13`). 병사는 `o_dummy`이고 갈래(`__soul.__social_strata`)가 2 다. 병영의 목록은 `…__soldiers_barracks_manager.get_array_of_soldiers()`.
   - 병사 추가: `gml_Script_rebellion_debug_spawn_player_soldier()`(인자 없음). 지도 가장자리에 생겨 걸어온다. 한 틱에 20번까지 불러 봤다(`NlCore::SoldierBatch`).
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
@@ -278,13 +279,26 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     붙인 재능의 행동을 게임이 돌리려 한다(`redeemer`·`musician`의 "Trait action …" 경고가 게임의 오류 파일에 남았다).
   - 능력치의 화면 이름은 `main.csv`의 `actor.skill.<열쇠>`에서 읽는다. **전투만 `actor.skill.fight`다**(`SkillCaptionKey`. 여덟이 같은 꼴이라고 어림했다가 틀렸다).
   - **`shot`에는 이름을 준다**(`shot role-before`. 이름이 없으면 찍히지 않는다). 받은 화면은 `ask.ps1`이 `refs\ui\<이름>.png`로 옮긴다. 명령 뒤의 화면은 2초쯤 두고 찍는다.
+- 임신·출생·성장(`src/core/FamilyPlan`, `src/People.cpp`. `research/24`). **플레이어의 영주에게만 한다**(`NlCore::IsPlayersLord`. 주민·손님·다른 진영에게는 불러 본 적이 없다).
+  - 임신의 단계는 특성이다: `pregnant_st1`·`st2`·`st3`. 출산 뒤 어머니에게 `pregnant_forbid`가 붙는다. 구성요소는 `__soul.__pregnancy`(`__father_soul_uuid`: 아버지의 uuid, 평소에는 빈 글).
+    성별은 `SoulBasic.get_gender() -> 1(여성) | 0(남성)`.
+  - 다음 단계: `…__pregnancy.debug_pregnancy_next_stage()`(인자 없음). 임신 중인 사람에게만 부르고 부를 때마다 특성을 다시 읽는다(본 바뀜 1→2, 2→3, 3→0 만 된 것으로 친다. `AfterStageCall`).
+    한 틱에 잇달아 불러도 된다. **게임의 확률을 그대로 탄다**: 3/3기의 다음이 출산이 아니라 유산일 수 있다.
+    **아이가 생겼는지는 사람의 수로 본다**(`StageReport`의 `Children`). 단계가 0 이 된 것만 보고 "출산했습니다"라고 적었다가 틀렸다.
+  - 임신 시작: 게임의 판정 `is_can_pregant()`를 묻고(수·불리언일 때만 읽는다), 아버지의 uuid 를 `__father_soul_uuid`에 적고(`NlAccess::WriteString`), `trait_attach("pregnant_st1")`.
+    그렇게 시작한 임신 49번이 모두 출산이나 유산까지 갔다. **`begin_pregnant()`는 부르지 않는다**: 아버지를 적고 불렀는데 게임이 끝났다("I32 argument is undefined").
+  - 아이를 어른으로: `set_age(18)`. 게임이 `kid`를 떼고 `untitled_lord`를 붙이고 진영을 `player_untitled`로 바꾼다(15, 16 에서는 아이 그대로였다. 자란 사람은 플레이어의 영주 목록에서 빠진다).
+  - 표의 셋(게임 변수. `src/Production.cpp`의 일): `no_miscarriage`는 확인됐다(켠 채 임신 25번에 유산 0, 끈 채 27번에 5). `safe_childbirth`(끈 채 22번의 출산에도 죽음이 없어 가리지 못했다)와
+    `pregnancy_chance`(모듈의 임신 시작은 그 확률을 타지 않는다)는 확인 전이다.
+  - **확률로 정해지는 것은 되풀이해 센다**: 멈춘 채로 한 실행에서 임신 시작과 바로 출산을 수십 번 돌렸다. 모듈의 로그의 `people: birth on …` 줄로 센다.
+    원격의 답은 첫 줄이 `running …`이다. 결과는 그다음 줄이다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
   - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).

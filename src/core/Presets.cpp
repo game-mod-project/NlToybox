@@ -14,10 +14,10 @@ namespace NlCore
 			{ "sandbox", "샌드박스", "짓고 만드는 데 걸림돌이 없다", {
 				{ "build_any", 0 }, { "build_free", 0 }, { "instant_upgrade", 0 }, { "instant_build", 0 },
 				{ "production_time", 0.1 }, { "worker_performance", 5 }, { "production_amount", 2 }, { "storage_capacity", 10 }, { "hire_cost", 0.1 } } },
-			{ "god", "신", "샌드박스에서 생산량을 x5 로 올리고 사람들의 욕구와 기분을 채워 두고, 싸울 때 아군의 전투 기술을 두 배로 적의 것을 절반으로 한다", {
+			{ "god", "신", "샌드박스에서 생산량을 x5 로 올리고 사람들의 욕구와 기분을 채워 두고, 싸울 때 아군의 전투 기술을 두 배로 적의 것을 절반으로 하고, 유산이 없다", {
 				{ "build_any", 0 }, { "build_free", 0 }, { "instant_upgrade", 0 }, { "instant_build", 0 },
 				{ "production_time", 0.1 }, { "worker_performance", 5 }, { "production_amount", 5 }, { "storage_capacity", 10 }, { "hire_cost", 0.1 },
-				{ "needs_full", 0 }, { "always_happy", 0 }, { "ally_power", 2 }, { "enemy_power", 0.5 } } },
+				{ "needs_full", 0 }, { "always_happy", 0 }, { "ally_power", 2 }, { "enemy_power", 0.5 }, { "no_miscarriage", 0 } } },
 		};
 		return presets;
 	}

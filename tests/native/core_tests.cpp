@@ -2882,7 +2882,17 @@ int main(int argc, char** argv)
 		CHECK(FindCheat("pregnancy_chance") && FindCheat("pregnancy_chance")->Kind == CheatKind::CustomScale && FindCheat("pregnancy_chance")->Where == Area::People
 			&& !FindCheat("pregnancy_chance")->Verified && FindCheat("pregnancy_chance")->Min >= 1 && FindCheat("pregnancy_chance")->Max <= 2);
 		for (const char* id : { "no_miscarriage", "safe_childbirth" })
-			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People && !FindCheat(id)->Verified);
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People);
+		// 유산 없음은 플레이에서 봤다(실행 3: 켠 채 임신 25번에 유산 0, 끈 채 27번에 유산 5. research/24). 다음 실행에서도 켜진 채로 시작하고 신 묶음에 든다.
+		// 출산 중 사망 없음은 가리지 못했다(끈 채 22번의 출산에서도 어머니가 죽지 않았다).
+		CHECK(FindCheat("no_miscarriage")->Verified && !FindCheat("safe_childbirth")->Verified);
+		CheatState family;
+		family.On = { "no_miscarriage", "safe_childbirth" };
+		CHECK(KeepKnown(family).On == (std::set<std::string>{ "no_miscarriage" }));
+		bool in_god = false;
+		for (const PresetItem& item : FindPreset("god")->Items)
+			in_god = in_god || std::string(item.Id) == "no_miscarriage";
+		CHECK(in_god);
 
 		// 명령의 낱말과 검사
 		PersonAct act = PersonAct::SkillSet;
