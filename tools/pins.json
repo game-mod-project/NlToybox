@@ -1,0 +1,31 @@
+{
+  "files": [
+    {
+      "name": "AurieCore.dll",
+      "project": "Aurie",
+      "tag": "v2.0.2",
+      "url": "https://github.com/AurieFramework/Aurie/releases/download/v2.0.2/AurieCore.dll",
+      "size": 967680,
+      "sha256": "18e3a1de980f487a6b3858b673d2030e96984dd96de3a047b43a263a5ba829ae",
+      "gamePath": "mods\\Native\\AurieCore.dll"
+    },
+    {
+      "name": "AuriePatcher.exe",
+      "project": "Aurie",
+      "tag": "v2.0.2",
+      "url": "https://github.com/AurieFramework/Aurie/releases/download/v2.0.2/AuriePatcher.exe",
+      "size": 260096,
+      "sha256": "4d3aec439dbba5209ad48fb0a40d6324406247fe678541df9031f5b89363d536",
+      "gamePath": null
+    },
+    {
+      "name": "YYToolkit.dll",
+      "project": "YYToolkit",
+      "tag": "v5.0.0c",
+      "url": "https://github.com/AurieFramework/YYToolkit/releases/download/v5.0.0c/YYToolkit.dll",
+      "size": 860672,
+      "sha256": "ae7809f136f9222e5f49393d7ce7c3ad4c375c171308e2414660946d4ba0378a",
+      "gamePath": "mods\\Aurie\\YYToolkit.dll"
+    }
+  ]
+}

@@ -1,0 +1,43 @@
+{
+  "name": "verify-stage1",
+  "game_version": "0.5588.9777.0",
+  "allow_experimental": true,
+  "changes": [
+    { "file": "gameplay_variables.json", "path": "global_map.ai_economy.initial_budget", "set": 7450319 },
+
+    { "file": "debug_params.json", "path": "product_count.wood", "set": 3073111 },
+    { "file": "debug_params.json", "path": "production_cost.ale", "set": 2311747 },
+    { "file": "debug_params.json", "path": "fair_trade.fair_trade_purchase.ale", "set": 4127339 },
+    { "file": "debug_params.json", "path": "fair_trade.fair_trade_sale.ale", "set": 3119561 },
+    { "file": "debug_params.json", "path": "fair_trade.migrants_limit_dummy", "set": 1013983 },
+    { "file": "debug_params.json", "path": "building_duration_factor", "set": 0.573119 },
+    { "file": "debug_params.json", "path": "building_resources.woodcutter_lvl_1[0][1]", "set": 1517377 },
+    { "file": "debug_params.json", "path": "bet.dummy", "set": 5099413 },
+
+    { "file": "battle_params.json", "path": "battle_dodge_shift_better", "set": 1117649 },
+    { "file": "battle_params.json", "path": "limit.cut", "set": 5021857 },
+    { "file": "battle_params.json", "path": "attack.sword.cut", "set": 2805133 },
+    { "file": "battle_params.json", "path": "defence.shield.bruise", "set": 2039771 },
+    { "file": "battle_params.json", "path": "pain.cut", "set": -6131299 },
+
+    { "file": "director_params.json", "path": "group_cooldown_days.RAID", "set": 4057213 },
+    { "file": "director_params.json", "path": "group_min_spawn_days.RAID", "set": 2063627 },
+    { "file": "director_params.json", "path": "group_super_priority_days.RAID", "set": 1069841 },
+    { "file": "director_params.json", "path": "events.vassal_player_demand.tickets", "set": 1009373 },
+    { "file": "director_params.json", "path": "events.vassal_player_demand.cooldown_days.max", "set": 7307159 },
+
+    { "file": "knowledge/technology/textbooks/skill_combat_1.json", "path": "upgrade_skill[0].value", "set": 1613477 },
+
+    { "file": "knowledge/technology/economic/07!building_internal_trade.json", "path": "available_parameters[0].population", "set": 4273691 },
+
+    { "file": "gameplay_variables.json", "path": "bribe.give_rings", "set": 1019923 },
+    { "file": "gameplay_variables.json", "path": "bribe.cooldown", "set": 1213087 },
+    { "file": "gameplay_variables.json", "path": "free_lord.stay_duration", "set": 1031269 },
+    { "file": "gameplay_variables.json", "path": "church.max_capacity", "set": 5023441 },
+    { "file": "gameplay_variables.json", "path": "tavern.max_capacity", "set": 3037583 },
+    { "file": "gameplay_variables.json", "path": "paper[\"messenger_cost \"]", "set": 1049317 },
+    { "file": "gameplay_variables.json", "path": "soldier.cost_for_combat_level", "set": 2029753 },
+    { "file": "gameplay_variables.json", "path": "skill.increase_in_use.command", "set": 2053807 },
+    { "file": "gameplay_variables.json", "path": "prestige.for_population", "set": 1061119 }
+  ]
+}

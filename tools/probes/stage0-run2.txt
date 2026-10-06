@@ -1,0 +1,18 @@
+# 단계 0 실행 2: 세 값을 바꾼 뒤. 바꾼 값(2345, 745)을 찾는다.
+delay_seconds=60
+script=gml_Script_budget_default_money_get
+find=2345
+find=745
+find_name=budget_money
+find_name=default_budget_money
+find_name=initial_budget
+find_name=ai_economy
+find_name=battle_dodge_base
+find_name=death_chance_mult
+find_name=production_cost
+find_name=building_resources
+find_name=product_count
+find_name=game_speed_slower_div
+find_name=gameplay_hour_frames
+find_name=farm_pig_grow_duration
+find_name=mill_rye_flour_yield

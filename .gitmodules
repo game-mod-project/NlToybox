@@ -1,0 +1,7 @@
+[submodule "external/YYToolkit"]
+	path = external/YYToolkit
+	url = https://github.com/AurieFramework/YYToolkit.git
+	branch = experimental
+[submodule "external/imgui"]
+	path = external/imgui
+	url = https://github.com/ocornut/imgui.git

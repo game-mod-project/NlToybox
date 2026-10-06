@@ -1,0 +1,19 @@
+# 단계 0 실행 1: 바닐라. 원래 값과 이름으로 찾는다.
+delay_seconds=60
+script=gml_Script_budget_default_money_get
+# resource_default_count_get 은 부르지 않는다. 정수 인자를 기대해서 문자열을 넘기면 게임이 GML 오류로 끝난다(실측).
+find=2000
+find=700
+find_name=budget_money
+find_name=default_budget_money
+find_name=initial_budget
+find_name=ai_economy
+find_name=battle_dodge_base
+find_name=death_chance_mult
+find_name=production_cost
+find_name=building_resources
+find_name=product_count
+find_name=game_speed_slower_div
+find_name=gameplay_hour_frames
+find_name=farm_pig_grow_duration
+find_name=mill_rye_flour_yield

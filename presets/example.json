@@ -1,0 +1,8 @@
+{
+  "name": "example",
+  "game_version": "0.5588.9777.0",
+  "changes": [
+    { "file": "gameplay_variables.json", "path": "global_map.ai_economy.initial_budget", "mul": 2 },
+    { "file": "debug_params.json", "path": "production_cost.*", "mul": 0.5 }
+  ]
+}
