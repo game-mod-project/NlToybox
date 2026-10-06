@@ -83,3 +83,58 @@
   `trait_get_hint_context`(인자 셋), `trait_is_exists`(하나), `trait_property_get`(둘). 인자의 형은 보지 못했다. 부르지 않았다.
 - 그래서 **모듈은 화면 이름을 게임의 함수가 아니라 게임 폴더의 `localization\main.csv`에서 읽는다**(`core/Localization`의 `ReadLocalization`. Korean 칸, 비면 English 칸).
   게임 파일의 글은 레포에 싣지 않는다.
+
+## 실행 2 (모듈 0.21.1, 2026-10-06, `lord-session2`)
+
+답: `refs/runtime/lord-session2.answer.txt`, 화면: `refs/ui/r1-lord*.png`, `r1-traits*.png`. 06:00 에서 멈춘 채 확인하고 한 시간과 10분을 흘렸다.
+저장하지 않고 껐다(새 세이브 없음). 적재 판정 통과. 게임의 오류 기록의 `_struct_copy_from` 경고는 늘지 않았다(75 → 75). 백그라운드.
+
+### 영주의 호감·충성(원격 `court`)
+
+| 한 것 | 본 것 |
+|---|---|
+| `court list` | 영주 다섯의 충성(31, 13, 74, 100, 100), 상태, `has_loyalty`(1, 1, 1, 0, 0), 따르는 사람(2, 0, 2, 0, 0), 서로의 평판 20칸. 왕은 Daven |
+| `court <Amold> loyal` | "Amold -> Daven: 평판 13 -> 103 (좋은 평판 15개 붙임)". 충성 103, 상태 2 |
+| `<Barra> opinion about=<Kira> amount=-3`, `amount=2`, `clear`, `clear` | 2 → -13(나쁜 것 3개 붙임) → -3(나쁜 것 2개 뗌) → 2(나쁜 것 1개 뗌) → "붙여 둔 디버그 평판이 없습니다" |
+| `<Shchitka> opinion about=<Barra> amount=40` 두 번, `clear` | 6 → 206(40개), 206 → 256("좋은 평판 10개 붙임. 같은 평판의 겹침 한도에 닿아 더 붙일 수 없습니다". 안 된 것으로 센다), 256 → 6(50개 뗌) |
+| `court lords like about=lords queue=1`(틱이 한다) | 14초 안에 20개 가운데 19개를 하고 1개는 이미 목표 이상. 스무 칸이 모두 100 ~ 105. 한 짝에 5 ~ 20개 |
+| 쌓인 일과 `person lords happy`·`needs_fill`을 한 요청에 | 쌓인 일 둘이 모두 됐다(버린 일 없음) |
+| `court lords loyal`(이미 100 이상), 없는 uuid, 왕, 아이(Shchitka) | "이미 목표(100) 이상입니다" 셋. 뒤의 셋은 "게임이 그 영주에게는 충성을 따지지 않습니다 (또는 그런 영주가 없습니다)" |
+| `court lords opinion about=king amount=3` | 받지 않는다("평판의 개수는 한 짝씩만 움직입니다") |
+| `court <Barra> release`, `court lords release` 두 번 | "Barra: 따르던 2명의 충성 대상을 지웠습니다", 그 뒤 Kira 의 2명, 그 뒤 모두 "따르는 사람이 없습니다". 따르는 사람 4 → 0 |
+
+- **사용자가 실행 중에 창의 단추를 눌렀다**: 로그에 원격으로 보내지 않은 일 두 묶음이 있다("서로를 100까지" 20개가 모두 "이미 목표 이상", 그 뒤 "붙인 평판 모두 떼기" 20개가 모두 됐다:
+  한 짝에 5 ~ 25개를 뗐다). 창의 단추도 같은 길로 된다는 것을 그 로그로 봤다. 그래서 그 뒤의 "한 시간 뒤에도 남는가"는 재지 못했다(이미 떼어졌다).
+- 떼고 난 뒤의 평판은 처음 값과 같거나 1 다르다(시간이 흘러 게임의 평판이 조금 바뀌었다: Barra → Daven 31 → 30).
+- 화면(`r1-lord2.png`): 결과 8줄이 영주의 표를 창 아래로 밀었다. 0.22.0 에서 결과를 2줄만 바로 보이게 했다.
+
+### 특성의 이름과, 설명의 열쇠를 얻는 길
+
+- 모듈이 `localization\main.csv`에서 `trait.*` 271개를 읽었다. **게임의 특성은 281개이고 그 가운데 208개에 그 줄이 있다**(73개는 줄이 없다: `human`, `aging`, 출혈·임신의 단계,
+  `guest_trait_*`, `__…__` 꼴의 안쪽 특성 …). 화면(`r1-traits2.png`): 가진 특성이 "지적 장애 (stupidity)", "매력적 (beauty_pretty)"으로 보이고 전체 목록의 표가 그려진다.
+- **`gml_Script_trait_get_caption(글) -> 글`**: 영주에게 `brave`를 붙이자 게임이 `("brave") -> "무모"`로 한 번 불렀다. 그 꼴로 불러 봤다:
+  `sex_desire_weak` → "성욕", `beauty_pretty` → "매력적", `bald` → "탈모"(셋 다 파일의 Korean 칸과 같다), `failed_poison` → "Indigestion"(Korean 칸이 비어 English 칸),
+  `human` → "trait.human"(줄이 없으면 열쇠 그대로), `__criminal_surrender__` → "". **모듈이 파일에서 읽는 것(Korean, 비면 English)과 같은 답이다.**
+- **`gml_Script_trait_property_get(글, 정수)`**: 게임이 10분에 1,394번 불렀다(`("brave", 9) -> 1`, `("brave", 13) -> 549890032640` …). 두 특성에 0 ~ 24번을 모두 불러 봤다:
+
+  | 번호 | 돌려준 것 |
+  |---|---|
+  | 0 | 그 이름(`"sex_desire_weak"`) |
+  | 1 | 화면 이름의 열쇠(`"trait.sex_desire_weak"`) |
+  | 13 | 큰 정수(int64. 갈래의 비트로 보인다. 뜻은 재지 않았다) |
+  | 16, 18 | 구조체 |
+  | **21** | **힌트의 열쇠**(`"hint_trait_sex_desire_weak"`, `"hint_beauty_pretty"`) |
+  | 그 밖 | 수, 불리언, `undefined`, 빈 글 |
+
+- **281개 모두에 `(이름, 21)`로 불렀다**: 246개가 열쇠(글), 35개가 빈 글. 죽지 않았다. 열쇠의 꼴: `hint_<이름>` 130, `hint_talent_<이름>` 57, `hint_trait_<이름>` 15,
+  **그 밖의 꼴 44**(`aging` → `hint_oldman`, `bleeding_*` → `hint_bleeding`, `beer_addiction` → `hint_alcoholism`, `blissful` → `hint_trait_blissful_new` …).
+  이름으로 어림했다면 44개를 놓치고 1개(`blissful`)는 다른 힌트를 골랐다.
+- 그 열쇠 246개 가운데 230개가 힌트 파일에 있다(`hints.csv` 227, `hints_tutorial.csv` 2, `hints_with_icons.csv` 1. 한 열쇠가 두 파일에 있는 것은 없다). 16개는 어느 파일에도 없다
+  (`hint_dialect_*`, `hint___fire_immunity__` …). 한국어 글이 빈 것 5개(영어로 보인다).
+- **힌트의 첫 줄은 제목이다**: 특성의 힌트 228개에서 첫 줄은 모두 18자 이하이고 한 줄뿐인 힌트는 없다. 화면 이름과 같은 것 83, 다른 것 107(이름 "무모"와 제목 "무모함" 같은 차이),
+  화면 이름의 줄이 없는 특성의 것 38. 본문은 가장 긴 것이 362자, 가운데 값 69자.
+- `trait_hint_name_get`, `trait_get_hint_context`, `trait_get_sprite_image`는 이 실행에서 한 번도 불리지 않았다. 부르지 않았다(21번 속성으로 충분했다).
+- 그래서 모듈(0.22.0)은: 화면 이름은 파일의 `trait.<이름>`, 설명의 열쇠는 `trait_property_get(이름, 21)`, 설명의 글은 힌트 파일 셋에서. 먼저 0번과 1번이 잰 대로인지 본다
+  (`NlCore::TraitLayoutOk`. 게임이 갱신돼 번호가 밀리면 설명을 붙이지 않는다). 화면 이름의 줄이 없는 특성은 힌트의 제목을 명칭으로 쓴다.
+- `tests/native`의 선택 시험(`NL_GAME_DIR`을 주면 돈다)이 진짜 파일을 코어의 코드로 읽어 본다: 이름 271, 힌트 3,934, 다듬은 글에 표식이 남은 것 0.
+

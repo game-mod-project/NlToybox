@@ -2575,7 +2575,31 @@ int main(int argc, char** argv)
 		CHECK(TraitLayoutOk("brave", "brave", "trait.brave"));
 		CHECK(!TraitLayoutOk("brave", "trait.brave", "brave") && !TraitLayoutOk("brave", "brave", "") && !TraitLayoutOk("brave", "", "trait.brave")
 			&& !TraitLayoutOk("brave", "calm", "trait.calm") && !TraitLayoutOk("", "", "trait."));
-		CHECK(k_TraitHintProperty == 21);
+		// 배치를 확인할 특성: 화면 이름의 줄(trait.<이름>)이 있는 이름 가운데서 고른다. 이름순의 앞쪽은 "__…__" 꼴의 안쪽 특성이고
+		// 그것들의 1번은 잰 적이 없다(게임의 이름 함수는 그런 이름에 빈 글을 돌려줬다. research/20).
+		{
+			const std::vector<std::string> names = { "__criminal_surrender__", "__fire_immunity__", "accurate_archer", "aging", "bald", "brave", "calm" };
+			const std::unordered_map<std::string, std::string> captions = { { "accurate_archer", "가" }, { "bald", "나" }, { "brave", "다" }, { "calm", "라" }, { "ghost", "마" } };
+			const std::vector<std::string> probes = TraitLayoutProbes(names, captions, 3);
+			CHECK(probes.size() == 3 && probes[0] == "accurate_archer" && probes[1] == "bald" && probes[2] == "brave");
+			CHECK(TraitLayoutProbes(names, captions, 10).size() == 4);		// 줄이 있는 것은 넷뿐이다(aging 과 __ 들은 없다)
+			CHECK(TraitLayoutProbes({ "__a__", "__b__" }, captions, 3).empty() && TraitLayoutProbes(names, {}, 3).empty() && TraitLayoutProbes(names, captions, 0).empty());
+			// 화면 이름이 빈 줄은 줄이 없는 것으로 친다
+			CHECK(TraitLayoutProbes({ "x" }, { { "x", "" } }, 3).empty());
+		}
+		// 21번이 힌트의 열쇠가 맞는가의 양성 대조: 게임이 준 열쇠의 대부분이 힌트 파일에 있어야 한다(이 빌드: 246개 가운데 230개).
+		// 절반도 없으면 번호가 밀린 것으로 보고 설명을 붙이지 않는다. 열쇠가 적으면(10개 미만) 판정하지 않는다.
+		CHECK(HintKeysPlausible(246, 230) && HintKeysPlausible(246, 123) && !HintKeysPlausible(246, 122) && !HintKeysPlausible(246, 0));
+		CHECK(HintKeysPlausible(0, 0) && HintKeysPlausible(9, 0) && !HintKeysPlausible(10, 4) && HintKeysPlausible(10, 5));
+		// 힌트의 제목을 명칭으로 써도 되는가: 본문이 있고(한 줄뿐인 힌트의 글은 제목이 아니다) 제목이 짧다(이 빌드의 제목은 18자 이하. 한글 20자 = 60바이트까지).
+		CHECK(GoodHintTitle({ "출혈", "피가 납니다." }) && !GoodHintTitle({ "출혈", "" }) && !GoodHintTitle({ "", "본문" }));
+		CHECK(GoodHintTitle({ std::string(60, 'a'), "b" }) && !GoodHintTitle({ std::string(61, 'a'), "b" }));
+		// 첫 줄이 표식뿐이라 다듬으면 비는 힌트: 다음 줄이 제목이다
+		split = SplitHint("<img=spr_x></img>\n[hint_other_thing]\n진짜 제목\n본문");
+		CHECK_STR(split.Title, "진짜 제목");
+		CHECK_STR(split.Body, "본문");
+		split = SplitHint("<b></b>\n \n");
+		CHECK(split.Title.empty() && split.Body.empty());
 
 		// 목록의 차례: 화면 이름이 있는 것을 그 이름의 차례로 먼저, 없는 것을 게임의 이름의 차례로 뒤에.
 		CHECK(TraitBefore("zeal", "가", "ant", "나") && !TraitBefore("ant", "나", "zeal", "가"));
@@ -2598,11 +2622,12 @@ int main(int argc, char** argv)
 		CHECK(ParseRemoteLine("traits max=100000").Error.empty());
 	});
 
-	Test("현지화: 게임 폴더가 주어지면 진짜 파일을 읽어 본다 (NL_GAME_DIR 이 없으면 건너뛴다)", [] {
+	Test("현지화: 게임 폴더가 주어지면 진짜 파일을 읽어 본다 (NLTOYBOX_TEST_GAME_DIR 이 없으면 건너뛴다)", [] {
 		// 게임 파일의 글을 시험에 싣지 않는다: 여기서는 꼴만 본다(읽히는가, 수가 맞는가, 다듬은 글에 표식이 남지 않는가, 끝나는가).
-		// 게임이 갱신된 뒤 다시 돌려 본다: $env:NL_GAME_DIR = <게임 폴더>; build\\nlcore_tests.exe tools\\probes
+		// 게임이 갱신된 뒤 다시 돌려 본다: $env:NLTOYBOX_TEST_GAME_DIR = <게임 폴더>; build\\nlcore_tests.exe tools\\probes
+		// 일부러 도구들의 NORLAND_GAME_DIR 과 다른 이름을 쓴다: 그 변수를 늘 켜 둔 사람의 평소 시험이 게임 파일에 기대지 않게.
 #pragma warning(suppress: 4996)		// getenv: 읽기만 한다
-		const char* dir = std::getenv("NL_GAME_DIR");
+		const char* dir = std::getenv("NLTOYBOX_TEST_GAME_DIR");
 		if (!dir || !*dir)
 			return;
 		const std::filesystem::path root = std::filesystem::path(dir) / "localization";

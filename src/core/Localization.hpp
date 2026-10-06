@@ -27,7 +27,7 @@ namespace NlCore
 	std::string PlainHint(std::string_view Raw, std::string_view Caption);
 
 	// 힌트의 글을 제목(첫 줄)과 본문으로 가른다. 특성의 힌트 228개에서 첫 줄은 언제나 짧은 제목이었다(18자 이하, 한 줄뿐인 힌트는 없었다. research/20).
-	// 제목과 본문을 모두 PlainHint 로 다듬는다. 앞의 빈 줄은 건너뛴다.
+	// 제목과 본문을 모두 PlainHint 로 다듬는다. 앞의 빈 줄과, 표식뿐이라 다듬으면 비는 줄은 건너뛴다(그 다음 줄이 제목이다).
 	struct HintText
 	{
 		std::string Title, Body;
@@ -39,6 +39,14 @@ namespace NlCore
 	constexpr int k_TraitNameProperty = 0, k_TraitCaptionKeyProperty = 1, k_TraitHintProperty = 21;
 	// 번호의 배치가 잰 것과 같은가: 0번이 그 이름이고 1번이 "trait.<이름>"이다. 아니면 21번을 설명의 열쇠로 믿지 않는다(게임이 갱신되면 번호가 밀릴 수 있다).
 	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1);
+	// 배치를 확인할 특성들: Names(이름순)에서 화면 이름의 줄이 있는 것(Captions 에 빈 글이 아닌 이름이 있다)을 앞에서부터 Max 개.
+	// 줄이 없는 특성("__…__" 꼴의 안쪽 특성, human …)에는 1번을 재지 않았다(게임의 이름 함수가 그런 이름에 빈 글이나 열쇠 그대로를 돌려줬다). 그런 것으로 확인하지 않는다.
+	std::vector<std::string> TraitLayoutProbes(const std::vector<std::string>& Names, const std::unordered_map<std::string, std::string>& Captions, size_t Max);
+	// 21번이 힌트의 열쇠가 맞는가의 양성 대조: 게임이 준 열쇠(Keys 개) 가운데 힌트 파일에 있는 것(Found 개)이 절반은 돼야 한다(이 빌드: 246 가운데 230).
+	// 0번·1번은 그대로인데 그 사이에 속성이 끼어 21번이 다른 것이 된 경우를 가린다. 열쇠가 10개 미만이면 판정하지 않는다(참).
+	bool HintKeysPlausible(size_t Keys, size_t Found);
+	// 힌트의 제목을 명칭으로 써도 되는가(화면 이름의 줄이 없는 특성): 본문이 있고 제목이 60바이트 이하다. 한 줄뿐인 힌트의 글은 제목이 아니라 문장이다.
+	bool GoodHintTitle(const HintText& Text);
 
 	// 목록의 차례: 화면 이름이 있는 것을 그 이름의 차례로 먼저(UTF-8 의 차례가 한글의 가나다 차례다), 없는 것을 게임의 이름의 차례로 뒤에. 같은 이름끼리는 게임의 이름으로.
 	bool TraitBefore(const std::string& NameA, const std::string& CaptionA, const std::string& NameB, const std::string& CaptionB);

@@ -242,11 +242,41 @@ namespace NlCore
 	{
 		HintText out;
 		Raw = TrimView(Raw);
-		const size_t end = Raw.find('\n');
-		out.Title = PlainHint(Raw.substr(0, end), "");
-		if (end != std::string_view::npos)
-			out.Body = PlainHint(Raw.substr(end + 1), "");
+		// 다듬어서 비지 않는 첫 줄이 제목이다(표식뿐인 줄은 건너뛴다). 줄마다 하나씩 줄어들므로 끝난다.
+		while (!Raw.empty())
+		{
+			const size_t end = Raw.find('\n');
+			out.Title = PlainHint(Raw.substr(0, end), "");
+			Raw = end == std::string_view::npos ? std::string_view() : Raw.substr(end + 1);
+			if (!out.Title.empty())
+				break;
+		}
+		out.Body = PlainHint(Raw, "");
 		return out;
+	}
+
+	std::vector<std::string> TraitLayoutProbes(const std::vector<std::string>& Names, const std::unordered_map<std::string, std::string>& Captions, size_t Max)
+	{
+		std::vector<std::string> probes;
+		for (const std::string& name : Names)
+		{
+			if (probes.size() >= Max)
+				break;
+			const auto found = Captions.find(name);
+			if (found != Captions.end() && !found->second.empty())
+				probes.push_back(name);
+		}
+		return probes;
+	}
+
+	bool HintKeysPlausible(size_t Keys, size_t Found)
+	{
+		return Keys < 10 || Found * 2 >= Keys;
+	}
+
+	bool GoodHintTitle(const HintText& Text)
+	{
+		return !Text.Title.empty() && !Text.Body.empty() && Text.Title.size() <= 60;
 	}
 
 	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1)

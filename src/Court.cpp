@@ -650,8 +650,12 @@ void NlCourt::Draw()
 		for (size_t i = 0; i < lines.size() && i < k_PanelLines; i++)
 			Hint(lines[i].c_str());
 		if (lines.size() > k_PanelLines && ImGui::CollapsingHeader(("결과 " + std::to_string(lines.size() - k_PanelLines) + "줄 더 (안 된 것이 먼저)###court_more").c_str()))
+		{
 			for (size_t i = k_PanelLines; i < lines.size() && i < k_PanelLines + k_PanelMore; i++)
 				Hint(lines[i].c_str());
+			if (lines.size() > k_PanelLines + k_PanelMore)
+				ImGui::TextDisabled("(그 밖에 %d줄은 적지 않았습니다)", static_cast<int>(lines.size() - k_PanelLines - k_PanelMore));
+		}
 	}
 
 	if (ImGui::BeginTable("court_lords", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
