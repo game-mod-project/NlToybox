@@ -34,6 +34,7 @@
 //   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
 //   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 디버그 평판(±5)을 붙인다(research/19)
 //   diplomacy <uuid> opinion amount=<수> [side=…]   평판을 그만큼 움직인다(5 의 배수로)
+//                                                   queue=1 을 붙이면 창의 단추처럼 쌓기만 한다(틱이 조금씩 한다. 결과는 diplomacy list 로 본다)
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close

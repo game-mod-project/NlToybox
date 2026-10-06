@@ -24,6 +24,9 @@ namespace NlDiplomacy
 	// 명령을 지금 끝까지 한다(원격 명령 diplomacy). 게임 스레드에서만 부른다. 돌려주는 것: 한 일(줄마다).
 	std::vector<std::string> Do(const NlCore::DiplomacyCommand& Command);
 
+	// 명령을 창의 단추처럼 쌓기만 한다(원격 diplomacy … queue=1). 틱이 조금씩 한다. 돌려주는 글: 쌓은 일의 수나 거부한 까닭.
+	std::string Queue(const NlCore::DiplomacyCommand& Command);
+
 	// 왕국들과 지금의 관계(원격 diplomacy list). 게임 스레드에서만 부른다.
 	std::vector<std::string> List();
 }

@@ -330,22 +330,27 @@ namespace
 		return g_SideChoice == 1 ? 't' : g_SideChoice == 2 ? 'u' : 'b';
 	}
 
-	// 창의 단추: 명령을 일로 풀어 쌓는다(g_Kingdoms 는 틱이 채운 사본이다. 러너를 부르지 않는다).
-	void Push(const std::string& Who, DiplomacyGoal Goal, double Amount)
+	// 명령을 일로 풀어 쌓는다(g_Kingdoms 는 틱이 채운 사본이다. 러너를 부르지 않는다). 돌려주는 값: 쌓은 일의 수. 거부하면 -1 이고 Why 에 까닭.
+	int PushCommand(const DiplomacyCommand& Command, std::string& Why)
 	{
-		const DiplomacyCommand command{ Who, Goal, SideChoice(), Amount };
-		std::string why;
-		if (!NlCore::CheckDiplomacy(command, why))
-		{
-			g_Results = { why };
-			return;
-		}
+		if (!NlCore::CheckDiplomacy(Command, Why))
+			return -1;
 		if (g_Jobs.empty())
 		{
 			g_Results.clear();
 			g_Asked = g_Failed = 0;
 		}
-		g_Asked += Enqueue(command, g_Jobs);
+		const int count = Enqueue(Command, g_Jobs);
+		g_Asked += count;
+		return count;
+	}
+
+	// 창의 단추.
+	void Push(const std::string& Who, DiplomacyGoal Goal, double Amount)
+	{
+		std::string why;
+		if (PushCommand({ Who, Goal, SideChoice(), Amount }, why) < 0)
+			g_Results = { why };
 	}
 }
 
@@ -413,6 +418,18 @@ std::vector<std::string> NlDiplomacy::Do(const DiplomacyCommand& Command)
 	std::vector<std::string> lines = g_Results;
 	lines.push_back(Summary());
 	return lines;
+}
+
+std::string NlDiplomacy::Queue(const DiplomacyCommand& Command)
+{
+	std::lock_guard lock(g_Mutex);
+	if (!g_Ready)
+		return g_Why.empty() ? "왕국을 아직 읽지 않았습니다 (외교 패널을 열거나 diplomacy list 를 먼저)" : g_Why;
+	std::string why;
+	const int count = PushCommand(Command, why);
+	if (count < 0)
+		return why;
+	return count == 0 ? "그 왕국이 없습니다" : "일 " + std::to_string(count) + "개를 쌓았습니다 (틱이 합니다)";
 }
 
 std::vector<std::string> NlDiplomacy::List()

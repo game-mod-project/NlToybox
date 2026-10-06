@@ -442,6 +442,11 @@ namespace
 		}
 		command.Amount = C.Number;
 		Say("  running diplomacy " + C.Target + " " + goal->second);		// 죽으면 여기까지 남는다
+		if (C.Options.count("queue") > 0)		// 창의 단추와 같은 길: 쌓기만 하고 틱이 조금씩 한다
+		{
+			Say("  " + NlDiplomacy::Queue(command));
+			return;
+		}
 		for (const std::string& line : NlDiplomacy::Do(command))
 			Say("  " + line);
 	}
