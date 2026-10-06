@@ -16,9 +16,11 @@ add_library(nlcore STATIC
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
   src/core/CostBook.cpp
+  src/core/CourtPlan.cpp
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
+  src/core/Localization.cpp
   src/core/PeoplePlan.cpp
   src/core/Presets.cpp
   src/core/Rate.cpp
