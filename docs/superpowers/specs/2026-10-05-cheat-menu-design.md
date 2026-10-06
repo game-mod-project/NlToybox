@@ -264,7 +264,7 @@ lock inst:o_character:0.starving_hours=0
 | | 평화·동맹 강제(협정) | C 협정 행렬의 `set_agreement(세력, 세력, 비트)`로 평화 협정(4), 교역 협정(8), 방어 동맹(192)을 맺는다(`DiplomacyGoal::Pact`. 양쪽 칸에 쓰이고 게임의 판정 `is_declared_*_with`가 참이 된다. `research/19`) | 됨 |
 | | 외교 비용·성공률, 봉신 | 관계의 종류 동맹(0)·봉신(5)·주군(6)은 건드리지 않는다(`add_to_alliance_with_leader`, `vassalise_by_faction`은 게임이 부르는 꼴을 보지 못했다). 적대 없음: D `Faction.is_enemy_with(세력)`을 거짓으로(모든 세력. 효과는 확인 전) | 6(훅만) |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
-| 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교의 평판(`attach_opinion_to_bishop`)·예언·설교는 아직 | 2(일부), 6(주교) |
+| 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교와의 평판: C 주교의 평판 구조체에 영주의 호감과 같은 함수(`research/21`. 됨). 신앙심: B 감소 0(`debug_piety_decrease_per_hour`)과 채워 두기(됨). 성스러운 보호·종교 반란: D 판정 함수의 답(확인 전). 비용·신앙 회복·설교 전환: B 게임 변수와 설교 자료(확인 전). 설교의 효과와 예언은 아직 | 2(일부), 6(주교), 종교 단계(0.23.x) |
 | 시간 | 게임 속도 0.25~50배 | B `o_time_controller`의 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(§9) | 2 |
 | | 이동 속도, 쿨다운 제거 | B 를 찾는다. 안 되면 D | 6 |
 | 월드 | 지도·지역 공개, 자원 위치, 이동 제한 | D `is_in_fog_of_war`, A `is_fast_action_task_on_global_map`, B `o_global_map` | 2(A), 6 |
@@ -313,6 +313,7 @@ lock inst:o_character:0.starving_hours=0
 | 경제 보탬 | 신성 반지, 최소값 유지. 계획: `plans/2026-10-06-cheat-menu-economy-rings-floor.md` | 됐다(모듈 0.18.x, `research/18`). 반지를 더하고 맞추는 것(화면의 반지 수), 최소값 유지(켜면 1초 안에 채우고, 네 시간 동안 먹히는 당근이 바닥 아래로 내려가지 않고, 끄면 멈춘다), 영주의 반지(게임의 읽기 함수까지)를 플레이에서 확인했다 |
 | 외교 | 왕국과의 관계와 협정. 계획: `plans/2026-10-06-cheat-menu-diplomacy.md` | 됐다(모듈 0.20.x, `research/19`). 왕국의 이름과 양쪽의 관계를 보이고, 한 왕국이나 모든 왕국을 우호·중립으로, 한 왕국을 적대로 움직이는 것, 한 왕국과 평화 협정·교역 협정·방어 동맹을 맺는 것을 플레이에서 확인했다(게임의 관계·협정 판정 함수와 행렬로. 게임이 스스로 다시 셈한 뒤에도 남는다). 관계의 종류 동맹·봉신·주군, 협정을 푸는 것, 외교 비용·성공률은 만들지 않았다. 게임이 협정을 어떻게 따르는지와 세계 지도의 표시는 보지 못했다(게임 창을 누르지 않는 실행이었다) |
 | 영주의 호감·충성, 특성의 글 | 계획: `plans/2026-10-06-cheat-menu-lord-opinions.md` | 됐다(모듈 0.22.x, `research/20`). 영주끼리의 평판과 왕에 대한 충성을 올리고 내리고 떼기, 따르는 사람의 충성 대상 지우기. 인물 탭의 특성을 한국어 이름으로, 전체 특성 목록(명칭·설명·찾기). 세이브에 남는지와 반란에 어떻게 먹는지는 재지 않았다 |
+| 종교 | 계획: `plans/2026-10-06-cheat-menu-religion.md` | 됐다(모듈 0.23.x, `research/21`). 주교와의 평판(게임의 주교 평판 함수로 견줬다), 신앙 감소 0 과 신앙심 채워 두기(플레이에서 확인), 성스러운 보호·종교 반란의 판정(함수의 답까지), 종교 비용 0·신앙 회복 배율·설교 전환 배율(값이 써지고 되돌려지는 것까지). 설교의 효과, 예언, 광신도는 재지 못했다 |
 | 7 | 프리셋, 유틸. 계획: `plans/2026-10-06-cheat-menu-stage7-presets.md` | 프리셋 넷과 시간의 멈춤·다시 흐르게가 됐다(모듈 0.15.x). "18개 영역의 항목이 모두 `Verified`"는 이루지 못했다: 표 52개 가운데 확인된 것은 14개이고, 5·6단계에서 재지 못한 것(전투, 장비, 외교의 관계, 신앙, 계절·날씨, 지도, 이벤트 강제)이 남아 있다 |
 
 ## 11. 오류와 안전

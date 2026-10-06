@@ -73,3 +73,47 @@
 ### 주민의 신앙
 
 - 주민 24명의 특성에 `religiosity_fanatic`·`religiosity_doubting`이 없다(광신도 비율 0). 광신도·의심하는 사람이 있을 때의 것은 재지 못했다.
+
+## 실행 2 (모듈 0.23.1, 2026-10-06, `rel-session2`)
+
+답: `refs/runtime/rel-session2.answer.txt`, 화면: `refs/ui/w1-rel*.png`. 06:00 에서 확인하고 한 시간과 40분을 흘렸다. 저장하지 않고 껐다(새 세이브 없음). 적재 판정 통과. 백그라운드.
+
+| 한 것 | 본 것 |
+|---|---|
+| 주교가 오기 전 `court bishop like about=king` | "주교가 없습니다 (종교 패널의 '주교 부르기')" |
+| `world bishop` 뒤 `court list` | 주교 줄(`bishop`)이 따로 있고 "(5 lords, 1 bishop, …)". `get_bishop_opinion()` 0 |
+| `court bishop opinion about=king amount=3` | "Osortep -> Daven: 평판 0 -> 15 (좋은 평판 3개 붙임)". `get_bishop_opinion()` 15 |
+| `court bishop like about=king` | 15 → 100(17개). `get_bishop_opinion()` 100 |
+| `opinion amount=-2`, `clear` | 100 → 90(좋은 평판 2개 뗌) → 0(18개 뗌). **주교의 평판에서도 떼기가 듣는다.** 게임의 함수도 90, 0 |
+| `court bishop like about=king queue=1`(틱이 한다) | 6초 안에 100. 그 뒤 `court lords loyal queue=1`: 일 3개(주교는 들지 않는다) |
+| `cheat holy_defence on`, 자료를 0 으로 쓰고 `is_under_holy_defence()` | 1(기록: `() -> 0 => 1`). 끄면 0. 자료는 1 로 되돌렸다 |
+| `cheat no_religious_riot on` | 훅이 걸린다(`() -> false => false`) |
+| `cheat religion_free on` | 13칸이 0(게임 변수 여섯, 0 이 아닌 설교 비용 일곱). 끄면 3·5·250·300·200·50 과 50·30·50·50·50·50·150 |
+| `cheat piety_restore 3` | 15·15·30·20 → 45·45·90·60. 끄면 처음 값 |
+| `cheat preach_conversion 5` | 1 → 5. 끄면 1 |
+| `cheat piety_decrease 0` 으로 한 시간(06:00 → 07:20) | 기도하지 않은 14명의 신앙심이 그대로(20 → 20 …). 둘은 기도로 +5. 끄자 변수가 0.83 으로 돌아갔다 |
+| `cheat piety_full on` 으로 40분(07:20 → 08:00) | **플레이어의 사람 14명이 모두 100.** 플레이어의 사람이 아닌 둘(주교, 손님)은 57 → 56.45, 69 → 68.45(평소의 감소) |
+
+- 그래서 `piety_decrease`와 `piety_full`은 확인으로 둔다. `holy_defence`·`no_religious_riot`는 함수의 답까지, `religion_free`·`piety_restore`·`preach_conversion`은 값이 써지고 되돌려지는 것까지 봤다(게임이 그 값을 따르는지는 보지 못했다).
+- 화면(`w1-rel3.png`): 종교 패널에 표의 항목, 배율, "주교 부르기", "주교와의 평판"(`Osortep -> Daven (왕): 평판 100`과 단추 여섯)이 그려진다.
+- **시간을 흘리는 스크립트는 배속이 0 으로 떨어지면 다시 걸어야 한다**: 이 세이브는 4일차 08:00 에 이야기 창이 떠 시간이 멈춘다. 다시 걸지 않은 스크립트는 거기서 멈춰 한 시간이 40분이 됐다.
+
+## 실행 3 (모듈 0.23.2, 2026-10-06, `rel-session3`)
+
+답: `refs/runtime/rel-session3.answer.txt`. 06:00 에서 멈춘 채로만 했다. 저장하지 않고 껐다(새 세이브 없음). 적재 판정 통과(마지막 판). 백그라운드.
+
+- `cheat piety_full on` 뒤 4초: Barra 의 신앙심 0 → 100.
+
+### 재능을 몇 개까지 붙일 수 있는가 (인물 프리셋의 검토를 위한 측정)
+
+사용자가 인물 탭의 역할 프리셋(왕, 내정, 학자, 교관, 장군, 결투, 정치가, 음모, 관계, 종교, 무역, 생산, 교육)을 검토해 달라고 했다. 그 프리셋이 붙일 재능(talent) 특성이 한 사람에게 여럿 붙는지를 쟀다.
+
+- 처음: 영주마다 재능은 하나였다(Amold `armorer`, Kira `gifted`, Daven `flatterer`. Barra 는 없음).
+- `person <uuid> trait_add name=<이름>`으로 **71번 붙여 71번 모두 붙었다**(거부 0): Barra 에게 12개(장군·결투·교관), Amold 에게 30개(학자·교육·종교·관계·음모. 이미 있던 `empath`는 그대로),
+  Kira 에게 20개(무역·생산·내정과 그 밖), 왕 Daven 에게 9개(통치자의 재능 넷과 `charisma`, `calm`, `longlive`, `typh_immunity`, `addiction_resist`).
+  게임의 재능 58개가 모두 붙었고, 한 사람이 30개를 가져도 거부되지 않았다. 서로 밀어내는 조합을 보지 못했다.
+- 붙일 때 게임이 스스로 부른 것: `Traits.is_limit_reached("이름") -> false`(70번 모두 false), `Traits.trait_attach("이름") -> uuid`(모듈이 부른 꼴 그대로).
+  `gml_Script_trait_load_limit_value`는 한 번도 불리지 않았다.
+- 떼기: Barra 에게서 `leader`, `terrifying`, `cutter`를 뗐다(목록에서 사라졌다).
+- 보지 못한 것: 붙인 재능이 게임에서 실제로 듣는지(재능마다의 효과), 게임의 인물 창에 어떻게 보이는지, 세이브에 남는지(특성은 영혼의 자료라 남을 것으로 보이지만 재지 않았다).
+

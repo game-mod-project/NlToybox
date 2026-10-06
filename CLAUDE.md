@@ -226,6 +226,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - `NlPeople::Rows`가 `Busy`를 돌려주면(인물 쪽이 게임의 함수를 부르는 중에 다시 들어온 틱) 그 틱만 건너뛴다. 쌓인 일을 버리지 않는다.
   - `__is_king_whose_opinion_defines_loyalty`는 부르지 않는다(그 호출이 든 요청 때 게임의 경고가 났고 원인을 가리지 못했다).
   - 원격 `court list`, `court <uuid|lords> loyal [goal=]`, `like about=<uuid|lords|king> [goal=]`, `court <uuid> opinion about=<uuid|king> amount=<수>`(한 짝씩만), `clear about=…`, `release`. `queue=1`은 외교와 같다.
+- 종교(`research/21`). 패널은 표의 항목, 배율, `src/World.cpp`의 "주교 부르기", `src/Court.cpp`의 "주교와의 평판"으로 이루어진다.
+  - **주교의 평판(`ReligiosityManager.get_bishop_opinion()`)은 주교가 우리 왕을 보는 평판이다.** 주교는 `o_character`(진영 `holy_synod`. uuid 는 `…__religiosity_manager.__bishop_uuid`)이고
+    그 평판 구조체에 영주의 호감과 같은 함수(`opinion_attach`, `detach_generic_opinion_mind`)가 듣는다. 그래서 Court 에 주교를 평판의 주체로 넣었다(`court bishop like|opinion|clear about=…`.
+    `CourtLord::Bishop`). 주교는 "lords"에 들지 않고, 대상으로 삼지 않고, 걸음마다 아직 주교인지 다시 본다. 충성 올리기와 충성 대상 지우기는 주교에게 없다.
+  - 신앙심은 욕구 3번이다. `inst:o_debug.debug_piety_decrease_per_hour`를 0 으로 쓰면 줄지 않는다(`piety_decrease`. 14명에게서 봤다). 채워 두는 것은 욕구 항목의 바퀴가 한다(`piety_full`. `NeedsToHold`의 넷째 인자).
+  - 성스러운 보호는 `inst:o_game_map_controller.__onboard_manager.__is_under_holy_defence`(수 1)이고 `is_under_holy_defence()`가 그 수를 돌려준다. **수를 돌려주는 판정은 `CheatKind::HookNumber`로 건다**
+    (돌려줄 형은 `NlCore::HookForcedKind`가 정한다: 불리언 `'b'`, 수 `'n'`, 배율 `'x'`). 게임이 돌려주던 형 그대로 바꾼다.
+  - 종교의 게임 변수(`global.__gameplay_vars`의 `religiosity_*_cost`, `*_piety_restore`, `church_preach_conversion_factor`)와 설교의 비용(`inst:o_data.__preach_data.__preach_list[n].__cost`)은
+    `src/Production.cpp`의 일이 쓴다(`WalkVars`, `WalkReligionCosts`. 열쇠의 목록은 `core/WorldPlan`). 세이브에는 그 열쇠가 없다. **게임이 그 값을 따르는지는 보지 못했다**(설교를 정하는 것은 게임의 창이다).
+  - **표에 `global.` 뿌리로 값을 써 넣는 항목(Toggle, Number)을 두지 않는다**(시험이 막는다): 메인 메뉴에서도 써지고, 창이 보이는 동안 전역 4,700여 개를 훑는다. 게임 변수는 모듈의 일(Custom·CustomScale)로 쓴다.
+  - 설교의 효과(설교 강도, 전환 확률, 헌금)는 재지 못했다: 설교가 정해져 있지 않은 세이브에서는 그 스크립트들이 한 번도 불리지 않는다. 돌려주는 형을 보지 못한 함수에는 배율을 걸지 않는다.
+  - 건물의 종류는 `inst:o_building:<n>.raw_caption`(`"building.stone_church"`)으로 가린다. 교회의 구성요소는 `c_church`(교회가 아니면 -4).
+- **시간을 흘리는 스크립트는 배속이 0 으로 떨어지면 다시 건다**(아덴 세이브는 4일차 08:00 에 이야기 창이 떠 멈춘다. 다시 걸지 않으면 거기서 선다. `research/21`).
 - 특성의 글(`core/Localization`, `src/People.cpp`. `research/20`). **게임 파일의 글을 레포에 싣지 않는다**: 모듈이 시작할 때 게임 폴더의 `localization\main.csv`(화면 이름)와
   힌트 파일 셋(`hints_tutorial.csv`, `hints_with_icons.csv`, `hints.csv`)을 읽는다(Korean 칸, 비면 English 칸. `ReadLocalization`). 시험은 지어낸 글로 한다.
   - 화면 이름의 열쇠와 설명의 열쇠는 게임에 묻는다: `gml_Script_trait_property_get(이름, 번호)`(게임이 (글, 정수)로 부른다). 0번 이름, 1번 화면 이름의 열쇠(대개 `trait.<이름>`.
@@ -241,7 +254,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품), `diplomacy`, `court`, `traits [find=] [max=]`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
   - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).
