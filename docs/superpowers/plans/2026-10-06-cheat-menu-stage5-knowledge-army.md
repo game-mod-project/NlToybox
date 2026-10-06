@@ -73,7 +73,7 @@
 ### 결과 (2026-10-06)
 
 - Task 1: 조사 실행 한 번(`stage5-session1`). 답은 `research/12-knowledge-army.md`. 군대는 재지 못했다(세이브에 병영과 병사가 없다).
-- Task 2: 지식·아이템 패널, 명령 넷(`knowledge_all`, `knowledge_add`, `money_add`, `item_add`), 표의 연구 시간 배율(모듈 0.11.0, 커밋 `a546c6f`).
+- Task 2: 지식·아이템 패널, 명령 넷(`knowledge_all`, `knowledge_add`, `money_add`, `item_add`), 표의 연구 시간 배율(모듈 0.11.0, 커밋 `baa8fcf`).
 - Task 3: 독립 검토와 확인 실행(`stage5-session2`). 결과는 `research/12`의 "확인 실행".
 
 ## Self-Review

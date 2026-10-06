@@ -1475,7 +1475,7 @@ git -C E:\NlToyBox branch -d chore/workspace-setup
 git -C E:\NlToyBox log --oneline --graph -12
 git -C E:\NlToyBox branch -a
 ```
-Expected: 머지 커밋이 `develop`의 맨 위에 있고, 브랜치는 `develop`(현재)과 `main`만 남는다. `main`은 루트 커밋 `531f239`에 그대로 있다.
+Expected: 머지 커밋이 `develop`의 맨 위에 있고, 브랜치는 `develop`(현재)과 `main`만 남는다. `main`은 루트 커밋 `b3ea63e`에 그대로 있다.
 
 - [ ] **Step 8: 게임을 어떤 상태로 둘지 사용자에게 묻는다**
 

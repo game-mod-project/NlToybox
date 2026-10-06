@@ -186,7 +186,7 @@ pwsh -NoProfile -File tools/session.ps1 -Action stop -Name stage3c-session1
 
 ### Task 4: 확인 실행, 문서, 머지
 
-- [x] 독립 코드 검토(`dfe8c1a`. code-reviewer, opus): Critical 1, Important 7 → 시험과 함께 고쳤다(모듈 0.7.1. 아래 "검토에서 고친 것").
+- [x] 독립 코드 검토(`eb1c379`. code-reviewer, opus): Critical 1, Important 7 → 시험과 함께 고쳤다(모듈 0.7.1. 아래 "검토에서 고친 것").
 - [x] (한 것: 아래 "Task 4 의 결과") 실행 묶음 1회(사용자 승인). 세이브의 사본을 뜬 뒤 켠다. 위험한 호출은 요청마다 따로, 그 요청의 맨 뒤에 둔다. `cheat … on`과 그 결과를 묻는 줄은 한 요청에 넣지 않는다
   (훅은 0.5초, 비용은 1초 안에 적용된다).
   1. 적재 판정(`NlToyBox 0.7.1 loaded`). 사용자가 시험용 세이브를 불러와 일시정지한다.

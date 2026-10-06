@@ -14,13 +14,17 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 
 - 작업 브랜치는 `develop`에서 분기하고 `develop`으로 통합한다.
 - `main`에는 릴리스 시점에 `develop`에서만 들어간다.
-- 원격 저장소가 없다. PR 대신 로컬 merge commit(`git merge --no-ff`)을 쓴다.
-  원격을 만들면 2단계 PR로 바꾸고 이 절을 고친다.
+- 원격은 `origin` = `https://github.com/game-mod-project/NlToybox`(공개)다. 작업 브랜치를 푸시하고 `develop`으로 PR 을 올려 merge commit 으로 머지한다
+  (`gh pr create --base develop`, `gh pr merge --merge --delete-branch`). `main`에는 릴리스 때 `develop` → `main` PR 로만 들어간다.
+  `main`·`develop`에 직접 푸시하지 않는다(저장소를 처음 채울 때 한 번만 그대로 올렸다. 2026-10-06).
+- 커밋의 작성자 이메일은 GitHub 의 noreply 주소다(이 레포의 `user.email` 설정). 공개 이력에 개인 이메일을 남기지 않는다.
+  2026-10-06 에 이력 전체의 이메일을 다시 썼다: 그 전에 적어 둔 해시는 문서에서 새 해시로 바꿨고, 옛 이력의 사본은 `backups\git\`에 있다(추적 안 함).
 - CI가 없다. 코드가 바뀌면 머지 전에 `tools/build.ps1` 성공, `tools/test-native.ps1`·
   `tools/tests/safety.tests.ps1` 통과, `py -3.14 -m unittest discover -s tools/re/tests`와 `py -3.14 -m unittest discover -s tools/overlay/tests` 통과,
   `tools/check-load.ps1`(또는 같은 판정을 함께 내는 `tools/ui-check.ps1`) 종료 코드 0을 확인한다. 문서만 바뀌면 생략해도 된다.
   `check-load.ps1`과 `ui-check.ps1`을 뺀 나머지는 게임을 켜지 않는다(`safety.tests.ps1`은 임시 폴더의 가짜 게임으로 돈다).
-- 머지한 브랜치는 지운다(`git branch -d`).
+- 머지한 브랜치는 지운다(원격은 `--delete-branch`, 로컬은 `git branch -d`).
+- **푸시 전에 본다**: 아래 "저작물 경계"의 확인, 그리고 추적되는 파일에 비밀 값·개인 정보·게임 파일의 글이 없는가. 공개 저장소다.
 
 ## 경로
 
@@ -422,7 +426,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   **git 태그 `v5.0.0c`를 체크아웃하지 않는다.** 그 태그는 v4 헤더를 가리킨다.
   새로 클론했으면 `git submodule update --init` 먼저.
 - 서브모듈 안의 파일은 고치지 않는다.
-- Aurie와 YYToolkit은 AGPL-3.0이다. 레포 공개나 모듈 배포 전에 다시 검토한다.
+- Aurie와 YYToolkit은 AGPL-3.0이다. 레포는 소스만 공개했다(2026-10-06. 빌드한 DLL 과 `refs/`·`backups/`·`downloads/`는 추적하지 않는다.
+  공개 전에 추적되는 파일 205개에 바이너리·비밀 값·개인 정보가 없는 것을 봤다). **라이선스 파일은 아직 없다**: 무엇으로 할지는 사용자가 정한다.
+  모듈(DLL)을 배포하려면 그 전에 AGPL-3.0 과 맞는 라이선스를 정한다.
 
 ## 도구
 
