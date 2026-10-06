@@ -18,6 +18,18 @@ namespace NlCore
 		}
 	}
 
+	std::string PointerText(std::uintptr_t Value)
+	{
+		static const char digits[] = "0123456789abcdef";
+		std::string text;
+		do
+		{
+			text.insert(text.begin(), digits[Value & 0xf]);
+			Value >>= 4;
+		} while (Value != 0);
+		return "@" + text;
+	}
+
 	std::string Trim(const std::string& Text)
 	{
 		const size_t begin = Text.find_first_not_of(" \t\r\n");

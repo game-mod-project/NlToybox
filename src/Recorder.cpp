@@ -77,8 +77,8 @@ namespace
 			return NlCore::Quote(Value.ToString(), 60);
 		if (Value.IsArray())
 			return "array";
-		if (Value.IsStruct())
-			return "struct";
+		if (Value.IsStruct())		// 주소를 함께 적는다: ask 의 답과 견줘 어느 구조체가 인자로 왔는지 가린다(주소만 읽는다. 빌트인을 부르지 않는다)
+			return "struct" + NlCore::PointerText(reinterpret_cast<std::uintptr_t>(Value.m_Object));
 		if (kind == VALUE_REF)
 			return "ref";
 		if (kind == VALUE_BOOL)

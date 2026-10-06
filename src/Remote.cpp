@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Cheats.hpp"
+#include "Court.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -63,6 +64,12 @@ namespace
 		return it->second == "map" ? Holder::Map : it->second == "list" ? Holder::List : Holder::None;
 	}
 
+	// 구조체면 그 주소를 적는다(" @1a2b"). 기록의 표본이 같은 꼴로 적는다: 인자로 온 구조체가 이 주소의 것인지 견준다.
+	std::string StructAddress(const RValue& Value)
+	{
+		return Value.IsStruct() ? " " + NlCore::PointerText(reinterpret_cast<std::uintptr_t>(Value.m_Object)) : std::string();
+	}
+
 	void DoAsk(const RemoteCommand& C)
 	{
 		RValue value;		// 이 함수 안에서만 든다
@@ -73,7 +80,7 @@ namespace
 			return;
 		}
 		const NlAccess::Row row = NlAccess::Describe({}, value);
-		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text) + StructAddress(value));
 	}
 
 	void DoList(const RemoteCommand& C)
@@ -206,7 +213,7 @@ namespace
 	void SayResult(const RValue& Result)
 	{
 		const NlAccess::Row row = NlAccess::Describe({}, Result);
-		Say("  -> " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		Say("  -> " + row.Type + (row.Text.empty() ? "" : " " + row.Text) + StructAddress(Result));
 	}
 
 	// 게임 스크립트를 부른다. 인자의 수와 형은 기록으로 확인한 것만 쓴다(부르는 쪽의 책임이다).
@@ -457,6 +464,47 @@ namespace
 			Say("  " + line);
 	}
 
+	// 영주의 호감·충성 패널과 같은 일을 한다: 지금 끝까지(NlCourt::Do), 또는 queue=1 이면 단추처럼 쌓기만(NlCourt::Queue). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoCourt(const RemoteCommand& C)
+	{
+		if (C.Target == "list")
+		{
+			for (const std::string& line : NlCourt::List())
+				Say("  " + line);
+			return;
+		}
+		NlCore::CourtCommand command;
+		command.Who = C.Target;
+		bool about_king = false;
+		const auto act = C.Options.find("act");
+		const auto about = C.Options.find("about");
+		if (act == C.Options.end() || !NlCore::ParseCourtGoal(act->second, command.Goal, about_king))
+		{
+			Say("  : court needs who and loyal, like, opinion, clear or release");
+			return;
+		}
+		command.About = about_king ? "king" : about != C.Options.end() ? about->second : std::string();
+		command.OnlyLoyal = about_king;
+		command.Amount = C.Number;
+		Say("  running court " + C.Target + " " + act->second + (command.About.empty() ? "" : " about " + command.About));		// 죽으면 여기까지 남는다
+		if (C.Options.count("queue") > 0)		// 창의 단추와 같은 길: 쌓기만 하고 틱이 조금씩 한다
+		{
+			Say("  " + NlCourt::Queue(command));
+			return;
+		}
+		for (const std::string& line : NlCourt::Do(command))
+			Say("  " + line);
+	}
+
+	// 게임의 특성들: 이름과 화면 이름(인물 패널이 보이는 것과 같은 글). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoTraits(const RemoteCommand& C)
+	{
+		const auto find = C.Options.find("find");
+		const size_t max = static_cast<size_t>(NlCore::OptionNumber(C, "max", 40));
+		for (const std::string& line : NlPeople::Traits(find != C.Options.end() ? find->second : std::string(), max))
+			Say("  " + line);
+	}
+
 	// 인물 패널과 같은 길로 사람을 고친다(NlPeople::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoPerson(const RemoteCommand& C)
 	{
@@ -532,6 +580,10 @@ namespace
 			DoWorld(C);
 		else if (C.Verb == "diplomacy")
 			DoDiplomacy(C);
+		else if (C.Verb == "court")
+			DoCourt(C);
+		else if (C.Verb == "traits")
+			DoTraits(C);
 		else if (C.Verb == "preset")
 		{
 			std::string text;

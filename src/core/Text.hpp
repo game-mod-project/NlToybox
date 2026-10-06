@@ -1,11 +1,15 @@
 #pragma once
 // 러너에 기대지 않는 글 처리. tests/native 가 직접 부른다.
 
+#include <cstdint>
 #include <string>
 
 namespace NlCore
 {
 	std::string Trim(const std::string& Text);
+
+	// 주소를 적는 글: "@" 뒤에 소문자 16진수(앞의 0 없이). 기록의 표본과 ask 의 답이 같은 꼴로 적어, 인자로 온 구조체가 어느 것인지 견줄 수 있다.
+	std::string PointerText(std::uintptr_t Value);
 
 	// JSON 문자열로 쓴다. MaxBytes 보다 길면 UTF-8 글자 경계에서 자르고 "..." 를 붙인다. 잘못된 바이트는 '?' 로 바꾼다.
 	std::string Quote(std::string Text, size_t MaxBytes = 200);

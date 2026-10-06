@@ -36,6 +36,15 @@
 //   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)
 //   diplomacy <uuid> pact name=<peace|trade|defence>  그 왕국과 협정을 맺는다(게임의 협정 함수. 양쪽에 쓰인다)
 //                                                   queue=1 을 붙이면 창의 단추처럼 쌓기만 한다(틱이 조금씩 한다. 결과와 실패는 diplomacy list 의 끝에 나온다)
+//   court list                                      플레이어의 영주들: 왕에 대한 충성, 따르는 사람의 수, 서로를 보는 평판(research/20)
+//   court <uuid|lords> loyal [goal=<수>]            왕을 보는 평판을 목표(기본 100)까지 올린다(게임의 디버그 평판을 하나씩 붙인다. 나쁜 것이 붙어 있으면 그것부터 뗀다)
+//   court <uuid|lords> like about=<uuid|lords|king> [goal=<수>]   그 사람을 보는 평판을 목표까지 올린다
+//   court <uuid|lords> opinion about=<…> amount=<개수>            디버그 평판을 그 개수만큼 움직인다(양수는 올린다, 음수는 내린다. -40 ~ 40)
+//   court <uuid|lords> clear about=<…>              붙여 둔 디버그 평판을 모두 뗀다
+//   court <uuid|lords> release                      그 영주를 따르는 사람들의 충성 대상을 지운다(queue=1 은 diplomacy 와 같다)
+//   court <uuid> opinion … 은 한 짝씩만 받는다(여럿을 한꺼번에 내리지 않는다). loyal 은 게임이 충성을 따지는 영주에게만 간다
+//   traits [find=<글>] [max=<수>]                   게임의 특성들: 이름, 화면 이름, 설명의 앞부분(모듈이 게임의 현지화 파일에서 읽은 것). 인물 패널의 찾기 칸도 그 글이 된다
+//                                                   find 는 이름, 화면 이름, 설명의 글 어디에든 들어 있으면 맞는다
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close

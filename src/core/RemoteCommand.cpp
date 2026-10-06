@@ -2,6 +2,7 @@
 
 #include "AskPath.hpp"
 #include "CheatTable.hpp"
+#include "CourtPlan.hpp"
 #include "DiplomacyPlan.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
@@ -436,6 +437,82 @@ namespace NlCore
 			std::string why;
 			if (!CheckDiplomacy(diplomacy, why))
 				return fail("diplomacy all takes only friends or neutral (name one kingdom for hostile and opinion)");
+		}
+		else if (verb == "court")
+		{
+			// court list                                                   영주들의 충성과 서로의 평판
+			// court <uuid|lords> loyal [goal=<수>]                          왕을 보는 평판을 목표(기본 100)까지 올린다
+			// court <uuid|lords> like about=<uuid|lords|king> [goal=<수>]   그 사람을 보는 평판을 목표까지 올린다
+			// court <uuid|lords> opinion about=<…> amount=<개수>            디버그 평판을 그 개수만큼 움직인다(-40 ~ 40)
+			// court <uuid|lords> clear about=<…>                            붙여 둔 디버그 평판을 모두 뗀다
+			// court <uuid|lords> release                                    그 영주를 따르는 사람들의 충성 대상을 지운다
+			if (count >= 2 && tokens[1] == "list")
+			{
+				if (count != 2)
+					return fail("court list takes nothing");
+				command.Target = "list";
+				return command;
+			}
+			CourtCommand court;
+			bool about_king = false;
+			if (count < 3 || !GoodCourtWho(tokens[1]) || !ParseCourtGoal(tokens[2], court.Goal, about_king))
+				return fail("court needs list, or who (lords or the uuid of a lord) and loyal, like, opinion, clear or release");
+			command.Target = tokens[1];
+			if (!options(3))
+				return command;
+			// 모르는 열쇠는 받지 않는다. queue 는 1 만(창의 단추처럼 쌓는다).
+			for (const auto& [key, value] : command.Options)
+				if (key != "about" && key != "amount" && key != "goal" && key != "queue")
+					return fail("court takes only about=, amount=, goal= and queue=1: " + key);
+			const auto queue = command.Options.find("queue");
+			if (queue != command.Options.end() && queue->second != "1")
+				return fail("court queue= takes only 1");
+			const auto about = command.Options.find("about");
+			const auto amount = command.Options.find("amount");
+			const auto goal = command.Options.find("goal");
+			if (about_king && about != command.Options.end())
+				return fail("court loyal takes no about= (it is about the king)");
+			court.Who = tokens[1];
+			court.About = about_king ? "king" : about != command.Options.end() ? about->second : std::string();
+			court.OnlyLoyal = about_king;
+			if (court.Goal == CourtGoal::Raise)
+			{
+				if (amount != command.Options.end())
+					return fail(std::string("court ") + tokens[2] + " takes goal=, not amount=");
+				if (goal != command.Options.end() && (!ParseNumber(goal->second, command.Number) || command.Number == 0))
+					return fail("court goal= needs a whole number from 1 to 200");
+			}
+			else
+			{
+				if (goal != command.Options.end())
+					return fail(std::string("court ") + tokens[2] + " takes no goal=");
+				if (court.Goal == CourtGoal::Opinion)
+				{
+					if (amount == command.Options.end() || !ParseNumber(amount->second, command.Number))
+						return fail("court opinion needs amount=<a whole number from -40 to 40, not 0>");
+				}
+				else if (amount != command.Options.end())
+					return fail(std::string("court ") + tokens[2] + " takes no amount=");
+			}
+			court.Amount = command.Number;
+			std::string why;
+			if (!CheckCourt(court, why))
+				return fail("court: " + why);
+			command.Options["act"] = tokens[2];
+		}
+		else if (verb == "traits")
+		{
+			// traits [find=<글>] [max=<수>]      게임의 특성들: 이름, 화면 이름, 설명의 앞부분(모듈이 게임의 현지화 파일에서 읽은 것). max 는 1 ~ 100000
+			if (!options(1))
+				return command;
+			for (const auto& [key, value] : command.Options)
+				if (key != "find" && key != "max")
+					return fail("traits takes only find= and max=: " + key);
+			const auto max = command.Options.find("max");
+			double limit = 0;
+			// 범위부터 본다(유한하지 않은 수와 큰 수를 정수로 바꾸지 않는다).
+			if (max != command.Options.end() && (!ParseNumber(max->second, limit) || !(limit >= 1 && limit <= 100000) || limit != std::floor(limit)))
+				return fail("traits max= needs a whole number from 1 to 100000");
 		}
 		else if (verb == "cheat")
 		{

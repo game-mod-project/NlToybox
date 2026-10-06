@@ -5,6 +5,7 @@
 
 #include "core/PeoplePlan.hpp"
 
+#include <filesystem>
 #include <functional>
 #include <string>
 #include <vector>
@@ -13,7 +14,8 @@ namespace NlPeople
 {
 	using LogFn = std::function<void(const std::string&)>;
 
-	void Init(LogFn Log);
+	// GameDir: 게임 폴더. 그 안의 localization\main.csv 에서 특성의 화면 이름(한국어)을 읽어 둔다(게임 파일의 글을 레포에 싣지 않는다. research/20).
+	void Init(LogFn Log, const std::filesystem::path& GameDir);
 
 	// 게임 스레드의 틱. Active: 이 파일의 패널(인물, 영주, 인구, 지식, 아이템) 가운데 하나가 보이는가(보일 때만 목록과 값을 새로 읽는다).
 	void GameTick(double Now, bool Active);
@@ -35,4 +37,11 @@ namespace NlPeople
 	std::vector<std::string> List(bool All);
 	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);
+	// 게임의 특성들: 이름과 화면 이름. Find: 이름이나 화면 이름의 일부(빈 글이면 모두). Max: 줄의 한도.
+	// 인물 패널의 찾기 칸도 그 글로 맞추고 전체 목록을 펼친다(page person 뒤 shot 으로 창을 볼 수 있게).
+	std::vector<std::string> Traits(const std::string& Find, size_t Max);
+	// 사람들을 다시 읽어 그 줄들을 준다(영주의 호감·충성 패널이 쓴다). Busy: 인물 쪽이 게임의 함수를 부르는 중에 다시 들어왔다(잠깐 뒤에 다시 하면 된다).
+	// Failed: 읽지 못했다(Why 에 까닭).
+	enum class RowsResult { Ok, Busy, Failed };
+	RowsResult Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why);
 }
