@@ -47,6 +47,14 @@ namespace NlCore
 		return true;
 	}
 
+	void EnterStockPlace(StockBook& Book, const PlaceKey& Place, double Now)
+	{
+		if (!(Book.Place == Place) || Now < Book.Seen)
+			Book.Kept.clear();
+		Book.Place = Place;
+		Book.Seen = Now;
+	}
+
 	std::string WorldActWords()
 	{
 		std::string out;

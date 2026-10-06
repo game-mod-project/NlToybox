@@ -68,10 +68,9 @@ namespace
 	bool g_SeasonCallsLogged = false;	// 읽기 함수를 부른다는 것을 로그에 한 번 남겼다
 	std::unordered_map<std::string, std::string> g_SeasonCaptions;		// extreme_season.<이름> -> 화면 이름
 
-	std::map<std::string, double> g_MineKept;	// 매장량 붙들기가 광산마다 기억한 수
-	double g_MineSeen = 0;						// 마지막으로 본 게임 시각
-	int64_t g_MineMap = 0;						// 그때의 지도 관리 인스턴스(다른 세이브를 불러오면 바뀐다)
+	NlCore::StockBook g_Mines;					// 매장량 붙들기가 광산마다 기억한 수와 그것의 자리(core/WorldPlan)
 	int g_MineWrites = 0;						// 되돌려 쓴 횟수
+	bool g_HoldWasOn = false, g_MineWasOn = false;		// 지난 틱에 켜져 있었는가(끈 틱에 한 번 정리한다)
 
 	struct Busy
 	{
@@ -153,7 +152,22 @@ namespace
 		return true;
 	}
 
-	// 계절을 읽는다. 게임의 함수 가운데 게임이 그 상황에서 부르는 것만 부른다: 가혹한 계절이 아닐 때는 "올 때까지", 가혹한 계절일 때는 "끝날 때까지".
+	// 붙들기가 기억한 값이 어느 게임·어느 지도의 것인지(core/PlaceKey): 그 관리자 구조체의 주소와 지도 관리 인스턴스.
+	bool PlaceOf(const std::string& Path, NlCore::PlaceKey& Out)
+	{
+		RValue value;		// 이 함수 안에서만 든다
+		std::string why;
+		int64_t instance = 0;
+		if (!NlAccess::Read(NlCore::ParseAskPath(Path), value, why) || !value.IsStruct()
+			|| !NlAccess::InstanceIdentity(NlCore::ParseAskPath("inst:o_game_map_controller"), instance))
+			return false;
+		Out.Struct = reinterpret_cast<std::uintptr_t>(value.m_Object);
+		Out.Instance = instance;
+		return true;
+	}
+
+	// 계절을 읽는다. 가혹한 계절이 아닐 때는 "올 때까지"(게임이 그때 부르는 것을 봤다), 가혹한 계절일 때는 "끝날 때까지"를 묻는다
+	// (뒤의 것은 게임이 부르는 것을 보지 못했다. 가혹한 계절이 아닐 때와 가혹한 계절일 때 직접 불러 수를 받았다. research/25).
 	Season ReadSeason()
 	{
 		Season s;
@@ -226,7 +240,10 @@ namespace
 			if (NlCheats::IsOn(k_HoldCheat))
 				return "'계절 붙들기'를 켠 동안에는 단계를 끝내지 않습니다. 끄고 누르세요";
 			// 단계의 길이: 남은 시간 + 지나간 시간(게임이 남은 시간을 그렇게 셈한다)
-			if (!NlCore::EndPhaseStart(before.Now, before.Start, before.Remain + (before.Now - before.Start), k_EndLead, write))
+			const double duration = before.Remain + (before.Now - before.Start);
+			if (NlCore::PhaseEndTooEarly(before.Now, duration, k_EndLead))
+				return "게임을 시작한 지 이 단계의 길이만큼 지나지 않아 끝낼 수 없습니다(0 보다 앞의 시작 시각은 쓰지 않습니다)";
+			if (!NlCore::EndPhaseStart(before.Now, before.Start, duration, k_EndLead, write))
 				return "이 단계는 곧 끝납니다 (" + NlCore::SpanText(before.Remain) + " 남음)";
 		}
 		const std::string path = std::string(k_Season) + ".__start_phase_time";
@@ -241,7 +258,7 @@ namespace
 			return "썼지만 다시 읽지 못했습니다: " + after.Why;
 		if (!NlCore::RemainMoved(delay, before.Remain, after.Remain))
 			return "시작 시각은 썼지만 게임이 돌려주는 남은 시간이 바뀌지 않았습니다";
-		return std::string(delay ? "하루 미뤘습니다. " : "지금 단계의 남은 시간을 1분으로 줄였습니다. ") + SeasonText(after);
+		return (delay ? NlCore::DelayReport(write - before.Start, k_DelayStep) + " " : std::string("지금 단계의 남은 시간을 1분으로 줄였습니다. ")) + SeasonText(after);
 	}
 
 	// 붙들기(치트 표의 season_hold): 1초마다 시작 시각을 흐른 만큼 따라 민다. 판단은 core/SeasonPlan.
@@ -249,8 +266,10 @@ namespace
 	{
 		const std::string path = std::string(k_Season) + ".__start_phase_time";
 		double now = 0, start = 0, phase = 0, write = 0;
+		NlCore::PlaceKey place;		// 다른 세이브나 다른 지도의 관리자면 앞에서 기억한 것으로 쓰지 않는다(StepSeasonHold 가 다시 기억한다)
 		const bool in_game = On && NlAccess::InGame();
-		const bool read = in_game && NlAccess::ReadNumber(k_GameTime, now) && NlAccess::ReadNumber(path, start) && NlAccess::ReadNumber(std::string(k_Season) + ".__current_phase", phase);
+		const bool read = in_game && NlAccess::ReadNumber(k_GameTime, now) && NlAccess::ReadNumber(path, start) && NlAccess::ReadNumber(std::string(k_Season) + ".__current_phase", phase)
+			&& PlaceOf(k_Season, place);
 		const NlCore::SeasonHold was = g_Hold;
 		if (On && !read)
 		{
@@ -258,15 +277,15 @@ namespace
 			NlCheats::SetNote(k_HoldCheat, in_game ? "계절의 자료를 읽지 못했습니다" : std::string());
 			return;
 		}
-		if (!NlCore::StepSeasonHold(g_Hold, On, now, start, phase, write))
+		if (!NlCore::StepSeasonHold(g_Hold, On, now, start, phase, place, write))
 		{
-			if (!On && was.Has)
+			if (!On)		// 끈 틱에 한 번 온다(g_HoldWasOn)
 			{
 				Log("world: season hold off after " + std::to_string(g_HoldWrites) + " write(s)");
 				NlCheats::SetNote(k_HoldCheat, std::string());
 				g_HoldWrites = 0;
 			}
-			else if (On && (!was.Has || was.Phase != g_Hold.Phase || was.Elapsed != g_Hold.Elapsed))
+			else if (!was.Has || was.Phase != g_Hold.Phase || was.Elapsed != g_Hold.Elapsed)
 			{
 				Log("world: season hold keeps phase " + NlCore::Shortest(g_Hold.Phase) + " at " + NlCore::Shortest(g_Hold.Elapsed) + " s elapsed");
 				NlCheats::SetNote(k_HoldCheat, "단계 " + std::to_string(static_cast<long long>(g_Hold.Phase) + 1) + " 에 머무는 중");
@@ -287,27 +306,25 @@ namespace
 	// 광산의 매장량 붙들기(치트 표의 mine_stock_hold): 1초마다 줄어든 매장량을 줄기 전의 수로 되돌려 쓴다. 판단은 core/WorldPlan 의 KeepStock.
 	void MineTick(bool On)
 	{
-		if (!On)
+		if (!On)		// 끈 틱에 한 번 온다(g_MineWasOn)
 		{
 			if (g_MineWrites > 0)
 				Log("world: mine stock hold off after " + std::to_string(g_MineWrites) + " write(s)");
-			g_MineKept.clear();
+			g_Mines = NlCore::StockBook{};
 			g_MineWrites = 0;
 			NlCheats::SetNote(k_MineCheat, std::string());
 			return;
 		}
 		double now = 0;
-		int64_t map = 0;
-		if (!NlAccess::InGame() || !NlAccess::ReadNumber(k_GameTime, now) || !NlAccess::InstanceIdentity(NlCore::ParseAskPath("inst:o_game_map_controller"), map))
+		NlCore::PlaceKey place;
+		const bool in_game = NlAccess::InGame();
+		if (!in_game || !NlAccess::ReadNumber(k_GameTime, now) || !PlaceOf(k_MineStock, place))
 		{
-			g_MineKept.clear();		// 게임 화면이 아니다: 다음 게임에 앞의 수를 쓰지 않는다
-			NlCheats::SetNote(k_MineCheat, std::string());
+			g_Mines = NlCore::StockBook{};		// 게임 화면이 아니거나 읽지 못했다: 다음에 앞의 수를 쓰지 않는다
+			NlCheats::SetNote(k_MineCheat, in_game ? "광산의 매장량을 읽지 못했습니다" : std::string());
 			return;
 		}
-		if (now < g_MineSeen || map != g_MineMap)		// 다른 세이브를 불러왔다: 앞의 게임에서 본 수로 되돌려 쓰지 않는다
-			g_MineKept.clear();
-		g_MineSeen = now;
-		g_MineMap = map;
+		NlCore::EnterStockPlace(g_Mines, place, now);		// 다른 세이브나 다른 지도의 광산이면 앞에서 본 수를 버린다
 
 		RValue box;		// 이 함수 안에서만 든다
 		Holder kind = Holder::None;
@@ -329,7 +346,7 @@ namespace
 				return true;
 			mines++;
 			double write = 0;
-			if (NlCore::KeepStock(g_MineKept, step.Name, child.ToDouble(), write))
+			if (NlCore::KeepStock(g_Mines.Kept, step.Name, child.ToDouble(), write))
 				fixes.push_back({ step, write });
 			return true;
 		});
@@ -481,11 +498,13 @@ void NlWorld::GameTick(double Now, bool Visible)
 		return;
 	g_NextSeason = Now + 1;
 	const bool hold = NlCheats::IsOn(k_HoldCheat);
-	if (hold || g_Hold.Has)
+	if (hold || g_HoldWasOn)
 		HoldTick(hold);
+	g_HoldWasOn = hold;
 	const bool mines = NlCheats::IsOn(k_MineCheat);
-	if (mines || !g_MineKept.empty() || g_MineWrites > 0)
+	if (mines || g_MineWasOn)
 		MineTick(mines);
+	g_MineWasOn = mines;
 	if (Visible)
 		g_Season = ReadSeason();
 	else

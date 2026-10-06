@@ -830,12 +830,16 @@ int main(int argc, char** argv)
 		for (const char* id : { "season_hold", "no_autosave", "no_wolves", "mine_stock_hold", "reveal_map" })
 			CHECK(FindCheat(id)->Verified);
 		CHECK(!FindCheat("fast_map_moving")->Verified && !FindCheat("fast_global_tasks")->Verified);		// 재지 못했다
-		// 확인된 훅과 모듈의 일은 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다. 저장 끄기도 그렇다(값을 쓰는 스위치는 언제나 남는다).
+		// 확인된 훅과 모듈의 일은 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다.
+		// 저장 끄기는 그 실행에서만 간다(검토 I4): 켠 것을 잊고 다음 날 몇 시간을 해도 자동 저장이 하나도 생기지 않는 일이 없게, 켠 채 저장돼 있어도 꺼진 채로 시작한다.
 		CheatState world;
 		world.On = { "season_hold", "no_wolves", "mine_stock_hold", "reveal_map", "no_autosave" };
-		CHECK(KeepKnown(world).On.size() == 5);
+		CHECK(KeepKnown(world).On == (std::set<std::string>{ "season_hold", "no_wolves", "mine_stock_hold", "reveal_map" }));
+		CHECK(FindCheat("no_autosave")->ThisRunOnly);
+		for (const Cheat& cheat : Cheats())
+			CHECK(cheat.ThisRunOnly == (std::string(cheat.Id) == "no_autosave"));
 		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
-		// 셋 다 효과를 보기 전이다.
+		// (어느 것이 확인됐는지는 아래에서 본다)
 		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);
 		CHECK(FindCheat("fast_map_moving") && FindCheat("fast_map_moving")->Kind == CheatKind::Toggle && FindCheat("fast_map_moving")->Where == Area::World
 			&& std::string(FindCheat("fast_map_moving")->Path) == "inst:o_global_map.__m_global_map.__debug_fast_moving");
@@ -3219,6 +3223,16 @@ int main(int argc, char** argv)
 		CHECK(!DelaySeasonStart(std::nan(""), 374400, 86400, out) && !DelaySeasonStart(537321.83, std::nan(""), 86400, out)
 			&& !DelaySeasonStart(537321.83, 374400, std::numeric_limits<double>::infinity(), out));
 
+		// 미룬 결과의 글: 청한 만큼 밀렸으면 그만큼, 지금에 막혀 덜 밀렸으면 실제로 밀린 만큼을 말한다(검토 I2: 30분만 밀고 "하루 미뤘습니다"라고 했다).
+		CHECK(DelayReport(86400, 86400) == "1일 미뤘습니다.");
+		CHECK(DelayReport(1800, 86400) == "1시간 미만만 미뤘습니다(이 단계의 시작이 지금이 됐습니다. 더는 밀 수 없습니다).");
+		CHECK(DelayReport(18000, 86400) == "5시간만 미뤘습니다(이 단계의 시작이 지금이 됐습니다. 더는 밀 수 없습니다).");
+
+		// 끝내기는 0 보다 앞의 시작 시각을 쓰지 않는다: 게임을 시작한 지 단계의 길이만큼 지나지 않았으면 끝낼 수 없다(그런 시작 시각을 게임에서 본 적이 없다).
+		CHECK(PhaseEndTooEarly(200000, 345600, 60) && !PhaseEndTooEarly(345540, 345600, 60) && !PhaseEndTooEarly(537321.83, 345600, 60));
+		CHECK(!EndPhaseStart(200000, 100000, 345600, 60, out));
+		CHECK(EndPhaseStart(345540, 100000, 345600, 60, out) && out == 0);
+
 		// 끝내기: 남은 시간이 Lead 초가 되게 시작 시각을 당긴다. 이미 그만큼밖에 남지 않았으면 쓰지 않는다.
 		CHECK(EndPhaseStart(537321.83, 374400, 345600, 60, out) && std::fabs(PhaseRemain(537321.83, out, 345600) - 60) < 1e-6 && out < 374400);
 		CHECK(!EndPhaseStart(537321.83, 191781.83, 345600, 60, out));					// 남은 시간이 딱 60초
@@ -3227,35 +3241,48 @@ int main(int argc, char** argv)
 		CHECK(!EndPhaseStart(537321.83, 374400, 345600, -1, out) && !EndPhaseStart(std::nan(""), 374400, 345600, 60, out));
 
 		// 붙들기: 켠 뒤 처음 본 "지나간 시간"을 기억하고, 그 시간이 그대로이게 시작 시각을 따라 민다.
+		const PlaceKey here{ 0x1000, 7 }, other_map{ 0x2000, 7 }, other_game{ 0x1000, 9 };		// 관리자 구조체의 주소와 지도 관리 인스턴스(지어낸 수)
 		SeasonHold hold;
-		CHECK(!StepSeasonHold(hold, true, 1000, 400, 0, out) && hold.Has && hold.Elapsed == 600);		// 처음 본 틱에는 쓰지 않는다
-		CHECK(!StepSeasonHold(hold, true, 1000.4, 400, 0, out));										// 1초가 안 되는 차이는 쓰지 않는다
-		CHECK(StepSeasonHold(hold, true, 1060, 400, 0, out) && out == 460);							// 60초가 흘렀다: 시작을 60 뒤로
-		CHECK(!StepSeasonHold(hold, true, 1060, 460, 0, out));											// 쓴 뒤에는 쓸 것이 없다
+		CHECK(!StepSeasonHold(hold, true, 1000, 400, 0, here, out) && hold.Has && hold.Elapsed == 600);		// 처음 본 틱에는 쓰지 않는다
+		CHECK(!StepSeasonHold(hold, true, 1000.4, 400, 0, here, out));										// 1초가 안 되는 차이는 쓰지 않는다
+		CHECK(StepSeasonHold(hold, true, 1060, 400, 0, here, out) && out == 460);							// 60초가 흘렀다: 시작을 60 뒤로
+		CHECK(!StepSeasonHold(hold, true, 1060, 460, 0, here, out));											// 쓴 뒤에는 쓸 것이 없다
 		// 단계가 바뀌었거나(게임이 넘겼다, 또는 '끝내기'를 눌렀다) 시각이 거꾸로 갔으면(다른 세이브) 다시 기억한다.
-		CHECK(!StepSeasonHold(hold, true, 1100, 1090, 1, out) && hold.Elapsed == 10 && hold.Phase == 1);
-		CHECK(!StepSeasonHold(hold, true, 500, 100, 1, out) && hold.Elapsed == 400);
+		CHECK(!StepSeasonHold(hold, true, 1100, 1090, 1, here, out) && hold.Elapsed == 10 && hold.Phase == 1);
+		CHECK(!StepSeasonHold(hold, true, 500, 100, 1, here, out) && hold.Elapsed == 400);
+		// 자리가 바뀌었으면 다시 기억한다: 같은 단계, 더 뒤의 시각이라도 다른 세이브(지도 관리 인스턴스가 다르다)나 다른 지도(관리자 구조체가 다르다)의 것이면
+		// 앞의 게임에서 기억한 "지나간 시간"으로 쓰지 않는다(검토 I1: 3일 지난 게임에서 붙들다가 6시간 지난 세이브를 불러오면 그 세이브의 계절이 당겨졌다).
+		SeasonHold loaded;
+		CHECK(!StepSeasonHold(loaded, true, 1000, 400, 1, here, out) && loaded.Elapsed == 600);
+		CHECK(!StepSeasonHold(loaded, true, 5000, 4900, 1, other_game, out) && loaded.Elapsed == 100);		// 쓰지 않고 새 값을 기억한다
+		CHECK(StepSeasonHold(loaded, true, 5060, 4900, 1, other_game, out) && out == 4960);					// 그 뒤로는 새 게임의 값으로 붙든다
+		CHECK(!StepSeasonHold(loaded, true, 5060, 300, 1, other_map, out) && loaded.Elapsed == 4760);			// 다른 지도의 관리자
+		// 쓰는 값은 지금보다 뒤가 아니다(기억한 지나간 시간은 음수가 아니다).
+		for (double now : { 1000.0, 1300.0, 9000.0 })
+			if (StepSeasonHold(loaded, true, now + 6000, 300, 1, other_map, out))
+				CHECK(out <= now + 6000);
+
 		// 시작 시각이 지금보다 뒤로 읽히면 지나간 시간을 0 으로 본다.
 		SeasonHold odd;
-		CHECK(!StepSeasonHold(odd, true, 100, 300, 0, out) && odd.Elapsed == 0);
-		CHECK(StepSeasonHold(odd, true, 100, 300, 0, out) && out == 100);
+		CHECK(!StepSeasonHold(odd, true, 100, 300, 0, here, out) && odd.Elapsed == 0);
+		CHECK(StepSeasonHold(odd, true, 100, 300, 0, here, out) && out == 100);
 		// 끄면 잊는다. 꺼진 동안에는 쓰지 않는다. 읽지 못한 수로는 아무것도 하지 않는다.
-		CHECK(!StepSeasonHold(hold, false, 2000, 100, 1, out) && !hold.Has);
-		CHECK(!StepSeasonHold(hold, true, std::nan(""), 100, 1, out) && !hold.Has);
+		CHECK(!StepSeasonHold(hold, false, 2000, 100, 1, here, out) && !hold.Has);
+		CHECK(!StepSeasonHold(hold, true, std::nan(""), 100, 1, here, out) && !hold.Has);
 		// 밖에서 시작 시각을 바꿨으면(미루기) 잊게 한다: 다음 틱에 새 값을 기억한다.
 		SeasonHold moved;
-		StepSeasonHold(moved, true, 1000, 400, 0, out);
+		StepSeasonHold(moved, true, 1000, 400, 0, here, out);
 		ForgetSeasonHold(moved);
-		CHECK(!StepSeasonHold(moved, true, 1000, 900, 0, out) && moved.Elapsed == 100);
+		CHECK(!StepSeasonHold(moved, true, 1000, 900, 0, here, out) && moved.Elapsed == 100);
 
 		// 쓴 뒤의 확인: 게임의 함수가 돌려주는 남은 시간이 바라던 쪽으로 움직였는가(1초 넘게). 시작 시각이 써졌다는 것만으로 됐다고 하지 않는다.
 		CHECK(RemainMoved(true, 182678, 269078) && !RemainMoved(true, 182678, 182678) && !RemainMoved(true, 182678, 182678.5) && !RemainMoved(true, 182678, 100));
 		CHECK(RemainMoved(false, 182678, 60) && !RemainMoved(false, 182678, 182678) && !RemainMoved(false, 60, 182678));
 		CHECK(!RemainMoved(true, std::nan(""), 5) && !RemainMoved(false, 5, std::nan("")));
 
-		// 상태의 글: 가혹한 계절이 아닐 때는 올 때까지, 가혹한 계절일 때는 끝날 때까지. 이름이 없으면 이름 없이.
-		CHECK(SeasonLine(false, "가뭄", 528278.17, 873878.17) == "가혹한 계절(가뭄)까지 6일 2시간");
-		CHECK(SeasonLine(true, "가뭄", 0, 100000) == "가혹한 계절(가뭄) 중입니다. 끝나기까지 1일 3시간");
+		// 상태의 글: 가혹한 계절이 아닐 때는 올 때까지, 가혹한 계절일 때는 끝날 때까지. 이름이 없으면 이름 없이. (이름은 지어낸 것이다)
+		CHECK(SeasonLine(false, "별비", 528278.17, 873878.17) == "가혹한 계절(별비)까지 6일 2시간");
+		CHECK(SeasonLine(true, "별비", 0, 100000) == "가혹한 계절(별비) 중입니다. 끝나기까지 1일 3시간");
 		CHECK(SeasonLine(false, "", 7200, 0) == "가혹한 계절까지 2시간");
 		// 광산의 매장량 붙들기: 켠 동안 광산마다 본 가장 큰 값을 기억하고, 줄었으면 그 값으로 되돌려 쓴다(게임이 캘 때마다 1 씩 줄였다: 18 -> 17).
 		std::map<std::string, double> kept;
@@ -3265,6 +3292,21 @@ int main(int argc, char** argv)
 		CHECK(!KeepStock(kept, "69_156", 25, out) && kept["69_156"] == 25);		// 늘었으면 그 값을 기억한다
 		CHECK(!KeepStock(kept, "12_40", 3, out) && KeepStock(kept, "12_40", 0, out) && out == 3 && kept.size() == 2);		// 광산마다 따로
 		CHECK(!KeepStock(kept, "x", std::nan(""), out) && !KeepStock(kept, "y", -1, out) && kept.size() == 2);			// 수가 아니거나 음수인 칸은 건드리지 않는다
+		// 켤 때 이미 0 인 광산은 0 을 기억한다(되살리지 않는다).
+		CHECK(!KeepStock(kept, "empty", 0, out) && kept["empty"] == 0 && !KeepStock(kept, "empty", 0, out));
+		// 기억한 수가 어느 게임·어느 지도의 것인지: 자리가 바뀌었거나 시각이 거꾸로 갔으면 모두 잊는다(같은 자리의 열쇠를 가진 다른 세이브의 광산에 앞의 수를 쓰지 않는다).
+		StockBook book;
+		EnterStockPlace(book, here, 1000);
+		KeepStock(book.Kept, "69_156", 18, out);
+		EnterStockPlace(book, here, 1060);
+		CHECK(book.Kept.size() == 1);											// 같은 자리, 시각이 앞으로: 그대로
+		EnterStockPlace(book, other_game, 2000);
+		CHECK(book.Kept.empty() && !KeepStock(book.Kept, "69_156", 5, out));		// 다른 세이브: 5 를 18 로 되돌려 쓰지 않는다
+		EnterStockPlace(book, other_map, 2100);
+		CHECK(book.Kept.empty());
+		KeepStock(book.Kept, "1_1", 9, out);
+		EnterStockPlace(book, other_map, 500);
+		CHECK(book.Kept.empty());												// 시각이 거꾸로 갔다
 
 		// 단계의 글: 게임의 단계는 0 부터다. 창에는 1 부터 센다.
 		CHECK(PhaseNote(0, 182678.17) == "단계 1, 이 단계는 2일 2시간 남음" && PhaseNote(2, 3000) == "단계 3, 이 단계는 1시간 미만 남음");

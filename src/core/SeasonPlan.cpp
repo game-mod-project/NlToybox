@@ -50,25 +50,38 @@ namespace NlCore
 	{
 		if (!Finite(Now, Start, Duration) || !std::isfinite(Lead) || Duration <= 0 || Lead < 0)
 			return false;
-		if (PhaseRemain(Now, Start, Duration) <= Lead)
+		if (PhaseRemain(Now, Start, Duration) <= Lead || PhaseEndTooEarly(Now, Duration, Lead))
 			return false;
 		Out = Now - Duration + Lead;
 		return true;
 	}
 
-	bool StepSeasonHold(SeasonHold& Hold, bool On, double Now, double Start, double Phase, double& Write)
+	std::string DelayReport(double Moved, double Asked)
+	{
+		if (Moved >= Asked - 1)
+			return SpanText(Moved) + " 미뤘습니다.";
+		return SpanText(Moved) + "만 미뤘습니다(이 단계의 시작이 지금이 됐습니다. 더는 밀 수 없습니다).";
+	}
+
+	bool PhaseEndTooEarly(double Now, double Duration, double Lead)
+	{
+		return Finite(Now, Duration, Lead) && Now - Duration + Lead < 0;
+	}
+
+	bool StepSeasonHold(SeasonHold& Hold, bool On, double Now, double Start, double Phase, const PlaceKey& Place, double& Write)
 	{
 		if (!On || !Finite(Now, Start, Phase))
 		{
 			Hold = SeasonHold{};
 			return false;
 		}
-		if (!Hold.Has || Hold.Phase != Phase || Now < Hold.Seen)
+		if (!Hold.Has || Hold.Phase != Phase || Now < Hold.Seen || !(Hold.Place == Place))
 		{
 			Hold.Has = true;
 			Hold.Elapsed = Now > Start ? Now - Start : 0;
 			Hold.Phase = Phase;
 			Hold.Seen = Now;
+			Hold.Place = Place;
 			return false;
 		}
 		Hold.Seen = Now;
