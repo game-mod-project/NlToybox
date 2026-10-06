@@ -19,7 +19,7 @@ namespace NlCore
 			{ PersonAct::NeedSet, "need_set" }, { PersonAct::NeedsFill, "needs_fill" }, { PersonAct::AgeSet, "age_set" },
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
 			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
-			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" },
+			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" },
 		};
 
 		bool Clamp(double Value, double Low, double High, bool Whole, double& Out)
@@ -95,7 +95,7 @@ namespace NlCore
 
 	bool NeedsText(PersonAct Act)
 	{
-		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd;
+		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip;
 	}
 
 	bool GoodWho(const std::string& Who)
@@ -116,6 +116,8 @@ namespace NlCore
 			return true;
 		if (Act == PersonAct::SkillsMax || Act == PersonAct::NeedsFill || Act == PersonAct::Happy || Act == PersonAct::Cure)
 			return true;
+		if (Act == PersonAct::Equip)
+			return Who == "people";		// 플레이어의 사람 가운데 병사에게만 간다(부르는 쪽이 고른다). 영주는 병사가 아니다
 		return Act == PersonAct::KnowledgeAll && Who == "lords";		// 주민은 지식을 갖지 않는다
 	}
 
@@ -167,6 +169,67 @@ namespace NlCore
 	const char* SpawnMethod(SpawnKind Kind) { return SpawnOf(Kind).Method; }
 	const char* SpawnLabel(SpawnKind Kind) { return SpawnOf(Kind).Label; }
 
+	const std::vector<Loadout>& Loadouts()
+	{
+		// 게임의 자료에서 읽은 묶음들(research/17): h_swordman 은 갑옷 7·무기 12·방패, any 는 갑옷 -2·무기 -2(아무거나)였다. 나머지 셋은 이름과 번호만 읽었다.
+		static const std::vector<Loadout> loadouts = {
+			{ "h_swordman", "__h_swordman", "중갑·검·방패" },
+			{ "h_axeman", "__h_axeman", "중갑·도끼·방패" },
+			{ "h_spearman", "__h_spearman", "중갑·창·방패" },
+			{ "h_hammerhead", "__h_hammerhead", "중갑·망치·방패" },
+			{ "any", "__any", "아무 장비나" },
+		};
+		return loadouts;
+	}
+
+	const Loadout* FindLoadout(const std::string& Key)
+	{
+		for (const Loadout& loadout : Loadouts())
+			if (Key == loadout.Key)
+				return &loadout;
+		return nullptr;
+	}
+
+	std::vector<int> EquipGifts(double Armor, double Weapon, bool Shield, const std::vector<double>& Inventory)
+	{
+		std::vector<int> gifts;
+		const auto want = [&](double Resource) {
+			if (!std::isfinite(Resource) || Resource < 1 || Resource != std::floor(Resource) || Resource >= static_cast<double>(Inventory.size()))
+				return false;
+			const int index = static_cast<int>(Resource);
+			if (!(Inventory[index] >= 1))
+				gifts.push_back(index);
+			return true;
+		};
+		const bool armor = want(Armor);
+		const bool weapon = want(Weapon);
+		if (Shield && (armor || weapon))
+			want(k_ShieldResource);
+		return gifts;
+	}
+
+	EquipResult EquipReport(const char* Label, bool Stuck, int Wanted, int Given)
+	{
+		EquipResult out;
+		const std::string label = Label ? Label : "";
+		if (!Stuck)
+			out.Note = label + ": 선호 장비가 바뀌지 않았습니다 (장비는 넣지 않았습니다)";
+		else if (Given < Wanted)
+			out.Note = label + ": 선호 장비는 정했지만 넣을 " + std::to_string(Wanted) + "개 가운데 " + std::to_string(Wanted - Given) + "개를 넣지 못했습니다";
+		else
+		{
+			out.Ok = true;
+			out.Note = Wanted > 0 ? label + ": 선호 장비로 정하고 " + std::to_string(Given) + "개를 넣었습니다"
+				: label + ": 선호 장비로 정했습니다 (넣을 장비는 이미 갖고 있거나 없습니다)";
+		}
+		return out;
+	}
+
+	bool IsSoldier(const PersonRow& Row)
+	{
+		return !Row.Character && Row.Strata == 2;
+	}
+
 	bool SoldierBatch(double Asked, int& Count)
 	{
 		if (!std::isfinite(Asked))
@@ -209,6 +272,8 @@ namespace NlCore
 		if (Why.empty() && gift && (std::round(Command.Amount) == 0 || std::fabs(Command.Amount) > k_GiftMax))
 			Why = "줄 수가 0 이거나 너무 큽니다";
 		// 지식의 이름도 특성의 이름과 같은 꼴이다(소문자·숫자·밑줄). 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
+		if (Why.empty() && Command.Act == PersonAct::Equip && !FindLoadout(Command.Text))
+			Why = "모르는 장비 묶음입니다";
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
 			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
 		if (Why.empty() && trait && IsProtectedTrait(Command.Text))

@@ -23,7 +23,7 @@
 //   person <uuid|lords|people> <할 일> [index=N] [amount=N] [name=글]
 //                                                   인물 패널과 같은 길로 고친다. 할 일: skill_set, skill_add, skills_max, need_set, needs_fill,
 //                                                   age_set, happy, cure, trait_add, trait_remove, knowledge_all, knowledge_add,
-//                                                   money_add, item_add (core/PeoplePlan)
+//                                                   money_add, item_add, equip name=<장비 묶음> (core/PeoplePlan)
 //   person spawn_soldier amount=<1..20>             플레이어의 병사를 만든다(게임의 디버그 함수. research/13)
 //   person spawn <soldier|knight|peasant|slave|lord>  디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다
 //   preset <normal|easy|sandbox|god>                치트 표의 확인된 항목의 묶음을 건다(모드창의 프리셋과 같다)
