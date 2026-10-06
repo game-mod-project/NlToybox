@@ -441,6 +441,12 @@ namespace
 			return;
 		}
 		command.Amount = C.Number;
+		const auto pact = C.Options.find("name");
+		if (command.Goal == NlCore::DiplomacyGoal::Pact && (pact == C.Options.end() || !NlCore::ParseDiplomacyPact(pact->second, command.Pact)))
+		{
+			Say("  : diplomacy pact needs name=<peace|trade|defence>");
+			return;
+		}
 		Say("  running diplomacy " + C.Target + " " + goal->second);		// 죽으면 여기까지 남는다
 		if (C.Options.count("queue") > 0)		// 창의 단추와 같은 길: 쌓기만 하고 틱이 조금씩 한다
 		{

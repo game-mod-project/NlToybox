@@ -15,9 +15,9 @@ namespace NlCore
 	// 왕국인가: 세력의 __system_name 이 "faction.new.name.<수>"다(도적, 상인, 교단 같은 게임의 꾸러미가 아니다).
 	bool IsKingdom(const std::string& SystemName);
 
-	// 바라는 관계. Opinion 은 관계를 보지 않고 평판을 정한 만큼만 움직인다.
-	enum class DiplomacyGoal { Friends, Neutral, Hostile, Opinion };
-	// 원격 명령의 낱말: friends, neutral, hostile, opinion.
+	// 바라는 관계. Opinion 은 관계를 보지 않고 평판을 정한 만큼만 움직인다. Pact 는 평판이 아니라 협정을 맺는다(아래).
+	enum class DiplomacyGoal { Friends, Neutral, Hostile, Opinion, Pact };
+	// 원격 명령의 낱말: friends, neutral, hostile, opinion, pact.
 	bool ParseDiplomacyGoal(const std::string& Word, DiplomacyGoal& Out);
 	const char* DiplomacyGoalWord(DiplomacyGoal Goal);
 	// 창에 보일 이름: 우호, 중립, 적대.
@@ -37,6 +37,23 @@ namespace NlCore
 	// 평판의 변화량을 걸음 수로: 5 의 배수로 반올림하고 한도 안으로 당긴다. 부호가 방향이다. 수가 아니면 0.
 	int OpinionSteps(double Amount);
 
+	// 협정(FactionsAgreementMatrix 의 칸의 비트. 게임의 판정 함수가 is_has_agreement 에 넘기는 수): 평화 4, 교역 협정 8, 방어 동맹 192.
+	enum class DiplomacyPact { Peace, Trade, Defence };
+	// 원격 명령의 낱말: peace, trade, defence.
+	bool ParseDiplomacyPact(const std::string& Word, DiplomacyPact& Out);
+	const char* DiplomacyPactWord(DiplomacyPact Pact);
+	// 창에 보일 이름: 평화 협정, 교역 협정, 방어 동맹.
+	const char* DiplomacyPactLabel(DiplomacyPact Pact);
+	int PactBits(DiplomacyPact Pact);
+	// 칸의 수에 그 협정이 들어 있는가(그 비트가 모두 켜져 있다). 칸이 없거나(음수) 정수가 아니면 거짓.
+	bool HasPact(double Cell, DiplomacyPact Pact);
+	// 그 협정을 맺을 때 쓸 수: 지금 칸의 비트에 더한다(이미 든 협정을 지우지 않게). 칸이 없으면 그 협정의 비트만.
+	double PactCell(double Cell, DiplomacyPact Pact);
+	// 칸의 수를 창에 보일 글로: "평화, 교역". 든 것이 없으면 "-", 아는 비트가 하나도 없는데 0 이 아니면 "?".
+	std::string PactText(double Cell);
+	// 협정을 맺은 결과의 글. Outcome: 'd' 맺었다, 'a' 이미 있다, 'f' 못 했다(Why 에 까닭).
+	std::string PactReport(const std::string& Name, DiplomacyPact Pact, char Outcome, const std::string& Why);
+
 	// 대상: "all"(모든 왕국) 또는 세력의 uuid(16자리 16진수).
 	bool GoodFactionWho(const std::string& Who);
 
@@ -46,8 +63,9 @@ namespace NlCore
 		DiplomacyGoal Goal = DiplomacyGoal::Neutral;
 		char Side = 'b';
 		double Amount = 0;							// Opinion 의 변화량
+		DiplomacyPact Pact = DiplomacyPact::Peace;	// Pact 의 협정
 	};
-	// 명령이 말이 되는가. 아니면 거짓이고 Why 에 까닭. 모든 왕국에게는 우호와 중립만 한다(적대와 평판의 수는 한 왕국씩).
+	// 명령이 말이 되는가. 아니면 거짓이고 Why 에 까닭. 모든 왕국에게는 우호와 중립만 한다(적대, 평판의 수, 협정은 한 왕국씩).
 	bool CheckDiplomacy(const DiplomacyCommand& Command, std::string& Why);
 
 	// 한 왕국의 한쪽 평판을 움직인 결과를 글로. Side: 't' 또는 'u'. Before·After: 관계의 종류. Steps: 붙인 평판의 수(부호가 방향).

@@ -84,3 +84,33 @@
   `__update_relations(대상 세력)`으로 다시 셈하게 한 뒤 행렬의 칸을 다시 읽는다. 바라는 관계가 될 때까지 한 걸음씩 한다(`NlCore::StepToward`. 한쪽에 40개까지).
   적대는 철천지원수(2)까지 내린다(`is_enemy_with`가 참이 되는 관계). 동맹·봉신·주군(0, 5, 6)은 건드리지 않는다.
 - 원격: `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`. `queue=1`이면 창의 단추처럼 쌓기만 한다.
+
+## 확인 실행 (모듈 0.19.0, 2026-10-06)
+
+실행 묶음 `dip-session1`(답: `refs/runtime/dip-session1.answer.txt`). 06:00 ~ 12:20, 저장하지 않고 껐다(새 세이브 파일 없음). 적재 판정 통과. 백그라운드.
+
+| 한 것 | 본 것 |
+|---|---|
+| `diplomacy list` | 왕국 24개가 현지화된 이름으로(라크리아, 하라우, 크래스터 …). 크래스터만 "그쪽이 우리를 대립", 나머지는 양쪽 중립 |
+| `diplomacy <크래스터> friends side=them` | "크래스터: 그쪽이 우리를 대립 -> 우호 (평판 +5 를 7번)" (−7 + 35 = 28) |
+| `diplomacy <크래스터> friends`(양쪽) | "그쪽이 우리를 이미 우호입니다", "우리가 그쪽을 중립 -> 우호 (평판 +5 를 3번)" (10 + 15 = 25). `get_relation_with`가 양쪽 4 |
+| `diplomacy <라크리아> hostile side=them` | "중립 -> 철천지원수 (평판 -5 를 9번)". `get_relation_with` 2, `is_enemy_with(pf)` 참 |
+| `diplomacy <라크리아> neutral side=them` | "철천지원수 -> 중립 (평판 +5 를 10번)". 3, `is_enemy_with` 거짓 |
+| `diplomacy <크래스터> opinion amount=-10 side=us` | "우리가 그쪽을 우호 -> 중립 (평판 -5 를 2번)" |
+| `opinion amount=2`, `all hostile`, `all opinion`, 모르는 대상, 없는 uuid, `allies` | 모두 거부(없는 uuid 는 "그 왕국이 없습니다") |
+| `diplomacy <소피아> friends queue=1`(창의 단추와 같은 길) | "일 2개를 쌓았습니다". 4초 뒤 소피아가 양쪽 우호. 패널에 결과 줄(`refs/ui/m1-diplomacy2.png`) |
+| 여섯 시간을 흘림(게임이 `__update_relations`를 337번 불렀다) | 크래스터(그쪽 우호), 소피아(양쪽 우호) **그대로** |
+| `diplomacy all neutral` | "48/48 개가 됐습니다"(우호이던 셋만 −5 를 한 번씩, 나머지는 "이미 중립") |
+| `diplomacy all friends side=them queue=1` | "일 24개를 쌓았습니다". 20초 뒤 24개 모두 "그쪽이 우리를 우호" |
+
+- 문턱을 더 좁혔다: 우리가 그쪽을 보는 평판 10 에서 +15(25)에 friends 가 됐다. 앞의 실행에서 23 은 neutrals 였으므로 **friends 는 25 부터**로 보인다(두 쌍에서).
+- 로그: 이 실행의 외교 줄은 290줄이었다(호출마다 한 줄, 일마다 한 줄).
+
+## 협정을 쓰는 함수 (같은 실행의 마지막 호출)
+
+- 협정의 종류(판정 함수가 `is_has_agreement(세력, 세력, 수)`에 넘기는 수. 다시 기록해서 봤다): `is_declared_peace_with` **4**, `is_declared_trade_agreement_with` **8**,
+  `is_declared_defence_alliance_with` **192**.
+- **`FactionsAgreementMatrix.set_agreement(pf, X, 4) -> undefined`**(게임이 부르는 것은 기록하지 못했다. 인자 맞춤은 4. 셋만 넘겨 처음 불렀다): 게임이 끝나지 않았고,
+  `__matrix.<pf>.<X>`와 `__matrix.<X>.<pf>`가 둘 다 4 가 됐고(**양쪽에 쓴다**), `pf.is_declared_peace_with(X)`와 `X.is_declared_peace_with(pf)`가 4(참)를 돌려줬다.
+  방어 동맹의 판정은 거짓 그대로였다. 관계의 종류는 바뀌지 않았다(3 / 4).
+- 넷째 인자가 무엇인지(기한?), 이미 든 협정에 다른 협정을 쓰면 더해지는지 바뀌는지, 게임이 그 협정을 어떻게 따르는지는 재지 않았다. 푸는 함수 `reset_agreement`(인자 5)는 부르지 않았다.

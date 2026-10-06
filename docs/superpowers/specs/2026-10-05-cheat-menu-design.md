@@ -260,7 +260,8 @@ lock inst:o_character:0.starving_hours=0
 | | 장비 지급 | C 영혼의 선호 장비를 게임의 세터로 정하고(`SoulBasic.set_preferred_equipment(o_data.__preferred_equipment_data.<묶음>)`) 없는 장비를 소지품에 넣는다(`PersonAct::Equip`). 선호 장비에 없는 장비는 게임이 무기고로 돌려보낸다. 대조와 함께 하루를 돌려 확인했다(`research/17`) | 됨 |
 | | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 아군·적의 전투력과 맷집: D `get_combat_level_in_battle`·`get_mortal_pain_threshold`가 돌려주는 수에 self 로 가린 배율(`ally_power`·`enemy_power`·`ally_toughness`·`enemy_toughness`. 게임이 받는 수가 바뀌는 것까지 봤다. `research/16`). 사기와 분대의 전투는 아직 | 5(아군 무적 됨, 배율은 확인 전) |
 | | 전투 즉시 승리, 적 사기 0 | B 전투 중인 분대의 사기를 찾는다. 안 되면 C | 5 |
-| 외교 | 관계·호감 설정, 동맹·전쟁·평화 강제 | 적대 없음: D `Faction.is_enemy_with(세력) -> 불리언`을 거짓으로(모든 세력. 효과는 확인 전). 관계의 수(`__other_faction_relation_cache`의 −7, `get_relation_with`), 동맹·속국·중립(`add_to_alliance_with_leader`, `vassalise_by_faction`, `force_neutrality`)은 꼴을 재지 못했다(`research/14`) | 6(훅만) |
+| 외교 | 관계·호감 설정, 적대 제거, 전쟁·평화 강제 | C 왕국 사이의 관계(종류)는 게임이 왕끼리의 평판에서 다시 셈한다. `Faction.attach_opinion_about_faction(대상 세력, o_data.opinion_mind_debug_positive·negative)`로 평판(±5)을 붙이고 `__update_relations`로 다시 셈하게 해, 바라는 관계(우호·중립·적대)가 될 때까지 움직인다(`src/Diplomacy.cpp`, `research/19`). 행렬에 바로 쓴 값은 되돌아간다 | 됨 |
+| | 동맹 강제, 외교 비용·성공률 | 동맹(0)·봉신(5)·주군(6)은 평판으로 닿지 않는 관계라 만들지 않았다(`add_to_alliance_with_leader`, `vassalise_by_faction`, 협정 행렬의 `set_agreement`는 게임이 부르는 꼴을 보지 못했다). 적대 없음: D `Faction.is_enemy_with(세력)`을 거짓으로(모든 세력. 효과는 확인 전) | 6(훅만) |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
 | 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교의 평판(`attach_opinion_to_bishop`)·예언·설교는 아직 | 2(일부), 6(주교) |
 | 시간 | 게임 속도 0.25~50배 | B `o_time_controller`의 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(§9) | 2 |
@@ -309,6 +310,7 @@ lock inst:o_character:0.starving_hours=0
 | 5 | 지식, 아이템, 군대·전투. 계획: `plans/2026-10-06-cheat-menu-stage5-knowledge-army.md` | 지식과 소지품은 됐다(모듈 0.11.x, `research/12`): 영주에게 지식 하나·전부 주기, 소지금, 소지품을 플레이에서 확인했다(게임의 지식 창과 인물 창으로). 연구 시간 배율은 확인 전. 군대·전투(모듈 0.12 ~ 0.13, `research/13`, 계획 `plans/2026-10-06-cheat-menu-stage5b-army.md`): 병사 추가, 고용 값 배율, 디버그 소환기로 병사·기사·주민·노예·영주 만들기를 플레이에서 확인했다. 아군 무적은 함수 수준까지 봤다(확인 전). **장비 지급, 병사 제거, 모집 시간, 전투의 배율·사기·승패는 하지 못했다**(싸움을 붙이는 길을 찾지 못했다) |
 | 6 | 외교, 종교, 이벤트, 월드. 계획: `plans/2026-10-06-cheat-menu-stage6-world.md` | 일부만 됐다(모듈 0.14.x, `research/14`): 주교 부르기(확인), 이벤트 쿨다운 지우기(써지는 것까지), 세력 적대 판정 훅(확인 전). **관계 설정, 동맹·전쟁·평화, 신앙·설교, 계절·날씨, 지도 공개, 이벤트 강제 실행은 하지 못했다**(함수의 꼴을 재지 못했다. 조사 실행 둘이 내가 부른 디버그 함수 때문에 끝났다) |
 | 경제 보탬 | 신성 반지, 최소값 유지. 계획: `plans/2026-10-06-cheat-menu-economy-rings-floor.md` | 됐다(모듈 0.18.x, `research/18`). 반지를 더하고 맞추는 것(화면의 반지 수), 최소값 유지(켜면 1초 안에 채우고, 네 시간 동안 먹히는 당근이 바닥 아래로 내려가지 않고, 끄면 멈춘다), 영주의 반지(게임의 읽기 함수까지)를 플레이에서 확인했다 |
+| 외교 | 왕국과의 관계. 계획: `plans/2026-10-06-cheat-menu-diplomacy.md` | 됐다(모듈 0.19.x, `research/19`). 왕국의 이름과 양쪽의 관계를 보이고, 한 왕국이나 모든 왕국을 우호·중립으로, 한 왕국을 적대로 움직이는 것을 플레이에서 확인했다(게임의 관계 함수와 행렬로. 게임이 스스로 다시 셈한 뒤에도 남는다). 동맹 강제, 외교 비용·성공률은 만들지 않았다. 세계 지도의 표시로는 보지 못했다(게임 창을 누르지 않는 실행이었다) |
 | 7 | 프리셋, 유틸. 계획: `plans/2026-10-06-cheat-menu-stage7-presets.md` | 프리셋 넷과 시간의 멈춤·다시 흐르게가 됐다(모듈 0.15.x). "18개 영역의 항목이 모두 `Verified`"는 이루지 못했다: 표 52개 가운데 확인된 것은 14개이고, 5·6단계에서 재지 못한 것(전투, 장비, 외교의 관계, 신앙, 계절·날씨, 지도, 이벤트 강제)이 남아 있다 |
 
 ## 11. 오류와 안전

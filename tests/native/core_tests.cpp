@@ -1788,6 +1788,54 @@ int main(int argc, char** argv)
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 	});
 
+	Test("외교: 협정의 종류와 칸의 비트", [] {
+		// 게임의 판정 함수가 is_has_agreement 에 넘기는 수(research/19): 평화 4, 교역 협정 8, 방어 동맹 192
+		DiplomacyPact pact = DiplomacyPact::Peace;
+		CHECK(ParseDiplomacyPact("peace", pact) && pact == DiplomacyPact::Peace && PactBits(pact) == 4);
+		CHECK(ParseDiplomacyPact("trade", pact) && pact == DiplomacyPact::Trade && PactBits(pact) == 8);
+		CHECK(ParseDiplomacyPact("defence", pact) && pact == DiplomacyPact::Defence && PactBits(pact) == 192);
+		CHECK(!ParseDiplomacyPact("war", pact) && !ParseDiplomacyPact("", pact));
+		CHECK_STR(DiplomacyPactWord(DiplomacyPact::Defence), "defence");
+		CHECK_STR(DiplomacyPactLabel(DiplomacyPact::Peace), "평화 협정");
+		CHECK_STR(DiplomacyPactLabel(DiplomacyPact::Trade), "교역 협정");
+		CHECK_STR(DiplomacyPactLabel(DiplomacyPact::Defence), "방어 동맹");
+		// 칸의 수에 그 협정의 비트가 모두 켜져 있어야 든 것이다. 칸이 없으면(읽지 못하면 음수) 없다.
+		CHECK(HasPact(4, DiplomacyPact::Peace) && HasPact(12, DiplomacyPact::Peace) && HasPact(12, DiplomacyPact::Trade) && HasPact(196, DiplomacyPact::Defence));
+		CHECK(!HasPact(0, DiplomacyPact::Peace) && !HasPact(8, DiplomacyPact::Peace) && !HasPact(64, DiplomacyPact::Defence) && !HasPact(128, DiplomacyPact::Defence));
+		CHECK(!HasPact(-1, DiplomacyPact::Peace) && !HasPact(4.5, DiplomacyPact::Peace) && !HasPact(std::numeric_limits<double>::quiet_NaN(), DiplomacyPact::Peace)
+			&& !HasPact(1e300, DiplomacyPact::Peace));
+		// 쓸 수: 이미 든 협정을 지우지 않게 지금의 비트에 더한다. 칸이 없으면 그 협정의 비트만.
+		CHECK(PactCell(0, DiplomacyPact::Peace) == 4 && PactCell(4, DiplomacyPact::Trade) == 12 && PactCell(12, DiplomacyPact::Defence) == 204);
+		CHECK(PactCell(-1, DiplomacyPact::Trade) == 8 && PactCell(4, DiplomacyPact::Peace) == 4);
+		// 창에 보일 글
+		CHECK_STR(PactText(0), "-");
+		CHECK_STR(PactText(-1), "-");
+		CHECK_STR(PactText(4), "평화");
+		CHECK_STR(PactText(204), "평화, 교역, 방어 동맹");
+		CHECK_STR(PactText(64), "?");			// 모르는 비트뿐이다(방어 동맹의 반쪽)
+
+		// 명령: 협정은 한 왕국씩. 양쪽에 쓰이므로 side 는 받지 않는다.
+		DiplomacyGoal goal = DiplomacyGoal::Friends;
+		CHECK(ParseDiplomacyGoal("pact", goal) && goal == DiplomacyGoal::Pact);
+		std::string why;
+		DiplomacyCommand c{ "1fa50db321ce450b", DiplomacyGoal::Pact, 'b', 0 };
+		c.Pact = DiplomacyPact::Defence;
+		CHECK(CheckDiplomacy(c, why) && why.empty());
+		c.Who = "all";
+		CHECK(!CheckDiplomacy(c, why) && !why.empty());
+		CHECK(StepToward(3, DiplomacyGoal::Pact) == 2);		// 협정은 평판의 걸음이 아니다
+		// 결과의 글
+		CHECK_STR(PactReport("크래스터", DiplomacyPact::Peace, 'd', ""), "크래스터: 평화 협정을 맺었습니다");
+		CHECK_STR(PactReport("크래스터", DiplomacyPact::Peace, 'a', ""), "크래스터: 이미 평화 협정이 있습니다");
+		CHECK_STR(PactReport("크래스터", DiplomacyPact::Defence, 'f', "did not stick"), "크래스터: 방어 동맹을 맺지 못했습니다 (did not stick)");
+		// 원격 명령
+		const RemoteCommand pact_line = ParseRemoteLine("diplomacy 1fa50db321ce450b pact name=defence");
+		CHECK(pact_line.Error.empty() && pact_line.Options.at("goal") == "pact" && pact_line.Options.at("name") == "defence");
+		for (const char* bad : { "diplomacy 1fa50db321ce450b pact", "diplomacy 1fa50db321ce450b pact name=war", "diplomacy all pact name=peace",
+			"diplomacy 1fa50db321ce450b pact name=peace side=them", "diplomacy 1fa50db321ce450b pact name=peace amount=5" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
+	});
+
 	Test("장비: 선호 장비의 묶음과 넣어 줄 것", [] {
 		PersonAct act = PersonAct::SkillSet;
 		CHECK(ParsePersonAct("equip", act) && act == PersonAct::Equip && std::string(PersonActWord(PersonAct::Equip)) == "equip");

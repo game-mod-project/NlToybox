@@ -22,7 +22,9 @@ namespace
 	constexpr const char* k_Player = "inst:o_game_map_controller.__factions_manager.__player_faction";
 	// __matrix.<A 의 uuid>.<B 의 uuid> = A 가 B 를 보는 관계의 종류(0 allies … 7 opponent). 방향이 있다.
 	constexpr const char* k_Matrix = "inst:o_game_map_controller.__factions_manager.__allies_matrix.__matrix";
-	// 게임의 디버그용 평판. __opinion_modify 가 +5 / -5, 끝이 없고(__duration -4), 50겹까지다.
+	// 협정의 칸: __matrix.<A 의 uuid>.<B 의 uuid> = 비트(평화 4, 교역 협정 8, 방어 동맹 192). 협정이 없으면 칸도 없다. set_agreement 는 양쪽에 쓴다.
+	constexpr const char* k_Pacts = "inst:o_game_map_controller.__factions_manager.__agreement_matrix";
+	// 게임의 디버그용 평판. __opinion_modify 가 +5 / -5, __duration 이 -4, 50겹까지다.
 	constexpr const char* k_Good = "inst:o_data.opinion_mind_debug_positive";
 	constexpr const char* k_Bad = "inst:o_data.opinion_mind_debug_negative";
 	constexpr double k_StepEvery = 0.02;		// 쌓인 일을 한 묶음씩 하는 간격(초)
@@ -35,6 +37,7 @@ namespace
 		int Index = -1;				// __array_of_factions 의 자리. 쓰기 전에 그 자리의 uuid 를 다시 본다
 		double Theirs = -1;			// 그쪽이 우리를 보는 관계. 읽지 못하면 -1
 		double Ours = -1;			// 우리가 그쪽을 보는 관계
+		double Pacts = -1;			// 우리와 맺은 협정의 비트. 칸이 없으면(협정이 없다) -1
 	};
 
 	struct Job
@@ -44,6 +47,7 @@ namespace
 		DiplomacyGoal Goal = DiplomacyGoal::Neutral;
 		int Left = 0;				// 더 붙여도 되는 평판의 수
 		int Sign = 0;				// Opinion: 방향(+1, -1)
+		NlCore::DiplomacyPact Pact = NlCore::DiplomacyPact::Peace;		// Goal 이 Pact 일 때
 		int Done = 0;				// 붙인 평판의 수(부호가 방향)
 		double Before = -1;			// 시작할 때의 관계
 		bool Started = false;
@@ -98,12 +102,20 @@ namespace
 		return NlAccess::ReadNumber(std::string(k_Matrix) + "." + From + "." + To, kind) ? kind : -1;
 	}
 
+	// 우리와 그 세력 사이의 협정의 비트. 칸이 없으면 -1.
+	double PactCellOf(const std::string& Uuid)
+	{
+		double cell = -1;
+		return NlAccess::ReadNumber(std::string(k_Pacts) + ".__matrix." + g_PlayerUuid + "." + Uuid, cell) ? cell : -1;
+	}
+
 	void ReadKinds()
 	{
 		for (Kingdom& kingdom : g_Kingdoms)
 		{
 			kingdom.Theirs = Relation(kingdom.Uuid, g_PlayerUuid);
 			kingdom.Ours = Relation(g_PlayerUuid, kingdom.Uuid);
+			kingdom.Pacts = PactCellOf(kingdom.Uuid);
 		}
 	}
 
@@ -191,6 +203,34 @@ namespace
 		return nullptr;
 	}
 
+	// 협정을 맺는다(한 번에 끝난다). 돌려주는 값: core 의 PactReport 의 Outcome.
+	char MakePact(const Job& It, const std::string& Faction, std::string& Why)
+	{
+		const double before = PactCellOf(It.Uuid);
+		if (NlCore::HasPact(before, It.Pact))
+			return 'a';
+		RValue us, them, result;		// 이 함수 안에서만 든다
+		if (!NlAccess::Read(NlCore::ParseAskPath(k_Player), us, Why) || !us.IsStruct()
+			|| !NlAccess::Read(NlCore::ParseAskPath(Faction), them, Why) || !them.IsStruct())
+		{
+			Why = "세력의 구조체를 읽지 못했습니다";
+			return 'f';
+		}
+		// FactionsAgreementMatrix.set_agreement(세력, 세력, 비트) -> undefined. (플레이어, 왕국, 4)로 불러 양쪽 칸이 4 가 되고
+		// 양쪽의 is_declared_peace_with 가 참이 되는 것을 봤다(research/19). 이미 든 협정을 지우지 않게 지금의 비트에 더한 수를 넘긴다.
+		const double cell = NlCore::PactCell(before, It.Pact);
+		Log("diplomacy call set_agreement(" + std::string(k_Player) + ", " + Faction + ", " + std::to_string(static_cast<int>(cell)) + ")");
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_Pacts) + ".set_agreement"), { us, them, RValue(cell) }, result, Why))
+			return 'f';
+		// 쓴 뒤 다시 읽는다: 우리 쪽 칸에 그 협정이 들었는가.
+		if (!NlCore::HasPact(PactCellOf(It.Uuid), It.Pact))
+		{
+			Why = "협정의 칸이 바뀌지 않았습니다";
+			return 'f';
+		}
+		return 'd';
+	}
+
 	// 일의 한 걸음. 돌려주는 값: 0 이면 더 한다, 아니면 끝났다(core 의 DiplomacyReport 의 Outcome). Why 에 실패의 까닭.
 	char StepJob(Job& It, std::string& Why)
 	{
@@ -202,6 +242,8 @@ namespace
 			return 'f';
 		}
 		const std::string faction = FactionPath(kingdom->Index);
+		if (It.Goal == DiplomacyGoal::Pact)
+			return MakePact(It, faction, Why);
 		const double kind = It.Side == 't' ? Relation(It.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Uuid);
 		if (kind < 0)
 		{
@@ -274,7 +316,9 @@ namespace
 
 		const Kingdom* kingdom = FindKingdom(It.Uuid);
 		const double after = It.Side == 't' ? Relation(It.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Uuid);
-		const std::string line = NlCore::DiplomacyReport(kingdom ? kingdom->Name : It.Uuid, It.Side, It.Started ? It.Before : after, after, It.Done, outcome, why);
+		const std::string name = kingdom ? kingdom->Name : It.Uuid;
+		const std::string line = It.Goal == DiplomacyGoal::Pact ? NlCore::PactReport(name, It.Pact, outcome, why)
+			: NlCore::DiplomacyReport(name, It.Side, It.Started ? It.Before : after, after, It.Done, outcome, why);
 		Log("diplomacy: " + It.Uuid + " side " + std::string(1, It.Side) + " goal " + NlCore::DiplomacyGoalWord(It.Goal) + ": outcome "
 			+ std::string(1, outcome) + ", steps " + std::to_string(It.Done) + (why.empty() ? "" : ", " + why));
 		if (NlCore::DiplomacyFailed(outcome))
@@ -295,12 +339,14 @@ namespace
 				continue;
 			for (const char side : { 't', 'u' })
 			{
-				if (Command.Side != 'b' && Command.Side != side)
+				// 협정은 양쪽에 한 번에 쓰인다: 일 하나.
+				if (Command.Goal == DiplomacyGoal::Pact ? side != 't' : (Command.Side != 'b' && Command.Side != side))
 					continue;
 				Job job;
 				job.Uuid = kingdom.Uuid;
 				job.Side = side;
 				job.Goal = Command.Goal;
+				job.Pact = Command.Pact;
 				job.Left = Command.Goal == DiplomacyGoal::Opinion ? (steps > 0 ? steps : -steps) : NlCore::k_OpinionStepsMax;
 				job.Sign = steps > 0 ? 1 : steps < 0 ? -1 : 0;
 				Out.push_back(std::move(job));
@@ -346,10 +392,12 @@ namespace
 	}
 
 	// 창의 단추.
-	void Push(const std::string& Who, DiplomacyGoal Goal, double Amount)
+	void Push(const std::string& Who, DiplomacyGoal Goal, double Amount, NlCore::DiplomacyPact Pact = NlCore::DiplomacyPact::Peace)
 	{
+		DiplomacyCommand command{ Who, Goal, SideChoice(), Amount };
+		command.Pact = Pact;
 		std::string why;
-		if (PushCommand({ Who, Goal, SideChoice(), Amount }, why) < 0)
+		if (PushCommand(command, why) < 0)
 			g_Results = { why };
 	}
 }
@@ -443,7 +491,8 @@ std::vector<std::string> NlDiplomacy::List()
 	std::vector<std::string> lines;
 	for (const Kingdom& kingdom : g_Kingdoms)
 		lines.push_back(kingdom.Uuid + "  " + kingdom.Name + "  them " + NlCore::RelationLabel(kingdom.Theirs) + " (" + std::to_string(static_cast<int>(kingdom.Theirs))
-			+ ")  us " + NlCore::RelationLabel(kingdom.Ours) + " (" + std::to_string(static_cast<int>(kingdom.Ours)) + ")");
+			+ ")  us " + NlCore::RelationLabel(kingdom.Ours) + " (" + std::to_string(static_cast<int>(kingdom.Ours)) + ")  pacts " + NlCore::PactText(kingdom.Pacts)
+			+ " (" + std::to_string(static_cast<int>(kingdom.Pacts)) + ")");
 	lines.push_back("(" + std::to_string(g_Kingdoms.size()) + " kingdoms, player " + g_PlayerUuid + ")");
 	return lines;
 }
@@ -471,7 +520,9 @@ void NlDiplomacy::Draw()
 		Push("all", DiplomacyGoal::Neutral, 0);
 	Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(+5 또는 -5)을 게임의 함수로 붙이고 관계를 다시 셈하게 합니다. "
 		"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한쪽에 40개까지. 적대는 철천지원수까지 내립니다). 동맹·봉신·주군 관계는 건드리지 않습니다. "
-		"붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다.");
+		"붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다. "
+		"'평화'·'동맹'·'교역'은 게임의 협정 함수로 그 왕국과 협정(평화 협정, 방어 동맹, 교역 협정)을 바로 맺습니다. 푸는 단추는 없습니다. "
+		"게임이 그 협정을 어떻게 따르는지(기한, 침공)는 확인 전입니다.");
 	if (!g_Jobs.empty())
 		ImGui::TextDisabled("하는 중: 남은 일 %d개", static_cast<int>(g_Jobs.size()));
 	else if (g_Asked > 0)
@@ -481,11 +532,12 @@ void NlDiplomacy::Draw()
 	if (g_Results.size() > 6)
 		ImGui::TextDisabled("(그 밖에 %d줄)", static_cast<int>(g_Results.size() - 6));
 
-	if (ImGui::BeginTable("kingdoms", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+	if (ImGui::BeginTable("kingdoms", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 	{
 		ImGui::TableSetupColumn("왕국");
 		ImGui::TableSetupColumn("그쪽이 우리를");
 		ImGui::TableSetupColumn("우리가 그쪽을");
+		ImGui::TableSetupColumn("협정");
 		ImGui::TableSetupColumn("바꾸기");
 		ImGui::TableHeadersRow();
 		for (size_t i = 0; i < g_Kingdoms.size(); i++)
@@ -499,6 +551,8 @@ void NlDiplomacy::Draw()
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(NlCore::RelationLabel(kingdom.Ours));
 			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(NlCore::PactText(kingdom.Pacts).c_str());
+			ImGui::TableNextColumn();
 			ImGui::PushID(static_cast<int>(i));
 			for (const DiplomacyGoal goal : { DiplomacyGoal::Friends, DiplomacyGoal::Neutral, DiplomacyGoal::Hostile })
 			{
@@ -511,6 +565,15 @@ void NlDiplomacy::Draw()
 			ImGui::SameLine();
 			if (ImGui::SmallButton("-5"))
 				Push(kingdom.Uuid, DiplomacyGoal::Opinion, -5);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("평화"))
+				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Peace);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("동맹"))
+				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Defence);
+			ImGui::SameLine();
+			if (ImGui::SmallButton("교역"))
+				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Trade);
 			ImGui::PopID();
 		}
 		ImGui::EndTable();

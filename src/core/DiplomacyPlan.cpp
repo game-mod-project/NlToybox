@@ -14,7 +14,26 @@ namespace NlCore
 		} k_Goals[] = {
 			{ DiplomacyGoal::Friends, "friends", "우호" }, { DiplomacyGoal::Neutral, "neutral", "중립" },
 			{ DiplomacyGoal::Hostile, "hostile", "적대" }, { DiplomacyGoal::Opinion, "opinion", "평판" },
+			{ DiplomacyGoal::Pact, "pact", "협정" },
 		};
+
+		const struct
+		{
+			DiplomacyPact Pact;
+			const char* Word;
+			const char* Label;
+			const char* Short;
+			int Bits;
+		} k_Pacts[] = {
+			{ DiplomacyPact::Peace, "peace", "평화 협정", "평화", 4 }, { DiplomacyPact::Trade, "trade", "교역 협정", "교역", 8 },
+			{ DiplomacyPact::Defence, "defence", "방어 동맹", "방어 동맹", 192 },
+		};
+
+		// 협정의 칸: 0 이상의 정수여야 비트로 읽는다. 아니면 -1.
+		int WholeCell(double Cell)
+		{
+			return std::isfinite(Cell) && Cell == std::floor(Cell) && Cell >= 0 && Cell < 2147483648.0 ? static_cast<int>(Cell) : -1;
+		}
 
 		// 정수인 종류만 본다. 아니면 -1.
 		int WholeKind(double Kind)
@@ -75,6 +94,79 @@ namespace NlCore
 			if (goal.Goal == Goal)
 				return goal.Label;
 		return "";
+	}
+
+	bool ParseDiplomacyPact(const std::string& Word, DiplomacyPact& Out)
+	{
+		for (const auto& pact : k_Pacts)
+			if (Word == pact.Word)
+			{
+				Out = pact.Pact;
+				return true;
+			}
+		return false;
+	}
+
+	const char* DiplomacyPactWord(DiplomacyPact Pact)
+	{
+		for (const auto& pact : k_Pacts)
+			if (pact.Pact == Pact)
+				return pact.Word;
+		return "";
+	}
+
+	const char* DiplomacyPactLabel(DiplomacyPact Pact)
+	{
+		for (const auto& pact : k_Pacts)
+			if (pact.Pact == Pact)
+				return pact.Label;
+		return "";
+	}
+
+	int PactBits(DiplomacyPact Pact)
+	{
+		for (const auto& pact : k_Pacts)
+			if (pact.Pact == Pact)
+				return pact.Bits;
+		return 0;
+	}
+
+	bool HasPact(double Cell, DiplomacyPact Pact)
+	{
+		const int cell = WholeCell(Cell), bits = PactBits(Pact);
+		return cell >= 0 && bits != 0 && (cell & bits) == bits;
+	}
+
+	double PactCell(double Cell, DiplomacyPact Pact)
+	{
+		const int cell = WholeCell(Cell);
+		return static_cast<double>((cell < 0 ? 0 : cell) | PactBits(Pact));
+	}
+
+	std::string PactText(double Cell)
+	{
+		const int cell = WholeCell(Cell);
+		if (cell <= 0)
+			return "-";
+		std::string text;
+		for (const auto& pact : k_Pacts)
+			if ((cell & pact.Bits) == pact.Bits)
+				text += (text.empty() ? "" : ", ") + std::string(pact.Short);
+		return text.empty() ? "?" : text;
+	}
+
+	std::string PactReport(const std::string& Name, DiplomacyPact Pact, char Outcome, const std::string& Why)
+	{
+		const std::string label = DiplomacyPactLabel(Pact);		// 셋 모두 받침으로 끝난다("협정을", "동맹을")
+		switch (Outcome)
+		{
+		case 'd':
+			return Name + ": " + label + "을 맺었습니다";
+		case 'a':
+			return Name + ": 이미 " + label + "이 있습니다";
+		default:
+			return Name + ": " + label + "을 맺지 못했습니다 (" + (Why.empty() ? "모릅니다" : Why) + ")";
+		}
 	}
 
 	bool ParseDiplomacySide(const std::string& Word, char& Out)
@@ -140,6 +232,8 @@ namespace NlCore
 			Why = "어느 왕국인지 없습니다";
 		else if (Command.Side != 't' && Command.Side != 'u' && Command.Side != 'b')
 			Why = "누구의 평판인지 모릅니다";
+		else if (Command.Who == "all" && Command.Goal == DiplomacyGoal::Pact)
+			Why = "협정은 한 왕국씩 맺습니다";
 		else if (Command.Who == "all" && (Command.Goal == DiplomacyGoal::Hostile || Command.Goal == DiplomacyGoal::Opinion))
 			Why = "모든 왕국에게는 우호와 중립만 합니다 (적대와 평판의 수는 한 왕국씩)";
 		else if (Command.Goal == DiplomacyGoal::Opinion && OpinionSteps(Command.Amount) == 0)
