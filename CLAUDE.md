@@ -174,7 +174,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 지식과 아이템 패널도 이 파일에 있다(`research/12`). **지식은 영주가 가진다**: `__soul.__character_soul.__knowledge`의 `add_all_knowledge()`(인자 없음),
     `add_knowledge(지식 구조체, true, true)`. 지식 구조체는 `inst:o_data.__knowledge_data.__knowledge_list[n]`(121개. `__name`, `__caption_replaced`)에서 얻고 그 자리의 이름을 다시 본다.
     소지금은 `__inventory.change_money(변화량)`, 소지품은 `__inventory.change(자원 번호, 변화량)`으로 바꾼다(더할 정수는 `NlCore::GiftDelta`: 가진 것보다 많이 빼지 않는다).
-  - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/People.cpp`의 `One()`에 case 하나를 더한다
+  - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/People.cpp`에 `One<할 일>` 함수 하나와 `One()`의 case 한 줄을 더한다(행동마다 함수 하나다. 2026-10-07 에 그렇게 나눴다)
     (창의 단추와 원격 `person`이 같은 길을 탄다).
   - **인자가 없는 함수는 기계어로 가린다**: 본문이 `argc`(r9d)를 레지스터에도 스택에도 옮기지 않으면 인자를 읽지 않는다(`research/11`. 게임이 부르지 않는 디버그 함수에 쓴다).
   - **들머리의 인자 맞춤(`0x14018A9B0`, N)은 "생략해도 된다"가 아니다.** 모자란 인자를 `undefined`로 채울 뿐이고, 그 값을 수로 쓰는 함수는 GML 오류로 게임을 끝낸다
@@ -353,6 +353,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
   `world cooldowns_clear|bishop|season|season_delay|season_end`, `crime list|clear|return_stolen|absolve|acquit`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
   - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).
@@ -385,7 +386,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   (`budget_money`는 `default_budget_money`가 되지만 화면의 시작 금화는 달랐다. `research/02-new-game-state.md`).
 - 메인 메뉴와 게임은 같은 룸(`rm_game`)이다. 게임 화면은 `o_main_menu`가 없고 `o_character`가 있는 것으로 알아본다
   (새 게임에서 잰 것이다. 세이브를 불러올 때는 재지 않았다). `o_time_controller`는 메뉴에서 이미 있다.
-- 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다. 러너에 닿는 호출은
+- 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다(묶음마다 `test_<묶음>.cpp`. 공용 뼈대는 `common.hpp`, 차례는 `main.cpp`). 러너에 닿는 호출은
   `src/Game.cpp`를 거친다. 빌트인과 문서·소스·실행으로 확인한 인터페이스만 쓴다. `GetInstanceObject`와
   `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다. 없는 이름으로 부르는 `GetInstanceMember`와
   `GetInstanceMemberCount`는 확인하지 못한 빌트인을 구조체에 대고 부르므로 쓰지 않는다(이름은 열거로 찾는다).
