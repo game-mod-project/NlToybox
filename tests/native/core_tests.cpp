@@ -485,6 +485,9 @@ int main(int argc, char** argv)
 		CHECK(EconomyTargets(EconomyAct::AllAdd, stocked, 0) == stocked);			// "모든 자원 +100"이 반지를 100개 만들지 않는다
 		CHECK(EconomyTargets(EconomyAct::ResourceAdd, stocked, -1) == stocked);		// 반지의 자리를 모르면 넣지 않는다
 		CHECK(EconomyTargets(EconomyAct::ResourceAdd, { 0, 1 }, 0) == (std::vector<int>{ 0, 1 }));	// 두 번 넣지 않는다
+		// 반지가 갈래에 들어 있어도(다른 빌드) "모든 자원"은 반지를 받지 않는다(검토의 지적: 잰 것에 기대지 않고 코드로 막는다).
+		CHECK(EconomyTargets(EconomyAct::AllAdd, { 0, 1, 2 }, 0) == (std::vector<int>{ 1, 2 }));
+		CHECK(PlanEconomy({ EconomyAct::AllAdd, -1, 100 }, 0, { 7, 300 }, { 7, 300 }, EconomyTargets(EconomyAct::AllAdd, { 0, 1 }, 0)).size() == 1);
 		// 반지를 넣은 목록으로는 0번도 하나씩 바뀐다
 		const std::vector<double> counts = { 7, 300 };
 		const auto ring = PlanEconomy({ EconomyAct::ResourceAdd, 0, 5 }, 0, counts, counts, EconomyTargets(EconomyAct::ResourceAdd, { 1 }, 0));
@@ -519,6 +522,30 @@ int main(int argc, char** argv)
 		CHECK(PlanFloors({ { 2, 40 }, { 2, 80 } }, 0, free, allowed).size() == 1);
 		// 음수인 금화도 바닥까지 채운다
 		CHECK(PlanFloors({ { -1, 100 } }, -50, free, allowed)[0].Delta == 150);
+		// 바닥이 한도(10억)와 같으면 한다. 채울 양이 한도를 넘으면 하지 않는다(게임의 함수에 그런 수를 넘기지 않는다).
+		CHECK(PlanFloors({ { -1, 1e9 } }, 0, free, allowed)[0].Delta == 1e9);
+		CHECK(PlanFloors({ { -1, 1e9 } }, -50, free, allowed).empty());
+		// 기준은 예약되지 않은 수(화면의 수)다: 전체 300 가운데 50 이 예약됐으면 바닥 280 에 30 을 더한다.
+		CHECK(PlanFloors({ { 1, 280 } }, 0, { 0, 250 }, { 1 })[0].Delta == 30);
+		// 같은 자원이 두 번이면 앞의 것만 본다(앞의 것이 이미 채워져 있어도 뒤의 것으로 채우지 않는다).
+		CHECK(PlanFloors({ { 1, 10 }, { 1, 400 } }, 0, { 0, 300 }, { 1 }).empty());
+	});
+
+	Test("경제: 최소값 유지 한 바퀴의 결과를 숨기지 않는다", [] {
+		// (지키는 바닥, 채우려던 것, 부른 것, 불렀지만 청한 만큼 바뀌지 않은 것, 호출이 안 된 까닭)
+		FloorRound round = FloorReport(0, 0, 0, 0, "");
+		CHECK(round.Ok && round.Note == "지킬 최소값이 없습니다 (이 게임에 없는 자원뿐입니다)");
+		round = FloorReport(4, 0, 0, 0, "");
+		CHECK(round.Ok && round.Note == "최소값 4개를 지키는 중");
+		round = FloorReport(4, 2, 2, 0, "");
+		CHECK(round.Ok && round.Note == "최소값 4개를 지키는 중 (방금 2개를 채웠습니다)");
+		// 부르지 못한 것과, 불렀지만 수가 바뀌지 않은 것은 실패다(검토의 지적: 부른 횟수를 "채웠습니다"라고 적지 않는다).
+		round = FloorReport(4, 3, 1, 0, "no such script");
+		CHECK(!round.Ok && round.Note == "최소값: 채우려던 3개 가운데 2개를 부르지 못했습니다 (no such script)");
+		round = FloorReport(4, 3, 3, 2, "");
+		CHECK(!round.Ok && round.Note == "최소값: 채우려던 3개 가운데 2개는 불러도 수가 청한 만큼 바뀌지 않았습니다");
+		round = FloorReport(4, 3, 2, 1, "x");
+		CHECK(!round.Ok && round.Note == "최소값: 채우려던 3개 가운데 1개를 부르지 못했고 (x) 1개는 불러도 수가 청한 만큼 바뀌지 않았습니다");
 	});
 
 	Test("경제: 최소값의 열쇠와 명령", [] {
@@ -526,8 +553,13 @@ int main(int argc, char** argv)
 		CHECK(GoodFloorKey("gold") && GoodFloorKey("wood_blanks") && GoodFloorKey("rune") && GoodFloorKey("r2"));
 		CHECK(!GoodFloorKey("") && !GoodFloorKey("a b") && !GoodFloorKey("a=b") && !GoodFloorKey("#3") && !GoodFloorKey("Wood")
 			&& !GoodFloorKey(std::string(41, 'a')));
-		// 저장할 바닥: 0 이하와 수가 아닌 것은 "유지 안 함"(0). 정수로, 한도(10억)까지.
-		CHECK(FloorValue(250.4) == 250 && FloorValue(0.4) == 0 && FloorValue(-3) == 0 && FloorValue(nan) == 0 && FloorValue(1e12) == 1e9);
+		// 저장할 바닥: 0 이하와 수가 아닌 것은 "유지 안 함"(0). 정수로.
+		CHECK(FloorValue(250.4) == 250 && FloorValue(0.4) == 0 && FloorValue(0.5) == 1 && FloorValue(-3) == 0 && FloorValue(nan) == 0);
+		// 한도(10억)를 넘는 수와 유한하지 않은 수는 당기지 않고 버린다(검토의 지적): 잘못 친 수로 10억이 채워지지 않게. 넣을 때는 까닭을 말한다(GoodFloorAmount).
+		const double inf = std::numeric_limits<double>::infinity();
+		CHECK(FloorValue(1e9) == 1e9 && FloorValue(1e9 + 1) == 0 && FloorValue(1e12) == 0 && FloorValue(inf) == 0 && FloorValue(-inf) == 0);
+		CHECK(GoodFloorAmount(250) && GoodFloorAmount(0) && GoodFloorAmount(-3) && GoodFloorAmount(1e9));
+		CHECK(!GoodFloorAmount(1e9 + 1) && !GoodFloorAmount(1e12) && !GoodFloorAmount(inf) && !GoodFloorAmount(-inf) && !GoodFloorAmount(nan));
 		EconomyAct act = EconomyAct::GoldAdd;
 		CHECK(ParseEconomyAct("floor", act) && act == EconomyAct::FloorSet && NeedsResource(act) && IsFloorAct(act));
 		CHECK(ParseEconomyAct("gold_floor", act) && act == EconomyAct::GoldFloor && !NeedsResource(act) && IsFloorAct(act));
@@ -548,9 +580,13 @@ int main(int argc, char** argv)
 		const std::string text = FormatCheatState(state);
 		CHECK(text.find("floor gold=5000\n") != std::string::npos && text.find("floor wood=250\n") != std::string::npos);
 		// 읽을 수 없는 줄(열쇠에 빈칸, 0 이하, 수가 아닌 값)은 버린다. 같은 열쇠는 뒤의 것이 이긴다.
-		std::istringstream in(text + "floor bad key=3\nfloor rune=0\nfloor iron=-2\nfloor food=x\nfloor wood=300\nfloor stone=1e12\n");
+		std::istringstream in(text + "floor bad key=3\nfloor rune=0\nfloor iron=-2\nfloor food=x\nfloor wood=300\nfloor stone=1e12\nfloor coal=inf\n");
 		const CheatState again = ParseCheatState(in);
-		CHECK(again.Floors.size() == 3 && again.Floors.at("gold") == 5000 && again.Floors.at("wood") == 300 && again.Floors.at("stone") == 1e9);
+		CHECK(again.Floors.size() == 2 && again.Floors.at("gold") == 5000 && again.Floors.at("wood") == 300);		// 너무 큰 수와 inf 는 버린다
+		// 메모리의 잘못된 항목은 파일에 적지 않는다
+		CheatState odd;
+		odd.Floors = { { "wood", 250 }, { "bad key", 5 }, { "iron", 0 }, { "stone", 1e12 } };
+		CHECK_STR(FormatCheatState(odd), "# NlToyBox 의 치트 상태. 모드창(F8)에서 바꾸면 여기에 저장된다.\nfloor wood=250\n");
 		CHECK(KeepKnown(again).Floors == again.Floors);
 	});
 
