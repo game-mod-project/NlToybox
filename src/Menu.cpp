@@ -5,6 +5,7 @@
 #include "Production.hpp"
 #include "Cheats.hpp"
 #include "Court.hpp"
+#include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -166,6 +167,7 @@ void NlMenu::GameTick()
 	NlProduction::GameTick(now);
 	NlWorld::GameTick(now, visible && page == Area::World);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
+	NlCrime::GameTick(now, visible && page == Area::Crime);
 	NlCourt::GameTick(now, visible && (page == Area::Lord || page == Area::Religion));		// 종교 패널의 주교와의 평판도 같은 모듈이 한다
 	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
 	if (visible && now >= g_NextState)
@@ -259,6 +261,11 @@ void NlMenu::Draw()
 		break;
 	case Area::Presets:
 		NlCheats::DrawPresets();
+		break;
+	case Area::Crime:
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		NlCrime::Draw();
 		break;
 	case Area::World:
 		NlCheats::DrawArea(page);

@@ -9,6 +9,7 @@
 #include "core/CheatTable.hpp"
 #include "core/CostBook.hpp"
 #include "core/CourtPlan.hpp"
+#include "core/CrimePlan.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/Hooks.hpp"
@@ -815,7 +816,17 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 72);
+		CHECK(Cheats().size() == 77);
+		// 범죄(research/26). 주민이 범죄자가 되기 직전에 게임이 그 사람의 is_criminal_immunity()(불리언)를 묻는다. 참을 돌려주게 한 저녁에는 두 번의 시도에도
+		// 범죄자가 생기지 않았고, 그러지 않은 두 저녁에는 다섯 번·한 번의 시도에 다섯·한 명이 생겼다. 주소는 영주의 것으로 삼는다(게임 화면에는 영주가 언제나 있다).
+		CHECK(FindCheat("no_new_criminals") && FindCheat("no_new_criminals")->Kind == CheatKind::Hook && FindCheat("no_new_criminals")->On == 1
+			&& FindCheat("no_new_criminals")->Where == Area::Crime && FindCheat("no_new_criminals")->Verified
+			&& std::string(FindCheat("no_new_criminals")->Path) == "inst:o_character:0.c_criminal.is_criminal_immunity");
+		// 게임 변수를 쓰는 넷은 모듈의 일이고 효과를 보기 전이다(이틀 동안 범죄자들이 범죄를 저지르지 않았다).
+		for (const char* id : { "no_bandit_turn", "crime_minds_off", "theft_none" })
+			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::Crime && !FindCheat(id)->Verified);
+		CHECK(FindCheat("thug_days") && FindCheat("thug_days")->Kind == CheatKind::CustomScale && FindCheat("thug_days")->Where == Area::Crime && !FindCheat("thug_days")->Verified
+			&& FindCheat("thug_days")->Min >= 1 && FindCheat("thug_days")->On > 1);		// 날을 늘리는 배율이다: 1 아래로는 받지 않는다
 		// 지도 공개(research/25): GlobalMapManager.is_initial_area_visible(지역 구조체) -> 불리언. 참을 돌려주게 하자 세계 지도의 안개가 걷혔다
 		// (화면에서 봤다: 지역의 밝기, 마을의 이름, 자원 아이콘). 물체의 is_visible 만으로는 지역이 어두운 채였고 is_in_fog_of_war 만으로는 화면이 그대로였다.
 		CHECK(FindCheat("reveal_map") && FindCheat("reveal_map")->Kind == CheatKind::Hook && FindCheat("reveal_map")->On == 1 && FindCheat("reveal_map")->Where == Area::World
@@ -982,7 +993,11 @@ int main(int argc, char** argv)
 			CHECK(&GetArea(area.Id) == &area);
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
-		CHECK(Areas().size() == 16);
+		CHECK(Areas().size() == 17);
+		// 범죄 영역(research/26): 제 패널(src/Crime.cpp)이 있다. 표의 차례와 열거의 차례가 같아야 한다(GetArea 가 번호로 집는다).
+		CHECK(FindArea("crime") && FindArea("crime")->Id == Area::Crime && FindArea("crime")->Panel && &GetArea(Area::Crime) == FindArea("crime"));
+		for (const AreaInfo& area : Areas())
+			CHECK(&GetArea(area.Id) == &area);
 		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
 		for (const AreaInfo& area : Areas())
 		{
@@ -993,6 +1008,7 @@ int main(int argc, char** argv)
 				|| area.Id == Area::Army									// 군대: 병사를 만드는 단추
 				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
 				|| area.Id == Area::Diplomacy								// 왕국과의 관계(src/Diplomacy.cpp)
+				|| area.Id == Area::Crime									// 부랑자와 영주의 죄(src/Crime.cpp)
 				|| area.Id == Area::Presets;								// 프리셋: 확인된 항목의 묶음(core/Presets)
 			CHECK(area.Panel == panel);
 		}
@@ -3310,6 +3326,98 @@ int main(int argc, char** argv)
 
 		// 단계의 글: 게임의 단계는 0 부터다. 창에는 1 부터 센다.
 		CHECK(PhaseNote(0, 182678.17) == "단계 1, 이 단계는 2일 2시간 남음" && PhaseNote(2, 3000) == "단계 3, 이 단계는 1시간 미만 남음");
+	});
+
+	Test("범죄: 죄와 혐의의 특성, 범죄자의 줄, 명령, 결과의 글", [] {
+		// 죄는 이름이 sin_ 으로 시작하는 특성이다(research/26). 그 밖의 특성은 죄가 아니다.
+		CHECK(IsSinTrait("sin_murder") && IsSinTrait("sin_evil_joke") && IsSinTrait("sin_x"));
+		CHECK(!IsSinTrait("sin_") && !IsSinTrait("sin") && !IsSinTrait("human") && !IsSinTrait("original_sin_x") && !IsSinTrait("") && !IsSinTrait("SIN_murder"));
+		// 영주의 범죄 혐의: 세 가지 특성. 주민의 것(dummy_crime)과 겁먹은 범죄자의 표식은 혐의가 아니다.
+		CHECK(IsAccusationTrait("character_crime") && IsAccusationTrait("character_crime_blamed_by_bishop") && IsAccusationTrait("character_crime_blamed_by_fanatics"));
+		CHECK(!IsAccusationTrait("dummy_crime") && !IsAccusationTrait("criminal_intimidated") && !IsAccusationTrait("character_crime_x") && !IsAccusationTrait("sin_criminal")
+			&& !IsAccusationTrait(""));
+		const std::vector<std::string> traits = { "human", "sin_fight", "brave", "character_crime", "sin_seduce" };
+		CHECK(CrimeTraits(traits, true) == (std::vector<std::string>{ "sin_fight", "sin_seduce" }));
+		CHECK(CrimeTraits(traits, false) == (std::vector<std::string>{ "character_crime" }));
+		CHECK(CrimeTraits({ "human" }, true).empty() && CrimeTraits({}, false).empty());
+
+		// 범죄자의 깃발: 처음에는 수 0 이고 지정된 뒤로는 불리언 참·거짓이다. 읽지 못한 것은 범죄자가 아니다.
+		CHECK(IsVagabondFlag(true, 1) && !IsVagabondFlag(true, 0) && !IsVagabondFlag(false, 1) && !IsVagabondFlag(true, std::nan("")));
+
+		// 한 줄. 이름은 지어낸 것이다.
+		Vagabond who;
+		who.Name = "가람";
+		who.Begin = 669607;
+		CHECK(VagabondLine(who, 669607 + 2.3 * 86400) == "가람  2일째");
+		CHECK(VagabondLine(who, 669607 + 3600) == "가람  오늘부터");
+		who.Thug = true;
+		who.StolenGold = 12;
+		CHECK(VagabondLine(who, 669607 + 86400) == "가람  1일째  깡패  훔친 금화 12");
+		who.Begin = -4;		// 시작 시각을 모른다
+		who.Thug = false;
+		who.StolenGold = 0;
+		CHECK(VagabondLine(who, 700000) == "가람");
+		who.Begin = 800000;		// 시작이 지금보다 뒤로 읽혔다: 날을 적지 않는다
+		CHECK(VagabondLine(who, 700000) == "가람");
+
+		// 요약. 읽지 못한 수(음수)는 적지 않는다.
+		CHECK(CrimeSummary(5, 1, 0, 2) == "부랑자 5명 (깡패 1명), 오늘의 범죄 사건 0건, 범죄 기록 2건");
+		CHECK(CrimeSummary(3, 0, -1, -1) == "부랑자 3명");
+		CHECK(CrimeSummary(0, 0, 1, -1) == "부랑자 없음, 오늘의 범죄 사건 1건");
+
+		// 명령.
+		CrimeCommand c;
+		std::string why;
+		const std::string uuid = "0123456789abcdef";
+		CHECK(ParseCrimeCommand({ "list" }, c, why) && c.Act == CrimeAct::List && c.Who.empty());
+		CHECK(ParseCrimeCommand({ "clear", "all" }, c, why) && c.Act == CrimeAct::Clear && c.Who == "all");
+		CHECK(ParseCrimeCommand({ "clear", uuid }, c, why) && c.Act == CrimeAct::Clear && c.Who == uuid);
+		CHECK(ParseCrimeCommand({ "return_stolen" }, c, why) && c.Act == CrimeAct::ReturnStolen && c.Who.empty());
+		CHECK(ParseCrimeCommand({ "absolve", "lords" }, c, why) && c.Act == CrimeAct::Absolve && c.Who == "lords");
+		CHECK(ParseCrimeCommand({ "acquit", uuid }, c, why) && c.Act == CrimeAct::Acquit && c.Who == uuid);
+		// 범죄자 전원은 all, 영주 전원은 lords 다: 뒤바꾸지 못한다. 대상이 빠졌거나 남는 낱말이 있으면 받지 않는다.
+		for (const std::vector<std::string>& bad : std::vector<std::vector<std::string>>{ {}, { "clear" }, { "clear", "lords" }, { "clear", "people" }, { "absolve" },
+				{ "absolve", "all" }, { "acquit", "all" }, { "list", "all" }, { "return_stolen", "all" }, { "clear", "all", "now" }, { "clear", "0123" }, { "punish", uuid } })
+		{
+			why.clear();
+			CHECK(!ParseCrimeCommand(bad, c, why) && !why.empty());
+		}
+		for (CrimeAct act : { CrimeAct::List, CrimeAct::Clear, CrimeAct::ReturnStolen, CrimeAct::Absolve, CrimeAct::Acquit })
+		{
+			CrimeCommand round;
+			const std::vector<std::string> words = act == CrimeAct::List || act == CrimeAct::ReturnStolen ? std::vector<std::string>{ CrimeActWord(act) }
+				: std::vector<std::string>{ CrimeActWord(act), uuid };
+			CHECK(ParseCrimeCommand(words, round, why) && round.Act == act);
+		}
+		// 원격의 줄.
+		CHECK(ParseRemoteLine("crime list").Error.empty() && ParseRemoteLine("crime list").Target == "list");
+		const auto who_of = [](const RemoteCommand& r) {
+			const auto it = r.Options.find("who");
+			return it == r.Options.end() ? std::string("<none>") : it->second;
+		};
+		RemoteCommand remote = ParseRemoteLine("crime clear all");
+		CHECK(remote.Error.empty() && remote.Verb == "crime" && remote.Target == "clear" && who_of(remote) == "all");
+		CHECK(ParseRemoteLine("crime absolve lords").Error.empty() && who_of(ParseRemoteLine("crime acquit " + uuid)) == uuid);
+		CHECK(!ParseRemoteLine("crime").Error.empty() && !ParseRemoteLine("crime clear").Error.empty() && !ParseRemoteLine("crime absolve all").Error.empty());
+
+		// 지정 풀기의 결과: 몇 명 가운데 몇 명이 풀렸는가, 건너뛴 사람과 못 한 사람을 숨기지 않는다.
+		CHECK(ClearReport(0, 0, 0, "") == "부랑자가 없습니다");
+		CHECK(ClearReport(5, 5, 0, "") == "부랑자 5명을 주민으로 되돌렸습니다");
+		CHECK(ClearReport(1, 1, 0, "") == "부랑자 1명을 주민으로 되돌렸습니다");
+		CHECK(ClearReport(5, 3, 2, "") == "부랑자 5명 가운데 3명을 주민으로 되돌렸습니다 (그사이 범죄자가 아니게 됐거나 자리가 바뀐 2명은 건너뜀)");
+		CHECK(ClearReport(5, 3, 1, "did not stick") == "부랑자 5명 가운데 3명을 주민으로 되돌렸습니다 (그사이 범죄자가 아니게 됐거나 자리가 바뀐 1명은 건너뜀, 1명은 못 함: did not stick)");
+		CHECK(ClearReport(2, 0, 0, "busy") == "부랑자 2명 가운데 0명을 주민으로 되돌렸습니다 (2명은 못 함: busy)");
+
+		// 죄·혐의 지우기의 결과.
+		CHECK(TraitClearReport(true, 7, 3, 0, "") == "영주 7명에게서 죄 3개를 지웠습니다");
+		CHECK(TraitClearReport(false, 1, 2, 0, "") == "영주 1명에게서 범죄 혐의 2개를 지웠습니다");
+		CHECK(TraitClearReport(true, 7, 0, 0, "") == "지울 죄가 없습니다 (영주 7명)" && TraitClearReport(false, 7, 0, 0, "") == "지울 범죄 혐의가 없습니다 (영주 7명)");
+		CHECK(TraitClearReport(true, 2, 1, 2, "protected") == "영주 2명에게서 죄 1개를 지웠습니다 (2개는 못 뗌: protected)");
+		CHECK(TraitClearReport(true, 0, 0, 0, "busy") == "영주를 읽지 못했습니다: busy");
+
+		// 게임 변수의 열쇠들(이름만. 값과 뜻은 게임의 것이고 효과는 재지 않았다).
+		CHECK(BanditTurnVars().size() == 2 && CrimeMindVars().size() == 2 && ThugDaysVars().size() == 1 && TheftAmountVars().size() == 2);
+		CHECK(ThugDaysVars().size() == 1 && std::string(ThugDaysVars()[0]) == "dummy_criminal_days_to_thug");
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

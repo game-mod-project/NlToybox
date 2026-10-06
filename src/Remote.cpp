@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Court.hpp"
+#include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -428,6 +429,25 @@ namespace
 		Say("  " + NlWorld::Do(act));
 	}
 
+	// 범죄 패널의 단추와 같은 길(NlCrime::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoCrime(const RemoteCommand& C)
+	{
+		std::vector<std::string> words = { C.Target };
+		const auto who = C.Options.find("who");
+		if (who != C.Options.end())
+			words.push_back(who->second);
+		NlCore::CrimeCommand command;
+		std::string why;
+		if (!NlCore::ParseCrimeCommand(words, command, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		Say("  running crime " + C.Target + (command.Who.empty() ? "" : " " + command.Who));		// 죽으면 여기까지 남는다
+		for (const std::string& line : NlCrime::Do(command))
+			Say("  " + line);
+	}
+
 	// 외교 패널과 같은 일을 한다: 지금 끝까지(NlDiplomacy::Do), 또는 queue=1 이면 단추처럼 쌓기만(NlDiplomacy::Queue). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoDiplomacy(const RemoteCommand& C)
 	{
@@ -576,6 +596,8 @@ namespace
 			DoEconomy(C);
 		else if (C.Verb == "person")
 			DoPerson(C);
+		else if (C.Verb == "crime")
+			DoCrime(C);
 		else if (C.Verb == "world")
 			DoWorld(C);
 		else if (C.Verb == "diplomacy")

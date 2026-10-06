@@ -40,6 +40,8 @@ namespace NlPeople
 	// 게임의 특성들: 이름과 화면 이름. Find: 이름이나 화면 이름의 일부(빈 글이면 모두). Max: 줄의 한도.
 	// 인물 패널의 찾기 칸도 그 글로 맞추고 전체 목록을 펼친다(page person 뒤 shot 으로 창을 볼 수 있게).
 	std::vector<std::string> Traits(const std::string& Find, size_t Max);
+	// 특성의 보일 이름: "화면 이름 (게임의 이름)". 화면 이름이 없으면 게임의 이름만(범죄 패널이 죄와 혐의를 그렇게 적는다). 러너를 부르지 않는다.
+	std::string TraitName(const std::string& Name);
 	// 사람들을 다시 읽어 그 줄들을 준다(영주의 호감·충성 패널이 쓴다). Busy: 인물 쪽이 게임의 함수를 부르는 중에 다시 들어왔다(잠깐 뒤에 다시 하면 된다).
 	// Failed: 읽지 못했다(Why 에 까닭).
 	enum class RowsResult { Ok, Busy, Failed };

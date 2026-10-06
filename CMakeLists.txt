@@ -17,6 +17,7 @@ add_library(nlcore STATIC
   src/core/CheatTable.cpp
   src/core/CostBook.cpp
   src/core/CourtPlan.cpp
+  src/core/CrimePlan.cpp
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
@@ -55,6 +56,7 @@ add_library(nltoybox SHARED
   src/Production.cpp
   src/Cheats.cpp
   src/Court.cpp
+  src/Crime.cpp
   src/Dump.cpp
   src/Economy.cpp
   src/Explorer.cpp

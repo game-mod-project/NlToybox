@@ -7,6 +7,7 @@
 #include "Production.hpp"
 #include "Dump.hpp"
 #include "Court.hpp"
+#include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -27,7 +28,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.26.2";
+	constexpr const char* k_Version = "0.27.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -150,6 +151,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	// 게임 폴더: 모듈은 <게임>\mods\Aurie 에 있다. 인물 패널이 게임의 현지화 파일(localization\main.csv)에서 특성의 이름을 읽는다.
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
 	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
+	NlCrime::Init([](const std::string& Line) { LogLine(Line); });
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 이름도 그 파일에서 읽는다
 	NlDiplomacy::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
