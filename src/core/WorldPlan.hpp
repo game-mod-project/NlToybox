@@ -1,6 +1,7 @@
 #pragma once
 // 외교·종교·이벤트·월드에서 한 번 하는 일(src/World.cpp)의 판단 가운데 러너에 기대지 않는 것. 잰 것은 research/14.
 
+#include <map>
 #include <string>
 #include <vector>
 
@@ -34,6 +35,10 @@ namespace NlCore
 	// 주교를 부를지. Read: 주교가 있는지(is_has_bishop)를 읽었다. 읽지 못했거나 이미 있으면 부르지 않는다.
 	enum class BishopStep { Call, AlreadyHere, Unknown };
 	BishopStep ChooseBishopStep(bool Read, bool Has);
+
+	// 광산의 매장량 붙들기(치트 표의 mine_stock_hold. research/25): 켠 동안 광산(열쇠)마다 본 가장 큰 매장량을 기억하고, 줄었으면 그 값으로 되돌려 쓴다.
+	// 돌려주는 값: 쓸 것이 있는가(Write 에 쓸 값). 수가 아니거나 음수인 값은 기억하지도 쓰지도 않는다.
+	bool KeepStock(std::map<std::string, double>& Kept, const std::string& Key, double Now, double& Write);
 
 	// 종교 행동의 비용이 든 게임 변수(global.__gameplay_vars 의 열쇠. research/21): 고해, 이혼, 구걸, 시성(금화, 영지마다), 제물 설교.
 	const std::vector<const char*>& ReligionCostVars();

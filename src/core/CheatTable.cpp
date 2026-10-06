@@ -307,6 +307,14 @@ namespace NlCore
 			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons"). 단계가 넘어가지 않는 것까지는 아직 보지 못했다.
 			{ "season_hold", Area::World, "계절 붙들기 (지금 단계에 머문다)", "inst:o_game_map_controller.__current_local_map.__season_manager.__start_phase_time", C, 1, 0, 0, 0, false,
 				"지금 계절 단계의 시작 시각을 시간이 흐른 만큼 따라 밀어 가혹한 계절까지 남은 시간이 줄지 않게 한다. 끄면 그때부터 다시 흐른다(밀린 만큼은 되돌리지 않는다). 효과는 확인 전" },
+			// 늑대(research/25): WolvesManager.get_max_number_of_wolves()(인자 없음)를 게임이 밤에 한 번 불러 수(11.1)를 받았고 그 밤에 spawn_wolf(구조체)를 한 번 불렀다.
+			// 0 을 돌려주게 한다(수를 돌려주던 함수에 수). 늑대가 나오지 않는지는 아직 보지 못했다.
+			{ "no_wolves", Area::World, "늑대가 나타나지 않음", "inst:o_game_map_controller.__current_local_map.__wolf_manager.get_max_number_of_wolves", HN, 0, 1, 0, 0, false,
+				"게임이 밤에 묻는 '늑대의 최대 수'에 0 을 답하게 한다. 이미 나온 늑대는 그대로다. 효과는 확인 전" },
+			// 광산의 매장량(research/25): MinesManager 의 __mines_stock(광산의 자리 -> 남은 수). 게임이 캘 때마다 __change_mine_stock(광산, 1)을 불렀고 수가 1 줄었다(18 -> 17).
+			// 세이브에 남는 자료다("mines_stock"). src/World.cpp 가 1초마다 줄어든 수를 되돌려 쓴다(core/WorldPlan 의 KeepStock).
+			{ "mine_stock_hold", Area::World, "광산의 매장량이 줄지 않음", "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock", C, 1, 0, 0, 0, false,
+				"켠 동안 광산마다 매장량이 줄면 줄기 전의 수로 되돌려 쓴다(1초마다). 끄면 그때부터 다시 준다. 효과는 확인 전" },
 			// 세계 지도 관리자(inst:o_global_map.__m_global_map, GlobalMapManager)의 디버그 깃발. 뜻은 이름에서 읽은 것이다. 세이브에 그 열쇠는 없다.
 			{ "fast_map_moving", Area::World, "세계 지도의 이동을 빠르게", "inst:o_global_map.__m_global_map.__debug_fast_moving", T, 1, 0, 0, 0, false,
 				"세계 지도에서 움직이는 것을 빠르게 하는 개발자 스위치로 보인다" },

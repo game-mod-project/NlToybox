@@ -815,7 +815,12 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 69);
+		CHECK(Cheats().size() == 71);
+		// 늑대의 최대 수: WolvesManager.get_max_number_of_wolves()(인자 없음)가 밤에 한 번 불려 수(11.1)를 돌려줬다(research/25). 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
+		CHECK(FindCheat("no_wolves") && FindCheat("no_wolves")->Kind == CheatKind::HookNumber && FindCheat("no_wolves")->On == 0 && FindCheat("no_wolves")->Where == Area::World
+			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n' && !FindCheat("no_wolves")->Verified);
+		// 광산의 매장량 붙들기는 모듈의 일이다(src/World.cpp 가 줄어든 매장량을 되돌려 쓴다).
+		CHECK(FindCheat("mine_stock_hold") && FindCheat("mine_stock_hold")->Kind == CheatKind::Custom && FindCheat("mine_stock_hold")->Where == Area::World && !FindCheat("mine_stock_hold")->Verified);
 		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
 		// 셋 다 효과를 보기 전이다.
 		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);
@@ -3239,6 +3244,15 @@ int main(int argc, char** argv)
 		CHECK(SeasonLine(false, "가뭄", 528278.17, 873878.17) == "가혹한 계절(가뭄)까지 6일 2시간");
 		CHECK(SeasonLine(true, "가뭄", 0, 100000) == "가혹한 계절(가뭄) 중입니다. 끝나기까지 1일 3시간");
 		CHECK(SeasonLine(false, "", 7200, 0) == "가혹한 계절까지 2시간");
+		// 광산의 매장량 붙들기: 켠 동안 광산마다 본 가장 큰 값을 기억하고, 줄었으면 그 값으로 되돌려 쓴다(게임이 캘 때마다 1 씩 줄였다: 18 -> 17).
+		std::map<std::string, double> kept;
+		CHECK(!KeepStock(kept, "69_156", 18, out) && kept["69_156"] == 18);		// 처음 본 값은 기억만 한다
+		CHECK(KeepStock(kept, "69_156", 17, out) && out == 18);					// 줄었다: 되돌려 쓴다
+		CHECK(!KeepStock(kept, "69_156", 18, out));								// 그대로다
+		CHECK(!KeepStock(kept, "69_156", 25, out) && kept["69_156"] == 25);		// 늘었으면 그 값을 기억한다
+		CHECK(!KeepStock(kept, "12_40", 3, out) && KeepStock(kept, "12_40", 0, out) && out == 3 && kept.size() == 2);		// 광산마다 따로
+		CHECK(!KeepStock(kept, "x", std::nan(""), out) && !KeepStock(kept, "y", -1, out) && kept.size() == 2);			// 수가 아니거나 음수인 칸은 건드리지 않는다
+
 		// 단계의 글: 게임의 단계는 0 부터다. 창에는 1 부터 센다.
 		CHECK(PhaseNote(0, 182678.17) == "단계 1, 이 단계는 2일 2시간 남음" && PhaseNote(2, 3000) == "단계 3, 이 단계는 1시간 미만 남음");
 	});

@@ -33,6 +33,20 @@ namespace NlCore
 		return false;
 	}
 
+	bool KeepStock(std::map<std::string, double>& Kept, const std::string& Key, double Now, double& Write)
+	{
+		if (!std::isfinite(Now) || Now < 0)
+			return false;
+		const auto found = Kept.find(Key);
+		if (found == Kept.end() || Now >= found->second)
+		{
+			Kept[Key] = Now;
+			return false;
+		}
+		Write = found->second;
+		return true;
+	}
+
 	std::string WorldActWords()
 	{
 		std::string out;

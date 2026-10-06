@@ -13,6 +13,7 @@
 #include <deque>
 #include <fstream>
 #include <iterator>
+#include <map>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
@@ -34,6 +35,9 @@ namespace
 	constexpr const char* k_GameTime = "inst:o_time_controller.__game_time";
 	constexpr const char* k_HoldCheat = "season_hold";				// 치트 표의 항목(core/CheatTable)
 	constexpr const char* k_SeasonCaptionPrefix = "extreme_season.";	// 게임의 localization\main.csv 의 열쇠. 게임이 __extreme_season.__caption 에 그 열쇠를 든다
+	// 광산의 매장량(research/25): 광산의 자리("69_156") -> 남은 수. 게임이 캘 때마다 1 씩 줄인다.
+	constexpr const char* k_MineStock = "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock";
+	constexpr const char* k_MineCheat = "mine_stock_hold";			// 치트 표의 항목
 	constexpr double k_DelayStep = 86400;		// 미루기 한 번: 하루
 	constexpr double k_EndLead = 60;			// 끝내기: 남은 시간을 1분으로
 
@@ -63,6 +67,11 @@ namespace
 	int g_HoldWrites = 0;				// 붙들기가 쓴 횟수(로그를 드문드문 남긴다)
 	bool g_SeasonCallsLogged = false;	// 읽기 함수를 부른다는 것을 로그에 한 번 남겼다
 	std::unordered_map<std::string, std::string> g_SeasonCaptions;		// extreme_season.<이름> -> 화면 이름
+
+	std::map<std::string, double> g_MineKept;	// 매장량 붙들기가 광산마다 기억한 수
+	double g_MineSeen = 0;						// 마지막으로 본 게임 시각
+	int64_t g_MineMap = 0;						// 그때의 지도 관리 인스턴스(다른 세이브를 불러오면 바뀐다)
+	int g_MineWrites = 0;						// 되돌려 쓴 횟수
 
 	struct Busy
 	{
@@ -275,6 +284,68 @@ namespace
 		g_HoldWrites++;
 	}
 
+	// 광산의 매장량 붙들기(치트 표의 mine_stock_hold): 1초마다 줄어든 매장량을 줄기 전의 수로 되돌려 쓴다. 판단은 core/WorldPlan 의 KeepStock.
+	void MineTick(bool On)
+	{
+		if (!On)
+		{
+			if (g_MineWrites > 0)
+				Log("world: mine stock hold off after " + std::to_string(g_MineWrites) + " write(s)");
+			g_MineKept.clear();
+			g_MineWrites = 0;
+			NlCheats::SetNote(k_MineCheat, std::string());
+			return;
+		}
+		double now = 0;
+		int64_t map = 0;
+		if (!NlAccess::InGame() || !NlAccess::ReadNumber(k_GameTime, now) || !NlAccess::InstanceIdentity(NlCore::ParseAskPath("inst:o_game_map_controller"), map))
+		{
+			g_MineKept.clear();		// 게임 화면이 아니다: 다음 게임에 앞의 수를 쓰지 않는다
+			NlCheats::SetNote(k_MineCheat, std::string());
+			return;
+		}
+		if (now < g_MineSeen || map != g_MineMap)		// 다른 세이브를 불러왔다: 앞의 게임에서 본 수로 되돌려 쓰지 않는다
+			g_MineKept.clear();
+		g_MineSeen = now;
+		g_MineMap = map;
+
+		RValue box;		// 이 함수 안에서만 든다
+		Holder kind = Holder::None;
+		std::string why;
+		if (!NlAccess::Open(NlCore::ParseAskPath(k_MineStock), box, kind, why) || kind != Holder::Struct)
+		{
+			NlCheats::SetNote(k_MineCheat, "광산의 매장량을 읽지 못했습니다");
+			return;
+		}
+		struct Fix
+		{
+			NlCore::PathStep Step;
+			double Value;
+		};
+		std::vector<Fix> fixes;		// 도는 동안에는 쓰지 않는다
+		int mines = 0;
+		NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
+			if (!NlGame::IsNumber(child) || (static_cast<int>(child.m_Kind) & 0x0ffffff) == VALUE_BOOL)
+				return true;
+			mines++;
+			double write = 0;
+			if (NlCore::KeepStock(g_MineKept, step.Name, child.ToDouble(), write))
+				fixes.push_back({ step, write });
+			return true;
+		});
+		for (const Fix& fix : fixes)
+		{
+			if (g_MineWrites % 20 == 0)		// 첫 번째와 그 뒤로 20번마다 남긴다
+				Log("world: mine stock hold writes " + std::string(k_MineStock) + "." + fix.Step.Name + " back to " + NlCore::Shortest(fix.Value) + " (write " + std::to_string(g_MineWrites + 1) + ")");
+			if (NlAccess::SetNumber(box, fix.Step, fix.Value, why))		// 쓴 뒤 다시 읽어 확인한다
+				g_MineWrites++;
+			else
+				NlCheats::SetNote(k_MineCheat, "쓰지 못했습니다: " + why);
+		}
+		if (fixes.empty() || why.empty())
+			NlCheats::SetNote(k_MineCheat, "광산 " + std::to_string(mines) + "곳" + (g_MineWrites > 0 ? ", 되돌려 쓴 횟수 " + std::to_string(g_MineWrites) : std::string()));
+	}
+
 	bool HasBishop(bool& Has, std::string& Why)
 	{
 		RValue answer;
@@ -411,6 +482,9 @@ void NlWorld::GameTick(double Now, bool Visible)
 	const bool hold = NlCheats::IsOn(k_HoldCheat);
 	if (hold || g_Hold.Has)
 		HoldTick(hold);
+	const bool mines = NlCheats::IsOn(k_MineCheat);
+	if (mines || !g_MineKept.empty() || g_MineWrites > 0)
+		MineTick(mines);
 	if (Visible)
 		g_Season = ReadSeason();
 	else
