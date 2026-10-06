@@ -3255,7 +3255,10 @@ int main(int argc, char** argv)
 #pragma warning(suppress: 4996)		// getenv: 읽기만 한다
 		const char* dir = std::getenv("NLTOYBOX_TEST_GAME_DIR");
 		if (!dir || !*dir)
+		{
+			std::printf("  skip: NLTOYBOX_TEST_GAME_DIR 이 없다(평소 시험은 게임 파일에 기대지 않는다)\n");		// 돌았는지 안 돌았는지 보이게(2026-10-07 리뷰 R19)
 			return;
+		}
 		const std::filesystem::path root = std::filesystem::path(dir) / "localization";
 		const auto slurp = [&](const char* name, std::string& out) {
 			std::ifstream in(root / name, std::ios::binary);

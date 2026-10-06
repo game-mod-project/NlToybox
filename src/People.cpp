@@ -167,23 +167,23 @@ namespace
 			g_Log(Line);
 	}
 
+	const std::string k_NoText;		// 없는 글을 참조로 돌려줄 때(RValue 가 아니라 정적으로 둬도 된다)
+
 	// 특성의 화면 이름. 없으면 빈 글. 게임을 불러온 뒤에는 힌트의 제목으로 채운 것도 든다(g_TraitTexts).
 	const std::string& TraitCaption(const std::string& Name)
 	{
-		static const std::string none;
 		const auto text = g_TraitTexts.find(Name);
 		if (text != g_TraitTexts.end())
 			return text->second.Caption;
 		const auto found = g_TraitCaptions.find(Name);
-		return found != g_TraitCaptions.end() ? found->second : none;
+		return found != g_TraitCaptions.end() ? found->second : k_NoText;
 	}
 
 	// 특성의 설명. 없으면 빈 글.
 	const std::string& TraitHint(const std::string& Name)
 	{
-		static const std::string none;
 		const auto text = g_TraitTexts.find(Name);
-		return text != g_TraitTexts.end() ? text->second.Hint : none;
+		return text != g_TraitTexts.end() ? text->second.Hint : k_NoText;
 	}
 
 	// 그 특성의 명칭이 힌트의 제목에서 온 것인가(이름 줄이 없는 특성).
