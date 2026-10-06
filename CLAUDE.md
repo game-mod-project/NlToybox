@@ -203,8 +203,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - `Faction.get_relation_with(세력)`은 수치가 아니라 관계의 종류를 준다. `is_enemy_with`는 관계가 2(deadly enemies)일 때 참이었고 행렬의 읽기 함수를 거치지 않는다.
   - 문턱(한 쌍에서 잰 것): 평판 28 에서 friends, 음수면 opponent, −20 쯤 enemies, −45 쯤 deadly enemies. 그래서 수가 아니라 관계를 다시 읽으며 한 걸음씩 붙인다(`NlCore::StepToward`).
   - **같은 디버그 평판은 한 대상에게 50개까지만 센다**(`__stack_limit`). 하나가 5 씩이고 붙일 때마다 그 왕의 `__opinion_minds`에 원소가 하나 는다.
-    51번째부터는 함수가 구조체를 돌려주지만 평판도 원소도 늘지 않는다(40개에 +200, 55개에 +250). **붙었는지를 반환값으로 판정하지 않는다**: 앞뒤의 원소 수나 관계를 본다
-    (0.20.2 의 평판의 수는 아직 반환값으로 적는다. 알려진 틀림이다).
+    51번째부터는 함수가 구조체를 돌려주지만 평판도 원소도 늘지 않는다(40개에 +200, 55개에 +250. 나쁜 평판과 상대 왕도 같다). **붙었는지를 반환값으로 판정하지 않는다**:
+    붙이기 바로 앞뒤로 `get_king_character_soul()`이 돌려준 구조체의 `__opinions.__opinion_minds`의 길이를 견준다(`NlCore::AttachCheck`·`AfterAttach`).
+    "그대로다"를 한도로 읽는 것은 그 일에서 느는 것을 한 번이라도 본 뒤에만이다. 확인하지 못하고 센 것은 결과 줄에 그렇게 적는다(`UnsureNote`).
   - 세력을 건드리기 전에 `is_destroyed()`와 양쪽의 `get_king_character_soul()`을 묻는다(게임이 그 꼴로 부른다). 묻지 못한 것은 "망했다"가 아니라 실패다(`NlCore::AliveOutcome`).
   - 협정은 `…__factions_manager.__agreement_matrix.__matrix.<A>.<B>`의 비트다: 평화 4, 교역 협정 8, 방어 동맹 192(게임의 판정 `is_declared_*_with`가 `is_has_agreement`에 넘기는 수).
     협정이 없으면 칸도 없다. `set_agreement(세력, 세력, 비트)`가 양쪽 칸에 쓴다. 이미 든 협정을 지우지 않게 지금의 비트에 더한 수를 넘기고(`NlCore::PactCell`) 쓴 뒤 칸을 다시 읽는다.

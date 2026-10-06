@@ -72,6 +72,8 @@ namespace NlCore
 	double PactCell(double Cell, DiplomacyPact Pact);
 	// 칸의 수를 창에 보일 글로: "평화, 교역". 든 것이 없으면 "-", 아는 비트가 하나도 없는데 0 이 아니면 "?".
 	std::string PactText(double Cell);
+	// 칸에 아는 협정으로 설명되지 않는 것이 있는가(모르는 비트, 방어 동맹의 반쪽, 정수가 아닌 수). 칸이 없으면(음수) 거짓.
+	bool PactUnknown(double Cell);
 	// 협정을 맺은 결과의 글. Outcome: 'd' 맺었다, 'a' 이미 있다, 'f' 못 했다(Why 에 까닭).
 	std::string PactReport(const std::string& Name, DiplomacyPact Pact, char Outcome, const std::string& Why);
 
@@ -101,13 +103,25 @@ namespace NlCore
 	std::vector<DiplomacyJob> PlanJobs(const DiplomacyCommand& Command, const std::vector<std::string>& Kingdoms);
 
 	// 한 왕국의 한쪽 평판을 움직인 결과를 글로. Side: 't' 또는 'u'. Before·After: 관계의 종류. Steps: 붙인 평판의 수(부호가 방향).
-	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다.
+	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다,
+	// 's' 같은 평판의 겹침 한도에 닿아 더 붙지 않았다(붙은 수는 Steps 에. AttachCheck 가 가린다).
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why);
-	// 그 결과가 실패인가('l', 'f').
+	// 그 결과가 실패인가('l', 'f', 's').
 	bool DiplomacyFailed(char Outcome);
+
+	// 평판 하나가 붙었는가: 붙이기 바로 앞뒤로(같은 걸음 안에서) 그 평판을 갖는 왕의 평판 목록(__opinion_minds)의 원소 수를 견준다.
+	// 우리 왕에게서는 붙을 때마다 원소가 하나 늘었고, 같은 평판이 50개에 닿자 함수가 구조체를 돌려줘도 늘지 않았다(research/19).
+	// 돌려주는 값: 'y' 하나 늘었다(붙었다), 'n' 그대로다(붙지 않았다), 'u' 모른다(세지 못했다, 줄었다, 둘 이상 늘었다).
+	char AttachCheck(double Before, double After);
+	// 붙인 뒤의 판단. Check: AttachCheck 의 답. Seen: 이 일에서 평판의 수가 느는 것을 본 적이 있다(세는 길이 이 왕에게 듣는다는 증거).
+	// 돌려주는 값: 'c' 붙은 것을 확인했다(센다), 't' 확인하지 못했다(함수의 반환값을 믿고 센다. 결과 줄에 UnsureNote 를 덧붙인다),
+	// 's' 붙지 않았다(세지 않고 일을 멈춘다). 느는 것을 본 적이 없는 왕의 "그대로다"는 한도인지 세는 길이 듣지 않는 것인지 가릴 수 없어 't'다.
+	char AfterAttach(char Check, bool Seen);
+	// 확인하지 못하고 센 걸음이 있는 일의 결과 줄에 덧붙이는 글.
+	std::string UnsureNote();
 	// 평판의 수(목표가 없는 일)를 정한 만큼 붙인 뒤의 글. 붙인 개수와 관계를 따로 적는다(붙인 것을 "바꿨다"고 적지 않는다).
-	// 붙었는지는 게임의 함수가 구조체를 돌려준 것으로 본 것이다(평판의 수를 다시 읽는 길은 재지 못했다).
-	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps);
+	// Stopped: 정한 만큼 붙이기 전에 겹침의 한도에 닿아 멈췄다('s'). Steps 는 실제로 붙은 수다(0 일 수 있다).
+	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps, bool Stopped = false);
 
 	// 명령 하나(또는 쌓인 일들)의 결과를 세고 줄을 모은다. 실패한 줄을 앞에 둔다(창은 앞의 몇 줄만 보인다).
 	// "이미 그 관계였다"와 "건드리지 않았다"는 한 것에 넣지 않는다(그대로 둔 것).
