@@ -164,3 +164,16 @@
 - **묶음 C — 파일을 나누거나 합친다(설계가 필요하다)**: R6 `People.cpp` 분할, R7 `World.cpp` 분할, R8 `Production.cpp` 의 책임, R10 `Game::Resolve` 제거, `Build` 의 건설비를 `Production` 의 `Job` 으로, 패널 공통 뼈대(틱·큐·Tally·Do/Queue).
 
 묶음 A 는 bounded 다. B 는 파일을 나누지 않으므로 bounded 에 가깝지만 시험 파일 분할은 CMake 가 바뀐다. C 는 architectural 이다(스펙 → 계획).
+
+## 7. 결과 — 묶음 A (0.27.2, 가지 `chore/refactor-a`, 2026-10-07)
+
+- 한 것: R1(수 입력 칸 넷 → `core/NumberEdit` + `NlUi::InputNumber`), R2(`NlGame::FindScript`·`CallScriptStatus`. 원격 call·덤프·기록기), R3(큐 한도 상수와 넘침 알림. 경제 16 을 새로),
+  R14(`NlGame::k_KindMask`·`IsRealNumber`), R15(`sscanf_s`. 경고 0), R18, R19(skip 출력, `KnobDefs` 와 `KnobPlaces` 의 집합 시험), R20, 그리고 §3 의 조각
+  `Has`·`IsUuid`·`GoodPath`·`ScopedFlag`·`ReadText`·`Hint`·ds 상수·스크립트 찾기. 배율 7개의 정의는 `core/Knobs` 의 `KnobDefs` 로 옮겼다. 커밋 아홉.
+- 코어 시험 110 → 116. 빌드 경고 1 → 0. 동작은 바꾸지 않았다(큐 넘침의 알림만 새 동작).
+- 게임 확인(실행 1, 아덴 5일차 아침 세이브): 적재 판정 통과. 네 칸(치트의 수 `build_duration`, 배율 `production_time`, 탐색기의 값 `bet_dummy_value`, 잠금 값 `battle_dodge_shift_worse`)에
+  `ui click/type/key`로 수를 쳐 넣고 Tab 과 다른 곳 누르기로 떠나자 들어갔다(상태 파일과 `ask`로 봤다). `call gml_Script_budget_money_get` → 16105, `crime list`, `world season` 그대로.
+  큐의 넘침 알림은 창의 단추를 아홉 번 눌러야 해 게임에서는 재지 않았다(코어 시험만).
+- 그 실행에서 게임이 켜지다 멈췄고 원인을 찾았다: Aurie 콘솔의 선택(QuickEdit) 모드(`research/06` 의 세 번째). `tools/common.ps1` 의 `Clear-NlConsoleSelect` 와 기다리는 루프 넷에 넣었다.
+- 미룬 것(B 로): `Cheats.cpp:430` 의 안내 글 "수는 Enter 로 써 넣습니다"는 이제 틀린 글이다(DLL 이 바뀌므로 B 의 가지에서 고치고 B 의 실행으로 본다). `Explorer.cpp:310` 의 주석도 같다.
+- 자리의 교훈: 값을 써 넣으면 결과 줄이 생겨 아래 줄들이 25px 내려간다. `ui type`은 콜론을 받지 않는다(CLAUDE.md 에 적었다).

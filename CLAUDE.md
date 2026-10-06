@@ -76,8 +76,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   아침의 것은 06:00 에 난다(실행 1 에서 06:00:06 에 생겼다. `research/25`).
   **시험 값이 든 채 그 시각을 넘기지 않는다**
   (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
-- 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
-  `Using LEA pattern for RI ending`에서 끝난다. 모듈이 적재되기 전이라 모듈과 무관하다. 승인받은 횟수 안에서 다시 켠다.
+- 게임이 켜지다 멈추는 일이 있다(지금까지 세 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가 어느 `[trace]` 줄에서 끝난다
+  (`Using LEA pattern for RI ending`, `Hooks::InitializeStage2Hooks`). 모듈이 적재되기 전이라 모듈과 무관하다.
+  **원인은 Aurie 콘솔 창의 선택(QuickEdit) 모드다**(2026-10-07 실측. `research/06`): 창 제목이 `선택 Aurie Framework Log …`이고, 선택 모드에서는 콘솔에 쓰는 호출이
+  선택이 끝날 때까지 막혀 프로세스가 선다. 콘솔 창에 Escape 를 보내면(`Clear-NlConsoleSelect`. 진짜 키보드는 건드리지 않는다) 바로 이어진다.
+  `load-save.ps1`·`check-load.ps1`이 기다리는 동안 그것을 보고 푼다. **콘솔 창을 누르지 않는다.** 그래도 멈추면 승인받은 횟수 안에서 다시 켠다.
   강제로 끄기 전에 Aurie 콘솔 창의 글을 받아 둔다(`research/06-cheat-menu.md`).
 - `check-load.ps1`과 `probe.ps1`은 게임 창에 `WM_CLOSE`를 보내 정상 종료시키고(그래야 `aurie.log`가
   채워진다), 15초 안에 끝나지 않을 때만 강제 종료한다(`Stop-NlGame`).
@@ -121,9 +124,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     청한 만큼 바뀌었는지는 `__total__`의 앞뒤로 본다(함수의 반환값에 기대지 않는다). `change`는 용량을 보지 않는다.
   - 원격 명령 `economy`와 `page`가 같은 길을 창 없이 태운다. 패널을 고치면 실행 묶음에서 `economy …`와 화면으로 확인한다.
   - **수 입력 칸(`InputDouble`·`InputInt`)에 `ImGuiInputTextFlags_EnterReturnsTrue`를 주지 않는다.** Dear ImGui 가 지원하지 않는다(`InputScalar`의 단언. 릴리스 빌드에서는 조용히 지나간다):
-    Enter 로만 들어가고 칸을 떠나면 친 수가 버려진다(최소값 칸이 그랬다. `research/18`의 끝). 치는 동안의 수는 들고 있다가 `IsItemDeactivatedAfterEdit()`에 넣는다(`NlCore::StepFloorEdit`).
+    Enter 로만 들어가고 칸을 떠나면 친 수가 버려진다(최소값 칸이 그랬다. `research/18`의 끝). 치는 동안의 수는 들고 있다가 `IsItemDeactivatedAfterEdit()`에 넣는다(`NlCore::StepNumberEdit`).
+    **수 입력 칸은 `NlUi::InputNumber(라벨, 열쇠, 값, 서식, 넣을 수)`로 그린다**(치트의 수·배율 칸, 탐색기의 값·잠금 값 칸. 2026-10-07 에 넷 모두 게임에서 Tab 과 다른 곳 누르기로 확인했다).
   - **창의 입력 칸은 글자를 쳐 넣어 확인한다**: 원격 `ui click x= y=`, `ui type text=`, `ui key name=<enter|tab|escape|backspace>`가 Dear ImGui 의 입력 큐에만 넣는다
     (게임 창과 진짜 마우스·키보드는 건드리지 않는다. 자리는 `shot`으로 본다. Tab 은 다음 입력 칸으로 옮기며 그 칸을 보이는 데로 끌어온다). 원격 명령만으로 확인한 칸은 확인한 것이 아니다.
+    `ui type`은 글자·숫자·`.`·`-`·`_`만 받는다(콜론이 든 주소는 치지 못한다: 탐색기는 뿌리 목록의 줄을 눌러 들어간다). 값을 써 넣으면 결과 줄이 생겨 아래 줄들이 내려간다. 다음 자리는 `shot`을 다시 떠서 본다.
 - 게임의 판정을 바꿀 때는 그 함수가 돌려주는 값을 훅으로 바꾼다(`NlRecorder::Override`. 스펙 §3 의 수단 D. `research/09`).
   - 바꾸기 전에 `statics <주소>`로 이름을 찾고 `record`로 그 함수가 무엇을 받고 무엇을 돌려주는지 본다. 불리언·수를 돌려주는 함수만 바꾼다
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.

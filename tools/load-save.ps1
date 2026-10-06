@@ -29,6 +29,7 @@ $deadline = (Get-Date).AddSeconds($TimeoutSec)
 $menu = $false
 while ((Get-Date) -lt $deadline) {
     if (-not (Test-NlGameRunning)) { throw '게임이 꺼졌습니다.' }
+    [void](Clear-NlConsoleSelect)       # Aurie 콘솔이 선택 모드면 게임이 켜지다 선다(research/06)
     $state = Ask-Lines @('state') 20
     if ($state -match 'in_game 1') { throw '이미 게임 화면입니다. 세이브는 메인 메뉴에서만 불러옵니다.' }
     if ($state -match 'o_main_menu\s+[1-9]') { $menu = $true; break }
