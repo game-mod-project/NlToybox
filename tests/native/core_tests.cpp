@@ -815,6 +815,8 @@ int main(int argc, char** argv)
 		CHECK(Cheats().size() == 63);
 		// 종교(research/21): 신앙심 채워 두기, 성스러운 보호 유지(수 1 을 돌려주게 한다), 종교 반란 없음, 종교 비용 없음, 신앙 회복 배율, 설교 전환 계수.
 		CHECK(FindCheat("piety_full") && FindCheat("piety_full")->Kind == CheatKind::Custom && FindCheat("piety_full")->Where == Area::Religion);
+		// 신앙심 채워 두기는 플레이에서 봤다(켜고 40분 뒤 플레이어의 사람 14명이 모두 100, 플레이어의 사람이 아닌 둘은 평소대로 줄었다. research/21)
+		CHECK(FindCheat("piety_full")->Verified);
 		CHECK(FindCheat("holy_defence") && FindCheat("holy_defence")->Kind == CheatKind::HookNumber && FindCheat("holy_defence")->On == 1
 			&& FindCheat("holy_defence")->Where == Area::Religion && !FindCheat("holy_defence")->Verified);
 		CHECK(FindCheat("no_religious_riot") && FindCheat("no_religious_riot")->Kind == CheatKind::Hook && FindCheat("no_religious_riot")->On == 0);
@@ -840,7 +842,8 @@ int main(int argc, char** argv)
 			const CheatState kept = KeepKnown(saved);
 			CHECK(std::find(kept.On.begin(), kept.On.end(), "holy_defence") == kept.On.end());
 			CHECK(std::find(kept.On.begin(), kept.On.end(), "no_religious_riot") == kept.On.end());
-			CHECK(kept.On.empty());		// 확인 전의 모듈 항목(piety_full, religion_free)도 꺼진 채로 시작한다
+			// 확인 전의 모듈 항목(religion_free)도 꺼진 채로 시작한다. 확인된 것(piety_full)만 남는다.
+			CHECK(kept.On.size() == 1 && kept.On.count("piety_full") == 1);
 			// 수가 있는 것: 확인 전의 배율(piety_restore, preach_conversion)은 버리고, 확인된 값 써 넣기(piety_decrease)는 0 인 채로 남긴다
 			saved.Numbers = { { "piety_restore", 3 }, { "preach_conversion", 5 }, { "piety_decrease", 0 } };
 			const CheatState numbers = KeepKnown(saved);

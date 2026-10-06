@@ -253,7 +253,8 @@ namespace NlCore
 			{ "piety_decrease", Area::Religion, "신앙 감소(시간당)", "inst:o_debug.debug_piety_decrease_per_hour", N, 0, 0, 0, 10, true,
 				"0 으로 두면 신앙심이 줄지 않는다(그렇게 되는 것을 봤다). 원래 값은 0.83 이고, 이름으로 보아 한 시간에 줄어드는 양이다" },
 			// 신앙심 채워 두기: 욕구를 채워 두는 항목들과 같은 길(src/People.cpp 의 바퀴)로 욕구 3번만 채운다.
-			{ "piety_full", Area::Religion, "신앙심 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, false,
+			// 켜고 40분(게임 시간) 뒤 플레이어의 사람 14명의 신앙심이 모두 100 이었고, 플레이어의 사람이 아닌 둘(주교, 손님)은 평소대로 줄었다(research/21).
+			{ "piety_full", Area::Religion, "신앙심 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두의 신앙심을 가득 채워 둔다. 끄면 그때부터 평소대로 줄어든다" },
 			// 성스러운 보호: GameOnboardingManager.is_under_holy_defence()(인자 없음)가 __is_under_holy_defence(1)를 돌려준다. 게임이 여섯 시간에 한 번 불렀다.
 			// 훅으로 1 을 돌려주게 하면 자료를 0 으로 써도 1 이 나온다(research/21). 보호가 풀릴 인구(65)를 넘겨도 공격받지 않는지는 보지 못했다.
