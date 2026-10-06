@@ -94,6 +94,7 @@ namespace
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
 	bool g_TraitListOpen = false;		// 창의 선택: 전체 특성 목록을 펼쳐 둔다
+	bool g_TraitScroll = false;			// 다음에 그릴 때 특성의 자리로 내려간다(원격 traits 가 켠다)
 	// 특성의 화면 이름(게임의 이름 -> 한국어 이름). 시작할 때 게임의 localization\main.csv 에서 읽는다(열쇠 "trait.<이름>", Korean 칸. 비면 English 칸).
 	std::unordered_map<std::string, std::string> g_TraitCaptions;
 	std::string g_TraitTextNote = "특성의 이름을 아직 읽지 않았습니다";		// 어디서 몇 개를 읽었는가, 또는 못 읽은 까닭
@@ -1408,6 +1409,11 @@ namespace
 		}
 
 		ImGui::SeparatorText("특성");
+		if (g_TraitScroll)
+		{
+			ImGui::SetScrollHereY(0.0f);
+			g_TraitScroll = false;
+		}
 		for (size_t i = 0; i < one.Traits.size(); i++)
 		{
 			ImGui::PushID(200 + static_cast<int>(i));
@@ -1467,7 +1473,7 @@ namespace
 			ImGui::EndChild();
 			ImGui::TextDisabled("%d개 (게임의 특성 %d개)", shown, static_cast<int>(g_Now.TraitNames.size()));
 		}
-		Hint(("명칭은 게임의 한국어 이름입니다(" + g_TraitTextNote + "). 명칭이 없는 특성은 게임의 이름만 보입니다. "
+		Hint(("명칭은 게임의 한국어 이름입니다. 한국어 이름이 비어 있는 것은 영어 이름으로 보입니다(" + g_TraitTextNote + "). 명칭이 없는 특성은 게임의 이름만 보입니다. "
 			"종과 죽음의 특성(human, dead 같은 것)은 붙이거나 뗄 수 없습니다.").c_str());
 	}
 
@@ -1882,6 +1888,14 @@ std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
 	const Busy busy;
 	if (!Scan())
 		return { g_Now.Why };
+	// 인물 패널의 찾기도 그 글로 맞춘다(칸보다 긴 글은 글자의 중간에서 자르지 않게 통째로 버린다).
+	if (Find.size() < sizeof(g_TraitFilter))
+	{
+		std::fill(std::begin(g_TraitFilter), std::end(g_TraitFilter), '\0');
+		std::copy(Find.begin(), Find.end(), g_TraitFilter);
+		g_TraitListOpen = true;
+		g_TraitScroll = true;
+	}
 	std::vector<std::string> lines;
 	size_t matched = 0, captioned = 0;
 	for (const std::string& name : g_Now.TraitNames)
@@ -1899,20 +1913,20 @@ std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
 	return lines;
 }
 
-bool NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why)
+NlPeople::RowsResult NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why)
 {
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 	{
 		Why = "busy";
-		return false;
+		return RowsResult::Busy;
 	}
 	const Busy busy;
 	if (!Scan())
 	{
 		Why = g_Now.Why;
-		return false;
+		return RowsResult::Failed;
 	}
 	Out = g_Now.People;
-	return true;
+	return RowsResult::Ok;
 }

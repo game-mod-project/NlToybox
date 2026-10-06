@@ -123,6 +123,11 @@ namespace NlCore
 			Why = "자기 자신을 보는 평판은 없습니다";
 			return false;
 		}
+		if (Command.OnlyLoyal && (Command.Goal != CourtGoal::Raise || Command.About != "king"))
+		{
+			Why = "충성 올리기는 왕을 보는 평판을 올리는 일에만 씁니다";
+			return false;
+		}
 		switch (Command.Goal)
 		{
 		case CourtGoal::Raise:
@@ -131,7 +136,10 @@ namespace NlCore
 				Why = "목표는 1 에서 200 사이의 정수입니다";
 			break;
 		case CourtGoal::Opinion:
-			if (OpinionSteps(Command.Amount) == 0)
+			// 한 짝씩만 한다: 여럿을 한꺼번에 내리는 명령을 받지 않는다(여럿에게는 올리기와 떼기만. 창에도 짝 하나의 단추만 있다).
+			if (Command.Who == "lords" || Command.About == "lords")
+				Why = "평판의 개수는 한 짝씩만 움직입니다 (영주의 uuid 와, 대상의 uuid 또는 king)";
+			else if (OpinionSteps(Command.Amount) == 0)
 				Why = "평판의 개수는 0 이 아닌 -40 에서 40 사이의 정수입니다";
 			break;
 		case CourtGoal::Clear:
@@ -154,7 +162,8 @@ namespace NlCore
 		std::vector<std::string> holders, abouts;
 		for (const CourtLord& lord : Lords)
 		{
-			if (Command.Who == "lords" || Command.Who == lord.Uuid)
+			// 충성 올리기는 게임이 충성을 따지는 영주에게만 한다(아이와 왕은 뺀다).
+			if ((Command.Who == "lords" || Command.Who == lord.Uuid) && (!Command.OnlyLoyal || lord.HasLoyalty))
 				holders.push_back(lord.Uuid);
 			if (Command.About == "lords" || Command.About == lord.Uuid || (Command.About == "king" && lord.King))
 				abouts.push_back(lord.Uuid);

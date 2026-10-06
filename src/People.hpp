@@ -38,7 +38,10 @@ namespace NlPeople
 	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);
 	// 게임의 특성들: 이름과 화면 이름. Find: 이름이나 화면 이름의 일부(빈 글이면 모두). Max: 줄의 한도.
+	// 인물 패널의 찾기 칸도 그 글로 맞추고 전체 목록을 펼친다(page person 뒤 shot 으로 창을 볼 수 있게).
 	std::vector<std::string> Traits(const std::string& Find, size_t Max);
-	// 사람들을 다시 읽어 그 줄들을 준다(영주의 호감·충성 패널이 쓴다). 못 읽으면 거짓이고 Why 에 까닭.
-	bool Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why);
+	// 사람들을 다시 읽어 그 줄들을 준다(영주의 호감·충성 패널이 쓴다). Busy: 인물 쪽이 게임의 함수를 부르는 중에 다시 들어왔다(잠깐 뒤에 다시 하면 된다).
+	// Failed: 읽지 못했다(Why 에 까닭).
+	enum class RowsResult { Ok, Busy, Failed };
+	RowsResult Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why);
 }

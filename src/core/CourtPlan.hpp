@@ -29,6 +29,7 @@ namespace NlCore
 		CourtGoal Goal = CourtGoal::Raise;
 		std::string About;					// 누구를 보는 평판인가: "king", "lords", 영주의 uuid. Release 에서는 빈 글
 		double Amount = 0;					// Opinion: 개수(부호가 방향, 절댓값 1 ~ 40). Raise: 목표(0 이면 k_CourtRaiseTo, 아니면 1 ~ 200 의 정수)
+		bool OnlyLoyal = false;				// 충성 올리기(loyal): 게임이 충성을 따지는 영주에게만 한다. 왕을 보는 올리기(Raise, About "king")에만 쓴다
 	};
 	bool GoodCourtWho(const std::string& Who);
 	bool GoodCourtAbout(const std::string& About);
@@ -39,6 +40,7 @@ namespace NlCore
 	{
 		std::string Uuid;
 		bool King = false;		// 플레이어 세력의 왕이다
+		bool HasLoyalty = false;	// 게임이 이 사람에게 충성을 따진다(is_has_loyalty() 가 참이었다. 읽지 못한 것은 거짓으로 둔다)
 	};
 	struct CourtJob
 	{

@@ -474,6 +474,7 @@ namespace NlCore
 				return fail("court loyal takes no about= (it is about the king)");
 			court.Who = tokens[1];
 			court.About = about_king ? "king" : about != command.Options.end() ? about->second : std::string();
+			court.OnlyLoyal = about_king;
 			if (court.Goal == CourtGoal::Raise)
 			{
 				if (amount != command.Options.end())
@@ -501,7 +502,7 @@ namespace NlCore
 		}
 		else if (verb == "traits")
 		{
-			// traits [find=<글>] [max=<수>]      게임의 특성들: 이름, 화면 이름, 설명(모듈이 게임의 현지화 파일에서 읽은 것)
+			// traits [find=<글>] [max=<수>]      게임의 특성들: 이름과 화면 이름(모듈이 게임의 현지화 파일에서 읽은 것). max 는 1 ~ 100000
 			if (!options(1))
 				return command;
 			for (const auto& [key, value] : command.Options)
@@ -509,8 +510,9 @@ namespace NlCore
 					return fail("traits takes only find= and max=: " + key);
 			const auto max = command.Options.find("max");
 			double limit = 0;
-			if (max != command.Options.end() && (!ParseNumber(max->second, limit) || limit < 1 || limit != static_cast<double>(static_cast<long long>(limit))))
-				return fail("traits max= needs a whole number from 1");
+			// 범위부터 본다(유한하지 않은 수와 큰 수를 정수로 바꾸지 않는다).
+			if (max != command.Options.end() && (!ParseNumber(max->second, limit) || !(limit >= 1 && limit <= 100000) || limit != std::floor(limit)))
+				return fail("traits max= needs a whole number from 1 to 100000");
 		}
 		else if (verb == "cheat")
 		{

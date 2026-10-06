@@ -37,7 +37,7 @@ namespace
 		std::string Uuid, Name;
 		int Index = -1;					// o_character 의 몇 번째였는가. 인물이 드나들면 바뀐다: 쓰기 전에 그 자리의 uuid 를 다시 본다
 		bool King = false;				// 플레이어 세력의 왕이다
-		bool HasLoyalty = false;		// is_has_loyalty(): 게임이 이 사람에게 충성을 따지는가(왕과 아이는 거짓이었다)
+		int HasLoyalty = -1;			// is_has_loyalty(): 게임이 이 사람에게 충성을 따지는가(왕과 아이는 거짓이었다). 1 참, 0 거짓, -1 읽지 못했다
 		double Loyalty = k_Unread;		// get_loyalty_to_king()
 		double State = -1;				// get_loyalty_state(): 0, 1, 2
 		int Followers = 0;				// 이 영주를 충성 대상으로 삼은 사람의 수
@@ -72,6 +72,7 @@ namespace
 	double g_NextRead = 0, g_NextStep = 0;
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 	bool g_ReadLogged = false;			// 훑을 때 부르는 것을 로그에 한 번 남겼다
+	bool g_ScanSkipped = false;			// 마지막 훑기가 잠깐 못 한 것이다(인물 쪽이 하는 중). 실패가 아니다: 값과 쌓인 일을 그대로 둔다
 	std::string g_PickHolder, g_PickAbout;		// 창에서 고른 짝
 
 	struct Busy
@@ -151,8 +152,18 @@ namespace
 	}
 
 	// 영주들과 값을 다시 읽는다. 못 하면 거짓이고 g_Why 에 까닭.
+	// 인물 쪽이 게임의 함수를 부르는 중에 다시 들어온 틱이면 아무것도 건드리지 않고 거짓을 돌려준다(g_ScanSkipped 가 참. 다음 틱에 다시 한다).
 	bool Scan()
 	{
+		g_ScanSkipped = false;
+		std::vector<NlCore::PersonRow> rows;
+		std::string why;
+		const NlPeople::RowsResult read = NlAccess::InGame() ? NlPeople::Rows(rows, why) : NlPeople::RowsResult::Failed;
+		if (read == NlPeople::RowsResult::Busy)
+		{
+			g_ScanSkipped = true;
+			return false;
+		}
 		g_Ready = false;
 		if (!NlAccess::InGame())
 		{
@@ -161,9 +172,7 @@ namespace
 			g_Followers.clear();
 			return false;
 		}
-		std::vector<NlCore::PersonRow> rows;
-		std::string why;
-		if (!NlPeople::Rows(rows, why))
+		if (read != NlPeople::RowsResult::Ok)
 		{
 			g_Why = why.empty() ? "사람들을 읽지 못했습니다" : why;
 			return false;
@@ -201,12 +210,16 @@ namespace
 			Lord& lord = lords[i];
 			lord.King = has_king && souls[i].m_Object == king.m_Object;
 			const std::string soul = Base(lord) + ".__soul";
-			double has = 0;
-			lord.HasLoyalty = CallNumber(soul + ".is_has_loyalty", {}, has) && has != 0;
-			if (!CallNumber(soul + ".get_loyalty_to_king", {}, lord.Loyalty))
-				lord.Loyalty = k_Unread;
-			if (!CallNumber(soul + ".get_loyalty_state", {}, lord.State))
-				lord.State = -1;
+			// 충성의 함수들은 왕이 있는 세이브에서만 쟀다. 왕을 찾지 못했으면 부르지 않는다(읽지 못한 것으로 둔다).
+			if (has_king)
+			{
+				double has = 0;
+				lord.HasLoyalty = CallNumber(soul + ".is_has_loyalty", {}, has) ? (has != 0 ? 1 : 0) : -1;
+				if (!CallNumber(soul + ".get_loyalty_to_king", {}, lord.Loyalty))
+					lord.Loyalty = k_Unread;
+				if (!CallNumber(soul + ".get_loyalty_state", {}, lord.State))
+					lord.State = -1;
+			}
 			// OpinionMinds.get_opinion(상대의 __character_soul) -> 수.
 			lord.Opinions.assign(lords.size(), k_Unread);
 			for (size_t k = 0; k < lords.size(); k++)
@@ -215,10 +228,11 @@ namespace
 		}
 
 		// 따르는 사람: __soul.__fealty.__loyaled_to_uuid 가 그 영주의 uuid 다(없으면 빈 글). 읽기만 한다.
+		// 주민·병사(o_dummy)만 센다: 충성 대상을 지우는 함수는 주민에게만 불러 봤다(영주에게는 부르지 않는다).
 		std::vector<Follower> followers;
 		for (const NlCore::PersonRow& row : rows)
 		{
-			if (!NlCore::IsPlayers(row))
+			if (row.Character || !NlCore::IsPlayers(row))
 				continue;
 			std::string to;
 			if (!ReadText(Base(row.Character, row.Index) + ".__soul.__fealty.__loyaled_to_uuid", to) || to.empty())
@@ -348,8 +362,12 @@ namespace
 			return 'f';
 		// 쓴 뒤 다시 읽는다: 센 수가 바라는 대로 하나만 바뀌었는가(함수의 반환값으로 판정하지 않는다).
 		double good_after = -1, bad_after = -1;
-		CallNumber(count, { target, good }, good_after);
-		CallNumber(count, { target, bad }, bad_after);
+		if (!CallNumber(count, { target, good }, good_after) || !CallNumber(count, { target, bad }, bad_after))
+		{
+			// 세지 못했다: 됐는지 모른다(안 됐다고 적지 않는다). 세지 않고 멈춘다.
+			Why = std::string(attach ? "붙이는" : "떼는") + " 함수는 불렀지만 그 뒤의 수를 읽지 못해 확인하지 못했습니다";
+			return 'f';
+		}
 		if (!NlCore::CourtStepDone(step.Action, good_before, bad_before, good_after, bad_after))
 		{
 			Why = std::string(attach ? "붙지" : "떼어지지") + " 않았습니다 (좋은 평판 " + NlCore::Shortest(good_before) + " -> " + NlCore::Shortest(good_after)
@@ -371,7 +389,10 @@ namespace
 			std::string line;
 			const char outcome = holder && StillThere(*holder) ? Release(*holder, line) : 'f';
 			if (line.empty())
-				line = holder_name + ": 그 영주를 찾지 못했습니다";
+			{
+				line = holder_name + ": 그 영주를 찾지 못했습니다 (자리가 바뀌었으면 다시 눌러 주세요)";
+				g_Ready = false;		// 다음 틱이 다시 모은다
+			}
 			Tally.Add(outcome, line);
 			return true;
 		}
@@ -397,7 +418,7 @@ namespace
 	{
 		std::vector<NlCore::CourtLord> lords;
 		for (const Lord& lord : g_Lords)
-			lords.push_back({ lord.Uuid, lord.King });
+			lords.push_back({ lord.Uuid, lord.King, lord.HasLoyalty == 1 });
 		std::vector<Job> jobs;
 		for (NlCore::CourtJob& plan : NlCore::PlanCourtJobs(Command, lords))
 		{
@@ -414,6 +435,8 @@ namespace
 		const bool king = std::any_of(g_Lords.begin(), g_Lords.end(), [](const Lord& lord) { return lord.King; });
 		if (Command.About == "king" && !king)
 			return "플레이어의 영주 가운데 왕을 찾지 못했습니다";
+		if (Command.OnlyLoyal)
+			return Command.Who == "lords" ? "게임이 충성을 따지는 영주가 없습니다" : "게임이 그 영주에게는 충성을 따지지 않습니다 (또는 그런 영주가 없습니다)";
 		return "그런 영주(또는 짝)가 없습니다";
 	}
 
@@ -443,10 +466,11 @@ namespace
 		return static_cast<int>(jobs.size());
 	}
 
-	// 창의 단추.
-	void Push(const std::string& Who, CourtGoal Goal, const std::string& About, double Amount = 0)
+	// 창의 단추. Loyal: 충성 올리기(게임이 충성을 따지는 영주에게만).
+	void Push(const std::string& Who, CourtGoal Goal, const std::string& About, double Amount = 0, bool Loyal = false)
 	{
-		const CourtCommand command{ Who, Goal, About, Amount };
+		CourtCommand command{ Who, Goal, About, Amount };
+		command.OnlyLoyal = Loyal;
 		g_Refused.clear();
 		if (PushCommand(command, g_Refused) == 0)
 			g_Refused = NoJobs(command);
@@ -478,6 +502,11 @@ void NlCourt::GameTick(double Now, bool Active)
 		g_NextRead = Now + 1;
 		if (!Scan())
 		{
+			if (g_ScanSkipped)
+			{
+				g_NextRead = Now;		// 인물 쪽이 하는 중에 다시 들어온 틱이다. 값도 일도 그대로 두고 다음 틱에 다시 읽는다
+				return;
+			}
 			DropJobs(g_Why);		// 게임 화면을 떠났거나 읽지 못했다. 버린 일을 "됐다"에 남기지 않는다
 			return;
 		}
@@ -496,7 +525,9 @@ void NlCourt::GameTick(double Now, bool Active)
 		if (RunJob(g_Jobs.front(), k_StepsPerTick, g_Tally))
 		{
 			g_Jobs.pop_front();
-			g_NextRead = 0;		// 바뀐 값을 바로 다시 읽는다
+			// 쌓인 일이 다 끝났으면 바뀐 값을 바로 다시 읽는다(일마다 다시 읽지 않는다: 훑기가 영주 수의 제곱만큼 게임을 부른다).
+			if (g_Jobs.empty())
+				g_NextRead = 0;
 		}
 	}
 }
@@ -511,7 +542,7 @@ std::vector<std::string> NlCourt::Do(const CourtCommand& Command)
 		return { "busy" };
 	const Busy busy;
 	if (!Scan())
-		return { g_Why };
+		return { g_ScanSkipped ? std::string("busy") : g_Why };
 
 	// 제 결과는 따로 센다(창이 쌓아 둔 일들의 셈과 섞지 않는다).
 	NlCore::DiplomacyTally tally;
@@ -531,7 +562,7 @@ std::string NlCourt::Queue(const CourtCommand& Command)
 {
 	std::lock_guard lock(g_Mutex);
 	if (!g_Ready)
-		return g_Why.empty() ? "영주들을 아직 읽지 않았습니다 (영주 패널을 열거나 court list 를 먼저)" : g_Why;
+		return (g_Why.empty() ? std::string("영주들을 아직 읽지 않았습니다") : "마지막으로 읽지 못한 까닭: " + g_Why) + " (영주 패널을 열거나 court list 를 먼저)";
 	std::string why;
 	const int count = PushCommand(Command, why);
 	if (count < 0)
@@ -546,11 +577,12 @@ std::vector<std::string> NlCourt::List()
 		return { "busy" };
 	const Busy busy;
 	if (!Scan())
-		return { g_Why };
+		return { g_ScanSkipped ? std::string("busy") : g_Why };
 	std::vector<std::string> lines;
 	for (const Lord& lord : g_Lords)
 		lines.push_back(lord.Uuid + "  " + lord.Name + (lord.King ? "  king" : "") + "  loyalty " + NumberText(lord.Loyalty) + "  state " + NlCore::Shortest(lord.State)
-			+ " (" + NlCore::LoyaltyLabel(lord.State) + ")  has_loyalty " + (lord.HasLoyalty ? "1" : "0") + "  followers " + std::to_string(lord.Followers));
+			+ " (" + NlCore::LoyaltyLabel(lord.State) + ")  has_loyalty " + (lord.HasLoyalty < 0 ? "?" : lord.HasLoyalty ? "1" : "0") + "  followers "
+			+ std::to_string(lord.Followers));
 	for (const Lord& lord : g_Lords)
 	{
 		std::string line = "  " + lord.Name + " ->";
@@ -585,7 +617,9 @@ void NlCourt::Draw()
 	}
 
 	if (ImGui::Button("모든 영주의 충성을 100으로"))
-		Push("lords", CourtGoal::Raise, "king");
+		Push("lords", CourtGoal::Raise, "king", 0, true);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("게임이 충성을 따지는 영주만 (왕과, 충성 칸이 '-'인 사람은 빼고)");
 	ImGui::SameLine();
 	if (ImGui::Button("모든 영주가 서로를 100까지 좋아하게"))
 		Push("lords", CourtGoal::Raise, "lords");
@@ -599,7 +633,9 @@ void NlCourt::Draw()
 	if (ImGui::CollapsingHeader("설명##court"))
 		Hint("영주가 다른 영주를 보는 평판은 게임이 여러 평판의 합으로 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것 +5, 나쁜 것 -5. 사람에 따라 +6 인 것도 봤습니다)을 "
 			"게임의 함수로 하나씩 붙이고 뗍니다. 올릴 때 나쁜 것이 붙어 있으면 그것부터 뗍니다(좋은 것과 나쁜 것을 함께 두지 않습니다). 걸음마다 게임이 세어 준 수로 붙었는지 확인합니다. "
-			"한 번에 한 짝에 40걸음까지 하고, 같은 평판은 50개까지만 겹칩니다. 충성 상태는 평판이 오르면 낮음, 보통, 높음으로 올랐습니다(55 에서 높음, -19 에서 낮음을 봤습니다). "
+			"올리고 내리는 일은 한 번에 한 짝에 40걸음까지 하고(떼기는 다 뗄 때까지), 같은 평판은 50개까지만 겹칩니다. "
+			"충성 칸의 '낮음·보통·높음'은 게임의 충성 상태의 수(0, 1, 2)에 이 모드가 붙인 이름입니다: 평판이 오르면 수도 올랐습니다(55 에서 2, -19 에서 0 을 봤습니다). "
+			"'-'는 게임이 그 사람에게 충성을 따지지 않는다는 뜻이고(왕과 아이가 그랬습니다), '?'는 읽지 못했다는 뜻입니다. "
 			"'붙인 평판 모두 떼기'는 여기서 붙인 디버그 평판만 뗍니다(게임이 붙인 평판은 건드리지 않습니다). 붙인 평판이 세이브에 남는지는 확인 전입니다. "
 			"'충성 대상 지우기'는 그 영주를 충성 대상으로 삼은 주민·병사의 충성 대상을 게임의 함수로 비웁니다(한 명에게 불러 비워지는 것을 봤습니다. 반란에 어떻게 먹는지는 확인 전입니다).");
 	if (!g_Refused.empty())
@@ -629,21 +665,21 @@ void NlCourt::Draw()
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted((lord.Name + (lord.King ? " (왕)" : "")).c_str());
 			ImGui::TableNextColumn();
-			if (lord.HasLoyalty)
+			if (lord.HasLoyalty == 1)
 				ImGui::Text("%s (%s)", NumberText(lord.Loyalty).c_str(), NlCore::LoyaltyLabel(lord.State));
 			else
 			{
-				ImGui::TextDisabled("-");
+				ImGui::TextDisabled(lord.HasLoyalty == 0 ? "-" : "?");
 				if (ImGui::IsItemHovered())
-					ImGui::SetTooltip("게임이 이 사람에게는 충성을 따지지 않습니다");
+					ImGui::SetTooltip("%s", lord.HasLoyalty == 0 ? "게임이 이 사람에게는 충성을 따지지 않습니다" : "충성을 읽지 못했습니다");
 			}
 			ImGui::TableNextColumn();
 			ImGui::Text("%d", lord.Followers);
 			ImGui::TableNextColumn();
 			ImGui::PushID(static_cast<int>(i));
-			ImGui::BeginDisabled(lord.King);
+			ImGui::BeginDisabled(lord.HasLoyalty != 1);		// 왕과, 게임이 충성을 따지지 않는 사람에게는 끈다
 			if (ImGui::SmallButton("충성 100"))
-				Push(lord.Uuid, CourtGoal::Raise, "king");
+				Push(lord.Uuid, CourtGoal::Raise, "king", 0, true);
 			ImGui::EndDisabled();
 			ImGui::SameLine();
 			ImGui::BeginDisabled(lord.Followers == 0);

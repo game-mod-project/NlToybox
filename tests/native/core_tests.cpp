@@ -2287,6 +2287,27 @@ int main(int argc, char** argv)
 		CHECK(PlanCourtJobs({ "lords", CourtGoal::Opinion, "lords", 0 }, lords).empty());			// 말이 안 되는 명령
 		CHECK(PlanCourtJobs({ "lords", CourtGoal::Raise, "king", 0 }, { { "aaaaaaaaaaaaaaa1", false } }).empty());		// 왕이 없다
 
+		// 충성 올리기(loyal)는 게임이 충성을 따지는 영주에게만 간다(아이와 왕은 뺀다. research/20). 왕을 보는 평판을 올리는 like about=king 은 가리지 않는다.
+		const std::vector<CourtLord> court = { { "aaaaaaaaaaaaaaa1", false, true }, { "aaaaaaaaaaaaaaa2", false, false }, { "aaaaaaaaaaaaaaa3", true, false } };
+		CourtCommand loyal_all{ "lords", CourtGoal::Raise, "king", 0 };
+		loyal_all.OnlyLoyal = true;
+		CHECK(CheckCourt(loyal_all, why));
+		jobs = PlanCourtJobs(loyal_all, court);
+		CHECK(jobs.size() == 1 && jobs[0].Holder == "aaaaaaaaaaaaaaa1" && jobs[0].About == "aaaaaaaaaaaaaaa3");
+		loyal_all.Who = "aaaaaaaaaaaaaaa2";
+		CHECK(PlanCourtJobs(loyal_all, court).empty());		// 충성을 따지지 않는 영주 하나
+		CHECK(PlanCourtJobs({ "lords", CourtGoal::Raise, "king", 0 }, court).size() == 2);
+		// OnlyLoyal 은 왕을 보는 올리기에만 쓴다
+		CourtCommand odd{ "lords", CourtGoal::Clear, "king", 0 };
+		odd.OnlyLoyal = true;
+		CHECK(!CheckCourt(odd, why) && !why.empty());
+		CourtCommand odd_about{ "lords", CourtGoal::Raise, "lords", 0 };
+		odd_about.OnlyLoyal = true;
+		CHECK(!CheckCourt(odd_about, why));
+		// 평판의 수는 한 짝씩만 한다: 여럿을 한꺼번에 내리는 명령을 받지 않는다(여럿에게는 올리기와 떼기만)
+		CHECK(!CheckCourt({ "lords", CourtGoal::Opinion, "king", 3 }, why) && !CheckCourt({ "25556c3312bce178", CourtGoal::Opinion, "lords", -3 }, why));
+		CHECK(!CheckCourt({ "lords", CourtGoal::Opinion, "lords", -40 }, why) && CheckCourt({ "25556c3312bce178", CourtGoal::Opinion, "king", -3 }, why));
+
 		// 한 걸음. 올리기: 나쁜 것이 붙어 있으면 그것부터 뗀다. 좋은 것이 겹침 한도면 멈춘다.
 		CourtJob raise{ "h", "a", CourtGoal::Raise, 40, 1, 100 };
 		CHECK(PlanCourtStep(raise, 100, 0, 0, 0, 50).Outcome == 'a');
@@ -2375,6 +2396,51 @@ int main(int argc, char** argv)
 			CHECK_STR(CourtReport("A", "B", job, 0, 40, done, 'l', ""), "A -> B: 평판 0 -> 40 (좋은 평판 40개 붙임). 한 번의 한도까지 했지만 목표(100)에 닿지 않았습니다");
 		}
 
+		// 올리기에서 나쁜 평판을 떼는 걸음이 한도를 다 쓴다: 붙인 것 없이 'l'
+		{
+			double bad = 45;
+			CourtJob job{ "h", "a", CourtGoal::Raise, k_OpinionStepsMax, 1, 100 };
+			CourtDone done;
+			char outcome = 0;
+			for (int guard = 0; guard < 200 && outcome == 0; guard++)
+			{
+				const CourtStep step = PlanCourtStep(job, -bad * 5, 0, bad, done.Total(), 50);
+				outcome = step.Outcome;
+				if (outcome == 0)
+				{
+					CHECK(step.Action == 'd');
+					bad--;
+					CountCourtStep(done, step.Action);
+					job.Left--;
+				}
+			}
+			CHECK(outcome == 'l' && bad == 5 && done.BadOff == 40 && done.GoodOn == 0);
+			CHECK_STR(CourtReport("A", "B", job, -225, -25, done, 'l', ""), "A -> B: 평판 -225 -> -25 (나쁜 평판 40개 뗌). 한 번의 한도까지 했지만 목표(100)에 닿지 않았습니다");
+		}
+		// 내리기에 좋은 평판이 붙어 있다: 좋은 것 둘을 떼고 나쁜 것 셋을 붙인다
+		{
+			double good = 2, bad = 0;
+			CourtJob job{ "h", "a", CourtGoal::Opinion, 5, -1, 0 };
+			CourtDone done;
+			char outcome = 0;
+			for (int guard = 0; guard < 200 && outcome == 0; guard++)
+			{
+				const CourtStep step = PlanCourtStep(job, 10 + good * 5 - bad * 5, good, bad, done.Total(), 50);
+				outcome = step.Outcome;
+				if (outcome != 0)
+					break;
+				const double g = good, b = bad;
+				if (step.Action == 'D') good--;
+				else if (step.Action == 'a') bad++;
+				else g_Failed++;
+				CHECK(CourtStepDone(step.Action, g, b, good, bad));
+				CountCourtStep(done, step.Action);
+				job.Left--;
+			}
+			CHECK(outcome == 'd' && good == 0 && bad == 3 && done.GoodOff == 2 && done.BadOn == 3 && done.Total() == 5);
+			CHECK_STR(CourtReport("A", "B", job, 20, -5, done, 'd', ""), "A -> B: 평판 20 -> -5 (좋은 평판 2개 뗌, 나쁜 평판 3개 붙임)");
+		}
+
 		// 결과의 글
 		CourtDone none;
 		CHECK_STR(CourtReport("A", "B", raise, 120, 120, none, 'a', ""), "A -> B: 평판 120. 이미 목표(100) 이상입니다");
@@ -2416,7 +2482,8 @@ int main(int argc, char** argv)
 		for (const char* bad : { "court", "court lords", "court people loyal", "court lords loyal about=king", "court lords like", "court lords like about=people",
 			"court lords like about=lords goal=0", "court lords like about=lords goal=201", "court lords opinion about=king", "court lords opinion about=king amount=0",
 			"court lords opinion about=king amount=41", "court lords clear", "court lords clear about=king amount=2", "court lords release about=king",
-			"court lords loyal sdie=1", "court lords loyal queue=2", "court list now", "court 25556c3312bce178 opinion about=25556c3312bce178 amount=1" })
+			"court lords loyal sdie=1", "court lords loyal queue=2", "court list now", "court 25556c3312bce178 opinion about=25556c3312bce178 amount=1",
+			"court lords opinion about=king amount=3", "court 25556c3312bce178 opinion about=lords amount=-3", "court lords opinion about=lords amount=-40" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 	});
 
@@ -2455,6 +2522,13 @@ int main(int argc, char** argv)
 		out.clear();
 		CHECK(ReadLocalization("Key,Korean\r\ntrait.a,\"가\r\n나\"\r\n", "trait.", { "Korean" }, out, why) && out["trait.a"] == "가\n나");
 
+		// 머리에 Korean 이 없고 English 만 있는 파일: 다음 언어로 읽는다
+		out.clear();
+		CHECK(ReadLocalization("Key,Russian,English\ntrait.brave,R,Brave\n", "trait.", { "Korean", "English" }, out, why) && out["trait.brave"] == "Brave");
+		// 머리 줄이 닫히지 않은 따옴표로 끝난다
+		out.clear();
+		CHECK(!ReadLocalization("Key,\"Korean\ntrait.a,가\n", "trait.", { "Korean" }, out, why) && !why.empty() && out.empty());
+
 		CHECK_STR(TraitCaptionKey("sex_desire_weak"), "trait.sex_desire_weak");
 
 		// 힌트의 글을 창에 보일 글로: 첫 줄이 이름과 같으면 떼고, 꺾쇠 표식은 지우고 안의 글은 두고, {자리}는 "(값)", [다른 힌트]는 지운다.
@@ -2468,6 +2542,17 @@ int main(int argc, char** argv)
 		CHECK_STR(PlainHint("  \n 앞뒤의 빈 줄 \n\n", ""), "앞뒤의 빈 줄");
 		CHECK_STR(PlainHint("용감", "용감"), "");
 		CHECK_STR(PlainHint("<img=spr_x></img>그림 뒤", ""), "그림 뒤");
+		// 0xE2 로 시작하지만 긴 줄표가 아닌 글자는 그대로 둔다. 표식이 닫히지 않은 채 끝나는 글도 끝난다
+		// (자리가 나아가지 않는 가지가 없다. 한 번 그런 가지로 시험이 멈췄다: [이름_ 을 읽던 줄).
+		CHECK_STR(PlainHint("a\xE2\x80\xA6" "b", ""), "a\xE2\x80\xA6" "b");
+		CHECK_STR(PlainHint("\xE2", ""), "\xE2");
+		CHECK_STR(PlainHint("끝이 <", ""), "끝이 <");
+		CHECK_STR(PlainHint("끝이 </", ""), "끝이 </");
+		CHECK_STR(PlainHint("끝이 <b", ""), "끝이 <b");
+		CHECK_STR(PlainHint("끝이 [ab_", ""), "끝이 [ab_");
+		CHECK_STR(PlainHint("끝이 [a_b_c_d", ""), "끝이 [a_b_c_d");
+		CHECK_STR(PlainHint("끝이 {", ""), "끝이 {");
+		CHECK_STR(PlainHint("끝이 {ab", ""), "끝이 {ab");
 
 		// 찾기: 게임의 이름이나 화면 이름에 들어 있다(영문은 대소문자를 가리지 않는다)
 		CHECK(TraitMatches("", "brave", "용감") && TraitMatches("brav", "brave", "용감") && TraitMatches("BRAV", "brave", "용감") && TraitMatches("용", "brave", "용감"));
@@ -2479,6 +2564,9 @@ int main(int argc, char** argv)
 		const RemoteCommand found = ParseRemoteLine("traits find=brave max=5");
 		CHECK(found.Error.empty() && found.Options.at("find") == "brave" && found.Options.at("max") == "5");
 		CHECK(!ParseRemoteLine("traits fnd=x").Error.empty() && !ParseRemoteLine("traits max=0").Error.empty() && !ParseRemoteLine("traits max=x").Error.empty());
+		for (const char* bad : { "traits max=inf", "traits max=1e30", "traits max=2.5", "traits max=-3", "traits max=100001" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
+		CHECK(ParseRemoteLine("traits max=100000").Error.empty());
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

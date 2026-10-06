@@ -484,6 +484,7 @@ namespace
 			return;
 		}
 		command.About = about_king ? "king" : about != C.Options.end() ? about->second : std::string();
+		command.OnlyLoyal = about_king;
 		command.Amount = C.Number;
 		Say("  running court " + C.Target + " " + act->second + (command.About.empty() ? "" : " about " + command.About));		// 죽으면 여기까지 남는다
 		if (C.Options.count("queue") > 0)		// 창의 단추와 같은 길: 쌓기만 하고 틱이 조금씩 한다
