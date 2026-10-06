@@ -1594,6 +1594,19 @@ int main(int argc, char** argv)
 		CHECK(EquipGifts(std::numeric_limits<double>::quiet_NaN(), 7.5, false, std::vector<double>(39, 0)).empty());
 		CHECK(EquipGifts(0, 12, false, std::vector<double>(39, 0)) == (std::vector<int>{ 12 }));		// 0 번 자원은 건드리지 않는다
 
+		// 장비 지급의 결과(검토의 지적): 선호 장비가 남지 않았거나 넣지 못한 것이 있으면 실패로 적는다
+		const EquipResult done = EquipReport("중갑·검·방패", true, 3, 3);
+		CHECK(done.Ok && done.Note == "중갑·검·방패: 선호 장비로 정하고 3개를 넣었습니다");
+		const EquipResult had = EquipReport("중갑·검·방패", true, 0, 0);
+		CHECK(had.Ok && had.Note == "중갑·검·방패: 선호 장비로 정했습니다 (넣을 장비는 이미 갖고 있거나 없습니다)");
+		const EquipResult part = EquipReport("중갑·검·방패", true, 3, 1);
+		CHECK(!part.Ok && part.Note == "중갑·검·방패: 선호 장비는 정했지만 넣을 3개 가운데 2개를 넣지 못했습니다");
+		const EquipResult unstuck = EquipReport("중갑·검·방패", false, 3, 0);
+		CHECK(!unstuck.Ok && unstuck.Note == "중갑·검·방패: 선호 장비가 바뀌지 않았습니다 (장비는 넣지 않았습니다)");
+		// 묶음의 이름은 모두 원격 명령의 이름 검사를 지난다
+		for (const Loadout& loadout : Loadouts())
+			CHECK(GoodTraitName(loadout.Key) && ParseRemoteLine(std::string("person people equip name=") + loadout.Key).Error.empty());
+
 		PersonRow row;
 		row.Character = false;
 		row.Strata = 2;

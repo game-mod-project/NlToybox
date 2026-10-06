@@ -177,7 +177,7 @@ namespace NlCore
 			{ "h_axeman", "__h_axeman", "중갑·도끼·방패" },
 			{ "h_spearman", "__h_spearman", "중갑·창·방패" },
 			{ "h_hammerhead", "__h_hammerhead", "중갑·망치·방패" },
-			{ "any", "__any", "아무 장비나 (가진 것을 그대로 둔다)" },
+			{ "any", "__any", "아무 장비나" },
 		};
 		return loadouts;
 	}
@@ -206,6 +206,23 @@ namespace NlCore
 		if (Shield && (armor || weapon))
 			want(k_ShieldResource);
 		return gifts;
+	}
+
+	EquipResult EquipReport(const char* Label, bool Stuck, int Wanted, int Given)
+	{
+		EquipResult out;
+		const std::string label = Label ? Label : "";
+		if (!Stuck)
+			out.Note = label + ": 선호 장비가 바뀌지 않았습니다 (장비는 넣지 않았습니다)";
+		else if (Given < Wanted)
+			out.Note = label + ": 선호 장비는 정했지만 넣을 " + std::to_string(Wanted) + "개 가운데 " + std::to_string(Wanted - Given) + "개를 넣지 못했습니다";
+		else
+		{
+			out.Ok = true;
+			out.Note = Wanted > 0 ? label + ": 선호 장비로 정하고 " + std::to_string(Given) + "개를 넣었습니다"
+				: label + ": 선호 장비로 정했습니다 (넣을 장비는 이미 갖고 있거나 없습니다)";
+		}
+		return out;
 	}
 
 	bool IsSoldier(const PersonRow& Row)

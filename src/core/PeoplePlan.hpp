@@ -76,10 +76,19 @@ namespace NlCore
 	const std::vector<Loadout>& Loadouts();
 	const Loadout* FindLoadout(const std::string& Key);
 
-	constexpr int k_ShieldResource = 15;		// 자원 번호 15 = 방패(global.__resource_caption[15] 가 "resource.shield")
+	constexpr int k_ShieldResource = 15;		// 자원 번호 15 = 방패(global.__resource_caption 의 15 번이 방패다. research/07, 13)
 	// 선호 장비의 갑옷·무기·방패 가운데 소지품에 없어서 넣어 줄 것(자원 번호). 1 보다 작은 번호(-1 없음, -2 아무거나, 0 은 건드리지 않는 자원),
 	// 정수가 아닌 수, 소지품의 칸 밖의 번호는 주지 않는다. 방패는 갑옷이나 무기가 정해진 묶음에만 넣는다.
 	std::vector<int> EquipGifts(double Armor, double Weapon, bool Shield, const std::vector<double>& Inventory);
+
+	// 장비 지급 한 번의 결과. Stuck: 세터를 부른 뒤 다시 읽은 선호 장비가 그 묶음의 것이다. Wanted: 넣으려던 장비의 수. Given: 넣은 뒤 소지품에 있는 것을 본 수.
+	// 선호 장비가 남지 않았거나 넣지 못한 것이 있으면 실패다(여럿에게 할 때 "N/N명"에 섞여 묻히지 않게).
+	struct EquipResult
+	{
+		bool Ok = false;
+		std::string Note;
+	};
+	EquipResult EquipReport(const char* Label, bool Stuck, int Wanted, int Given);
 
 	// 병사인가: 주민 쪽 오브젝트(o_dummy)이고 갈래가 2 다(research/13).
 	struct PersonRow;
