@@ -20,7 +20,6 @@ namespace
 {
 	constexpr int k_Slots = 64;				// 한 실행에 훅을 걸 수 있는 함수의 수. 자리는 다시 쓰지 않는다(24개는 한 실행에서 다 썼다. research/07)
 	constexpr int k_MaxKinds = 16;			// 꼴을 볼 때 보는 인자의 수
-	constexpr int k_KindMask = 0x0ffffff;	// m_Kind 에서 형만 남긴다(VALUE_UNSET 의 폭. YYTK_Shared_Types.hpp 199행)
 
 	struct Slot
 	{
@@ -70,8 +69,8 @@ namespace
 	// 값 하나를 짧은 글로. 훅 안에서 부른다: 빌트인을 부르지 않고 RValue 의 멤버 함수만 쓴다.
 	std::string Brief(const RValue& Value)
 	{
-		const int kind = static_cast<int>(Value.m_Kind) & k_KindMask;
-		if (kind == VALUE_UNDEFINED || kind == k_KindMask)		// k_KindMask 는 VALUE_UNSET 의 값이기도 하다
+		const int kind = static_cast<int>(Value.m_Kind) & NlGame::k_KindMask;
+		if (kind == VALUE_UNDEFINED || kind == NlGame::k_KindMask)		// NlGame::k_KindMask 는 VALUE_UNSET 의 값이기도 하다
 			return "undefined";
 		if (Value.IsString())
 			return NlCore::Quote(Value.ToString(), 60);
@@ -105,7 +104,7 @@ namespace
 			int kinds[k_MaxKinds];
 			const int seen = Count < 0 || !Args ? 0 : (Count > k_MaxKinds ? k_MaxKinds : Count);
 			for (int i = 0; i < seen; i++)
-				kinds[i] = Args[i] ? static_cast<int>(Args[i]->m_Kind) & k_KindMask : -1;
+				kinds[i] = Args[i] ? static_cast<int>(Args[i]->m_Kind) & NlGame::k_KindMask : -1;
 			key = NlCore::ShapeKey(kinds, seen);
 			{
 				std::lock_guard lock(g_Mutex);
@@ -171,13 +170,13 @@ namespace
 		if (forced && value.Skip && value.Kind != 'x')
 		{
 			// 원래 함수를 부르지 않는다. 들어올 때 Result 에 무엇이 있었는지 표본에 남긴다(부른 쪽이 초기화하는지 잰다).
-			const int came = static_cast<int>(Result.m_Kind) & k_KindMask;
+			const int came = static_cast<int>(Result.m_Kind) & NlGame::k_KindMask;
 			write_raw(Result);
 			if (sample)
 			{
 				std::lock_guard lock(g_Mutex);
 				slot.Log.Sample(sample, key, std::move(shape), std::move(args),
-					std::string("(skipped, Result came as ") + (came == k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
+					std::string("(skipped, Result came as ") + (came == NlGame::k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
 			}
 			return Result;
 		}
@@ -190,7 +189,7 @@ namespace
 		if (forced && value.Kind == 'x')
 		{
 			// 원래 함수가 돌려준 수에 배율을 곱한다. 수가 아니면(undefined, 구조체) 그대로 지나간다.
-			const int kind = static_cast<int>(out.m_Kind) & k_KindMask;
+			const int kind = static_cast<int>(out.m_Kind) & NlGame::k_KindMask;
 			const bool number = kind == VALUE_REAL || kind == VALUE_INT32 || kind == VALUE_INT64;
 			if (number)
 			{

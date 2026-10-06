@@ -35,6 +35,19 @@ namespace NlGame
 	// 수(불리언 포함)인가. 문자열·구조체·배열·undefined 는 아니다.
 	bool IsNumber(const YYTK::RValue& Value);
 
+	// 불리언이 아닌 수인가(IsNumber 에서 VALUE_BOOL 을 뺀 것). 쿨다운·매장량처럼 수만 고칠 자리를 가릴 때 쓴다.
+	bool IsRealNumber(const YYTK::RValue& Value);
+
+	// RValue::m_Kind 에서 형만 남기는 가림(VALUE_UNSET 의 폭. YYTK_Shared_Types.hpp 199행). 가린 값이 k_KindMask 그대로면 VALUE_UNSET 이다.
+	constexpr int k_KindMask = 0x0ffffff;
+
+	// GML 의 ds 형 상수(ds_exists 의 둘째 인자). 출처: YoYoGames/GameMaker-HTML5 scripts/functions/Function_YoYo.js 36~41행.
+	// 이 러너에서도 맞는지는 Finder 의 FindDataStructures 가 VerifyType 으로 확인한 뒤에만 쓴다.
+	constexpr double k_DsMap = 1, k_DsList = 2;
+
+	// ds 번호를 훑는 범위와, 이만큼 잇달아 비어 있으면 그만 훑는 수. 게임 안에서 본 가장 큰 번호는 1,467 이다(research/02). 번호는 0 부터 빈틈없이 배정돼 있었다.
+	constexpr int k_MaxDsId = 20000, k_MaxMissing = 500;
+
 	// 게임의 오브젝트 전부. 처음 부를 때 0 번부터 object_exists 가 참인 동안 이름을 모은다.
 	const std::vector<Object>& Objects();
 

@@ -51,9 +51,6 @@ namespace
 	};
 
 	// ds 형 상수. 이 러너에서 맞는 것을 만들고 지워서 확인했다(research/02).
-	constexpr double k_DsMap = 1, k_DsList = 2;
-	constexpr int k_MaxDsId = 20000;			// ds_map 번호를 훑는 범위. 게임 안에서 본 가장 큰 번호는 1,467 이다
-	constexpr int k_MaxMissing = 500;			// 이만큼 잇달아 비어 있으면 그만 훑는다(번호는 0 부터 빈틈없이 배정돼 있었다)
 
 	std::filesystem::path g_SettingsPath;
 	std::function<void(const std::string&)> g_Log;
@@ -94,17 +91,17 @@ namespace
 	// 데이터 파일을 읽은 ds_map 을 키 이름으로 찾는다. 번호는 실행마다 같았지만 기대지 않는다(research/02).
 	void Locate()
 	{
-		if (g_DebugRoot >= 0 && !(Exists(g_DebugRoot, k_DsMap) && MapHas(g_DebugRoot, "building_resources")))
+		if (g_DebugRoot >= 0 && !(Exists(g_DebugRoot, NlGame::k_DsMap) && MapHas(g_DebugRoot, "building_resources")))
 			g_DebugRoot = -1;
-		if (g_Knowledge >= 0 && !(Exists(g_Knowledge, k_DsMap) && MapHas(g_Knowledge, "skill_combat_1")))
+		if (g_Knowledge >= 0 && !(Exists(g_Knowledge, NlGame::k_DsMap) && MapHas(g_Knowledge, "skill_combat_1")))
 			g_Knowledge = -1;
 		if (g_DebugRoot >= 0 && g_Knowledge >= 0)
 			return;
 
 		int missing = 0;
-		for (int id = 0; id < k_MaxDsId && missing < k_MaxMissing && (g_DebugRoot < 0 || g_Knowledge < 0); id++)
+		for (int id = 0; id < NlGame::k_MaxDsId && missing < NlGame::k_MaxMissing && (g_DebugRoot < 0 || g_Knowledge < 0); id++)
 		{
-			if (!Exists(id, k_DsMap))
+			if (!Exists(id, NlGame::k_DsMap))
 			{
 				missing++;
 				continue;
@@ -147,7 +144,7 @@ namespace
 	{
 		RValue buildings;
 		if (g_DebugRoot < 0 || !NlGame::Call("ds_map_find_value", { RValue(g_DebugRoot), RValue("building_resources") }, buildings)
-			|| !NlGame::IsNumber(buildings) || !Exists(buildings.ToDouble(), k_DsMap))
+			|| !NlGame::IsNumber(buildings) || !Exists(buildings.ToDouble(), NlGame::k_DsMap))
 			return -1;
 
 		int written = 0;
@@ -155,7 +152,7 @@ namespace
 		{
 			RValue list;
 			if (!key.IsString() || !NlGame::Call("ds_map_find_value", { buildings, key }, list) || !NlGame::IsNumber(list)
-				|| !Exists(list.ToDouble(), k_DsList))
+				|| !Exists(list.ToDouble(), NlGame::k_DsList))
 				continue;
 			const int count = static_cast<int>(NlGame::CallNumber("ds_list_size", { list }, 0));
 			for (int i = 0; i < count; i++)
@@ -163,7 +160,7 @@ namespace
 				// 원소는 [자원 이름, 수량] 의 ds_list 다.
 				RValue pair, amount;
 				if (!NlGame::Call("ds_list_find_value", { list, RValue(static_cast<double>(i)) }, pair) || !NlGame::IsNumber(pair)
-					|| !Exists(pair.ToDouble(), k_DsList) || NlGame::CallNumber("ds_list_size", { pair }, 0) < 2)
+					|| !Exists(pair.ToDouble(), NlGame::k_DsList) || NlGame::CallNumber("ds_list_size", { pair }, 0) < 2)
 					continue;
 				if (!NlGame::Call("ds_list_find_value", { pair, RValue(1.0) }, amount) || !NlGame::IsNumber(amount))
 					continue;
@@ -184,7 +181,7 @@ namespace
 	{
 		RValue counts;
 		if (g_DebugRoot < 0 || !NlGame::Call("ds_map_find_value", { RValue(g_DebugRoot), RValue("product_count") }, counts)
-			|| !NlGame::IsNumber(counts) || !Exists(counts.ToDouble(), k_DsMap))
+			|| !NlGame::IsNumber(counts) || !Exists(counts.ToDouble(), NlGame::k_DsMap))
 			return -1;
 
 		int written = 0;

@@ -15,7 +15,6 @@ using NlCore::Shortest;
 namespace
 {
 	// ds 형 상수. 이 러너에서 맞는 것을 만들고 지워서 확인했다(research/02).
-	constexpr double k_DsMap = 1, k_DsList = 2;
 
 	struct Cursor			// 따라가는 동안 든 값
 	{
@@ -194,7 +193,7 @@ namespace
 		case '@':
 		{
 			RValue key;
-			if (!WholeNumber(From.Value, id) || !DsExists(id, k_DsMap) || !MapKey(id, S.Name, key)
+			if (!WholeNumber(From.Value, id) || !DsExists(id, NlGame::k_DsMap) || !MapKey(id, S.Name, key)
 				|| !NlGame::Call("ds_map_find_value", { RValue(id), key }, next))
 			{
 				Why = "@" + S.Name + ": no such ds_map or key";
@@ -204,7 +203,7 @@ namespace
 		}
 
 		case '#':
-			if (!WholeNumber(From.Value, id) || !DsExists(id, k_DsList)
+			if (!WholeNumber(From.Value, id) || !DsExists(id, NlGame::k_DsList)
 				|| S.Index >= NlGame::CallNumber("ds_list_size", { RValue(id) }, 0)
 				|| !NlGame::Call("ds_list_find_value", { RValue(id), RValue(S.Index) }, next))
 			{
@@ -385,6 +384,16 @@ bool NlAccess::ReadNumber(const std::string& Path, double& Out)
 	return true;
 }
 
+bool NlAccess::ReadText(const std::string& Path, std::string& Out)
+{
+	RValue value;		// 이 함수 안에서만 든다
+	std::string why;
+	if (!Read(NlCore::ParseAskPath(Path), value, why) || !value.IsString())
+		return false;
+	Out = value.ToString();
+	return true;
+}
+
 bool NlAccess::WriteNumber(const std::string& Path, double Number, std::string& Why)
 {
 	const AskPath path = NlCore::ParseAskPath(Path);
@@ -536,7 +545,7 @@ double NlAccess::ForEachChild(const RValue& Value, Holder Kind, const std::funct
 
 	case Holder::Map:
 	{
-		if (!WholeNumber(Value, id) || !DsExists(id, k_DsMap))
+		if (!WholeNumber(Value, id) || !DsExists(id, NlGame::k_DsMap))
 			return -1;
 		RValue keys;
 		if (!NlGame::Call("ds_map_keys_to_array", { RValue(id) }, keys) || !keys.IsArray())
@@ -557,7 +566,7 @@ double NlAccess::ForEachChild(const RValue& Value, Holder Kind, const std::funct
 
 	case Holder::List:
 	{
-		if (!WholeNumber(Value, id) || !DsExists(id, k_DsList))
+		if (!WholeNumber(Value, id) || !DsExists(id, NlGame::k_DsList))
 			return -1;
 		const double size = NlGame::CallNumber("ds_list_size", { RValue(id) }, 0);
 		for (double i = 0; i < size; i++)

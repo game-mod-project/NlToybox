@@ -24,8 +24,6 @@ namespace
 	constexpr double k_MaxArray = 4096;
 	constexpr double k_MaxSeconds = 3.0;
 	constexpr int k_MaxPerObject = 64;			// 오브젝트마다 들어가는 인스턴스 수
-	constexpr int k_MaxDsId = 20000;			// ds 번호를 훑는 범위. 게임 안에서 본 가장 큰 번호는 1,467 이다(research/02)
-	constexpr int k_MaxMissing = 500;			// 이만큼 잇달아 비어 있으면 그만 훑는다(번호는 0 부터 빈틈없이 배정돼 있었다)
 
 	char LowerChar(char C)
 	{
@@ -197,7 +195,7 @@ NlSearch::Result NlSearch::Run(const Spec& Spec)
 	{
 		// ds 형 상수 1(map)과 2(list)는 이 러너에서 맞다(research/02).
 		int missing = 0;
-		for (int id = 0; id < k_MaxDsId && missing < k_MaxMissing; id++)
+		for (int id = 0; id < NlGame::k_MaxDsId && missing < NlGame::k_MaxMissing; id++)
 		{
 			const RValue number(static_cast<double>(id));
 			const bool map = NlGame::CallNumber("ds_exists", { number, RValue(1.0) }, 0) > 0;

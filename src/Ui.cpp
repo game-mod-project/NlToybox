@@ -455,7 +455,7 @@ void NlUi::Init(AurieModule* Module, const std::filesystem::path& ModuleDir, Log
 		else if (key == "shot_seconds")
 			g_ShotSeconds = std::atof(value.c_str());
 		else if (key == "drag")
-			g_TestDrag = std::sscanf(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;
+			g_TestDrag = sscanf_s(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;		// MSVC 전용 빌드다. %f 에는 크기 인자가 없다
 		else if (key == "set")
 			g_TestSets.push_back(value.substr(0, value.find_last_not_of(" \r\n") + 1));
 		else
@@ -596,4 +596,16 @@ void NlUi::WndProc(FWWndProc& Context)
 	// 입력은 직접 건 창 프로시저(HkWndProc)가 받는다. 여기서는 이 콜백이 오는지만 센다.
 	UNREFERENCED_PARAMETER(Context);
 	g_YytkWndProcCalls++;
+}
+
+void NlUi::Hint(const char* Text)
+{
+	ImGui::PushTextWrapPos(0.0f);
+	ImGui::TextDisabled("%s", Text);
+	ImGui::PopTextWrapPos();
+}
+
+void NlUi::Hint(const std::string& Text)
+{
+	Hint(Text.c_str());
 }

@@ -53,6 +53,11 @@ bool NlGame::IsNumber(const RValue& Value)
 	return !Value.IsString() && !Value.IsStruct() && !Value.IsArray() && Value.IsNumberConvertible();
 }
 
+bool NlGame::IsRealNumber(const RValue& Value)
+{
+	return IsNumber(Value) && (static_cast<int>(Value.m_Kind) & k_KindMask) != VALUE_BOOL;
+}
+
 double NlGame::CallNumber(const char* Name, const std::vector<RValue>& Args, double Fallback)
 {
 	RValue result;

@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Game.hpp"
+#include "Ui.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
 #include "core/Guard.hpp"
@@ -68,21 +69,11 @@ namespace
 		return std::string("inst:") + (Character ? "o_character" : "o_dummy") + ":" + std::to_string(Index);
 	}
 
-	bool ReadText(const std::string& Path, std::string& Out)
-	{
-		RValue value;		// 이 함수 안에서만 든다
-		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(Path), value, why) || !value.IsString())
-			return false;
-		Out = value.ToString();
-		return true;
-	}
-
 	// 그 자리에 아직 그 사람이 있는가(사람이 드나들면 번호가 밀린다).
 	bool StillThere(const std::string& BasePath, const std::string& Uuid)
 	{
 		std::string now;
-		return ReadText(BasePath + ".__soul.__uuid", now) && now == Uuid;
+		return NlAccess::ReadText(BasePath + ".__soul.__uuid", now) && now == Uuid;
 	}
 
 	// 가진 특성의 이름들. 목록을 읽지 못하면 거짓(빈 목록과 가른다).
@@ -402,13 +393,6 @@ namespace
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
-	void Hint(const char* Text)
-	{
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", Text);
-		ImGui::PopTextWrapPos();
-	}
-
 	void Push(CrimeAct Act, const std::string& Who)
 	{
 		if (g_Queue.size() < 8)
@@ -452,7 +436,7 @@ void NlCrime::Draw()
 	std::lock_guard lock(g_Mutex);
 	ImGui::SeparatorText("부랑자 (범죄자가 된 주민)");
 	if (!g_View.Read)
-		Hint(g_View.Why.empty() ? "읽는 중입니다" : g_View.Why.c_str());
+		NlUi::Hint(g_View.Why.empty() ? "읽는 중입니다" : g_View.Why.c_str());
 	else
 	{
 		ImGui::TextUnformatted(NlCore::CrimeSummary(static_cast<int>(g_View.Vagabonds.size()), g_View.Thugs, g_View.UnreadPeople).c_str());
@@ -480,8 +464,8 @@ void NlCrime::Draw()
 		}
 	}
 	if (!g_LastCrime.empty())
-		Hint(g_LastCrime.c_str());
-	Hint("게임은 저녁(18:00)에 주민 가운데 몇을 범죄자(부랑자)로 만듭니다(무엇이 그들을 고르는지는 재지 못했습니다). '되돌리기'는 게임의 같은 함수로 그 지정을 풉니다. "
+		NlUi::Hint(g_LastCrime.c_str());
+	NlUi::Hint("게임은 저녁(18:00)에 주민 가운데 몇을 범죄자(부랑자)로 만듭니다(무엇이 그들을 고르는지는 재지 못했습니다). '되돌리기'는 게임의 같은 함수로 그 지정을 풉니다. "
 		"게임이 다시 고를 수 있습니다: 위의 '주민이 부랑자(범죄자)가 되지 않음'을 켠 저녁들에는 게임의 시도 셋이 모두 막혔습니다. 깡패는 되돌리지 않습니다(재지 못했습니다). "
 		"'훔친 것 되돌리기'는 훔친 금화가 있는 부랑자의 줄에만 나옵니다: 게임의 함수를 부르는 것까지만 했고 효과는 확인 전입니다. "
 		"범죄자의 지정은 세이브에 들어가는 자료입니다. 되돌리는 단추는 없습니다.");
@@ -524,8 +508,8 @@ void NlCrime::Draw()
 		}
 	}
 	if (!g_LastLords.empty())
-		Hint(g_LastLords.c_str());
-	Hint("게임에서 죄와 영주의 범죄 혐의는 특성입니다. 지우기는 그 특성을 뗍니다(인물 탭의 특성 떼기와 같은 길). 영주 둘의 죄 셋을 떼어 봤고, 그 가운데 하나에서 생각의 합이 오르는 것을 봤습니다. "
+		NlUi::Hint(g_LastLords.c_str());
+	NlUi::Hint("게임에서 죄와 영주의 범죄 혐의는 특성입니다. 지우기는 그 특성을 뗍니다(인물 탭의 특성 떼기와 같은 길). 영주 둘의 죄 셋을 떼어 봤고, 그 가운데 하나에서 생각의 합이 오르는 것을 봤습니다. "
 		"혐의의 특성을 가진 영주는 보지 못해 '혐의 지우기'는 해 보지 못했습니다(확인 전): 특성을 떼면 게임의 처벌 쪽이 어떻게 되는지도 모릅니다. 되돌리는 단추는 없습니다.");
 }
 

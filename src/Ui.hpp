@@ -47,6 +47,10 @@ namespace NlUi
 	// 모드창을 열거나 닫는다(F8 과 같다).
 	void SetVisible(bool Visible);
 
+	// 흐린 글씨의 줄바꿈되는 글(도움말, 한 일). 그리는 쪽에서 부른다. 패널 다섯이 같은 것을 따로 두고 있었다(2026-10-07 리뷰).
+	void Hint(const char* Text);
+	void Hint(const std::string& Text);
+
 	// 시험용: Dear ImGui 의 입력 큐에 넣는다(게임 창과 진짜 마우스·키보드는 건드리지 않는다). 게임 스레드에서 부른다. 모드창이 준비되지 않았으면 거짓.
 	// 누름은 그 자리로 옮기고 왼쪽 단추를 눌렀다 뗀다. 글자는 잡혀 있는 입력 칸이 받는다. 키는 enter, tab, escape, backspace.
 	bool InjectClick(float X, float Y);
