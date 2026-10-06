@@ -63,9 +63,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - **세이브는 직접 불러온다**(`tools/load-save.ps1`. 게임의 `GameLoadOperator.load_save`를 부른다. `research/11`). 사용자에게 넘기는 것은 새 게임을 만드는 일뿐이다.
   게임 창을 눌러야 하면(이야기 창의 "계속하기", 인물의 초상) `shot`으로 자리를 보고, 게임 창이 앞에 있을 때 `SetCursorPos` + `mouse_event`로 누른다.
   시간을 흘리다 게임이 멈추면(`time_warp` 0) 화면부터 뜬다: 이야기 창이 떠 있을 수 있다(아덴 세이브는 4일차 08:00).
+  **`load-save.ps1`은 실행 묶음이면 불러온 뒤 게임의 저장을 끈다**(`게임의 저장: 끔 (no_autosave)`. 치트 표의 `no_autosave` = `inst:o_debug.is_save_disabled`. `research/25`:
+  켠 채 자동 저장의 시각을 세 번 넘겨도 파일이 생기지 않았다). 그 줄이 나왔는지 본다. 경고가 나오면 아래의 시각 규칙을 따른다. 사용자의 게임(실행 묶음이 아닌 것)에서는 켜지 않는다.
+  **`__set_warp(0)`으로 멈춰 둔 게임이 다시 흐를 수 있다**(배속 1 로. 세 번 봤고 누가 풀었는지 가리지 못했다). 멈춰 둔 것에 기대어 시험 값을 남겨 두지 않는다.
 - 게임은 하루에 두 번(아침, 저녁) 자동 저장을 한다. 파일 이름에 실제 시각이 들어가 **새 파일이 하나 더 생긴다**(앞의 자동 저장은 그대로 남는다. `research/16`).
   **저녁의 것은 18시보다 이르다: 게임 시각 16:30 과 17:37 사이에 난다**(17:37 까지 돌린 실행이 시험 상태가 든 자동 저장을 만들었다. `research/17`).
-  **시험 값이 든 실행은 게임 시각 16:30(`game_time` 을 하루로 나눈 나머지 59400) 전에 끈다.** 시간을 흘리는 스크립트는 폴링의 넘침까지 넣어 한도를 잡는다. 아침의 시각은 재지 않았다.
+  **게임의 저장을 끄지 못한 실행에서는, 시험 값이 든 채 게임 시각 16:30(`game_time` 을 하루로 나눈 나머지 59400)을 넘기지 않는다.** 시간을 흘리는 스크립트는 폴링의 넘침까지 넣어 한도를 잡는다.
+  아침의 것은 06:00 에 난다(실행 1 에서 06:00:06 에 생겼다. `research/25`).
   **시험 값이 든 채 그 시각을 넘기지 않는다**
   (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
 - 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
@@ -292,12 +296,32 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `pregnancy_chance`(모듈의 임신 시작은 그 확률을 타지 않는다)는 확인 전이다.
   - **확률로 정해지는 것은 되풀이해 센다**: 멈춘 채로 한 실행에서 임신 시작과 바로 출산을 수십 번 돌렸다. 모듈의 로그의 `people: birth on …` 줄로 센다.
     원격의 답은 첫 줄이 `running …`이다. 결과는 그다음 줄이다.
+- 월드(`src/World.cpp`, `core/SeasonPlan`, `core/WorldPlan`, `core/PlaceKey`. `research/25`). 표의 항목들 아래에 계절 패널을 그린다.
+  - **계절**: `inst:o_game_map_controller.__current_local_map.__season_manager`(지도마다 하나). 단계 0..3, 가혹한 계절은 단계 2(게임이 `__get_remain_time_to_phase(2)`를 부른다).
+    남은 시간은 시작 시각(`__start_phase_time`)에서 셈한다. 읽을 때는 게임의 함수로(`is_extreme()`, `__get_remain_time_of_current_phase()`, `get_remain_time_to_extreme_season()`: 인자 없음),
+    바꿀 때는 시작 시각에 쓰고 **게임의 함수가 돌려주는 남은 시간이 따라 움직였는지** 본다(`RemainMoved`). `__set_phase`는 부르지 않는다: 게임이 매시 정각에 스스로 넘긴다(수 하나로 부른다).
+  - 미루기는 지금보다 뒤로 밀지 않고 실제로 밀린 만큼을 말한다(`DelayReport`). 끝내기는 남은 시간을 60초로 줄인다(다음 정각에 넘어간다. 새 시작은 지난 08:00).
+    가혹한 계절 중의 미루기, 붙들기를 켠 동안의 끝내기, 0 보다 앞의 시작 시각을 써야 하는 끝내기는 거절한다.
+  - **붙들기 둘(`season_hold`, `mine_stock_hold`)이 기억한 값은 그 자리의 것이다**(`PlaceKey`: 관리자 구조체의 주소 + 지도 관리 인스턴스). 자리나 단계가 달라지거나 시각이 거꾸로 가면
+    쓰지 않고 다시 기억한다. 값을 기억해 두었다가 되돌려 쓰는 항목을 새로 만들면 같은 가림을 넣는다(다른 세이브를 불러온 뒤 앞의 게임의 값으로 쓰지 않게).
+    붙들기는 실제 시간 1초마다 쓴다. 끈 틱에 한 번 정리한다(`g_HoldWasOn`).
+  - **세계 지도**: `inst:o_global_map.__m_global_map`(GlobalMapManager. `…__province`가 아니다). 안개는 `is_initial_area_visible(지역 구조체) -> 불리언`이 참이면 걷힌다(표의 `reveal_map`).
+    물체의 `is_visible`만 바꾸면 지역이 어두운 채이고 `is_in_fog_of_war`만 바꾸면 화면이 그대로다. `open_map()`·`close_map()`(인자 없음)은 직접 불러도 된다.
+    지도의 화면을 넓게 받으려면 열린 동안 `global.__current_camera.__zoom_ratio`를 0.7 로 쓴다(시험에서만. 끝나면 1.8 로 되돌린다).
+  - 늑대: `…__wolf_manager.get_max_number_of_wolves()`(밤에 한 번, 수)에 0 을 돌려준다. 광산: `…__mines_manager.__mines_stock.<자리>`(게임이 캘 때마다 1 준다)를 되돌려 쓴다.
+  - **그 실행에서만 가는 항목은 `Cheat::ThisRunOnly`**(표의 줄 끝에 `true`. 지금은 `no_autosave` 하나): 켠 것을 잊으면 잃는 것이 큰 항목에 쓴다.
+  - 날씨를 일으키는 것은 만들지 않았다: `__start_rain(구조체, 수)`의 구조체가 무엇인지 모른다. `fast_map_moving`·`fast_global_tasks`·`no_tree_growth`는 재지 않았다.
+  - 원격 `world season|season_delay|season_end`. 새 항목은 프리셋에 넣지 않았다(세이브에 남는 값을 쓰거나 난이도의 것이 아니다. 넣을지는 사용자가 정한다).
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
+  **매복이 진행 중이면 게임이 스스로 오류를 쏟아 낸다**(이벤트 `ambush_squad`, `map_get_building_id`. 게임 시각 1분에 15건쯤. 아덴의 아침 자동 저장에서는 7일차 오후부터).
+  모듈의 기능·배속·저장 끄기와 무관하다(대조 실행. `research/25`). 그 파일이 하루에 수십 MB 씩 커지므로 시간을 흘리는 실행은 그 전에 끝내거나, 넘겨야 하면 사용자에게 알린다.
+  오류 파일에 새 오류가 있으면 **대조 실행**(같은 세이브, 같은 배속, 아무것도 하지 않음)으로 내 변경 때문인지부터 가린다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.

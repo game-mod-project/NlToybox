@@ -267,10 +267,10 @@ lock inst:o_character:0.starving_hours=0
 | 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교와의 평판: C 주교의 평판 구조체에 영주의 호감과 같은 함수(`research/21`. 됨). 신앙심: B 감소 0(`debug_piety_decrease_per_hour`)과 채워 두기(됨). 성스러운 보호·종교 반란: D 판정 함수의 답(확인 전). 비용·신앙 회복·설교 전환: B 게임 변수와 설교 자료(확인 전). 설교의 효과와 예언은 아직 | 2(일부), 6(주교), 종교 단계(0.23.x) |
 | 시간 | 게임 속도 0.25~50배 | B `o_time_controller`의 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(§9) | 2 |
 | | 이동 속도, 쿨다운 제거 | B 를 찾는다. 안 되면 D | 6 |
-| 월드 | 지도·지역 공개, 자원 위치, 이동 제한 | D `is_in_fog_of_war`, A `is_fast_action_task_on_global_map`, B `o_global_map` | 2(A), 6 |
+| 월드 | 지도·지역 공개, 자원 위치, 이동 제한 | 지도 공개: D `GlobalMapManager.is_initial_area_visible(지역)`에 참(`is_in_fog_of_war`가 아니다: 그것만 바꾸면 화면이 그대로다). 지역의 자원 아이콘도 함께 보인다. 이동: A `is_fast_action_task_on_global_map`, `__debug_fast_moving`(재지 않았다). 계절: B `ExtremeSeasonManager.__start_phase_time`. 늑대: D `get_max_number_of_wolves()`에 0. 광산: B `__mines_stock`(`research/25`) | 2(A), 6, 월드 |
 | | 광산·자원 생성 | C (기록해서) | 6 |
 | 이벤트 | 강제 실행, 쿨다운 제거, 확률 100% | 쿨다운 제거: B `gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`에 0(써지는 것까지 봤다). 강제 실행(`o_data.__game_director_events_data.__debug_forced_event`)과 확률은 아직. 궁수 매복 디버그 함수는 게임을 끝낸다(쓰지 않는다) | 6(쿨다운) |
-| 유틸 | UI 숨기기, 디버그 표시, 게임의 디버그 창 | A `is_hide_*`, `is_gw_gui_draw_disabled`, `is_debug_enabled`, `is_show_debug_managers` | 2 |
+| 유틸 | UI 숨기기, 디버그 표시, 게임의 디버그 창, 게임의 저장 끄기 | A `is_hide_*`, `is_gw_gui_draw_disabled`, `is_debug_enabled`, `is_show_debug_managers`, `is_save_disabled`(자동 저장이 생기지 않는 것을 봤다. 그 실행에서만 간다) | 2, 월드 |
 | | 저장, 시간 정지, 인물·아이템 검색 | 시간 정지: C `o_time_controller.__set_warp(0)`으로 멈추고 `set_time_speed(0)`으로 푼다(시간 패널의 단추, 원격 `time pause|resume`). 저장은 게임의 저장 함수를 재지 않아 넣지 않았다. 검색은 탐색기의 찾기와 인물 목록이 한다 | 7(시간 정지 됨) |
 | 프리셋 | God, Sandbox, Easy, Normal(전부 끔) | 표의 확인된 항목의 묶음(`src/core/Presets`: normal, easy, sandbox, god). 누르면 묶음에 없는 항목은 끄고 묶음의 항목은 켠다. 확인 전의 항목과 값을 써 넣는 항목은 넣지 않는다(시험이 지킨다) | 7(됨) |
 
@@ -316,6 +316,7 @@ lock inst:o_character:0.starving_hours=0
 | 종교 | 계획: `plans/2026-10-06-cheat-menu-religion.md` | 됐다(모듈 0.23.x, `research/21`). 주교와의 평판(게임의 주교 평판 함수로 견줬다), 신앙 감소 0 과 신앙심 채워 두기(플레이에서 확인), 성스러운 보호·종교 반란의 판정(함수의 답까지), 종교 비용 0·신앙 회복 배율·설교 전환 배율(값이 써지고 되돌려지는 것까지). 설교의 효과, 예언, 광신도는 재지 못했다 |
 | 인물의 역할 프리셋 | 계획: `plans/2026-10-06-cheat-menu-role-presets.md` | 됐다(모듈 0.24.x, `research/22`). 역할 열셋을 한 사람에게 입힌다: 능력치를 올리고(내리지 않는다) 해로운 특성을 떼고 재능을 붙인다. 열셋을 영주 넷에게 입혀 능력치와 특성이 바뀌고 두 시간 뒤에도 남는 것을 봤다. 재능마다의 효과와 세이브에 남는지는 재지 않았다 |
 | 인구: 임신·출생·성장 | 계획: `plans/2026-10-06-cheat-menu-pregnancy.md` | 됐다(모듈 0.25.x, `research/24`). 플레이어의 영주에게 임신의 다음 단계와 바로 출산, 아버지를 골라 임신 시작, 아이를 어른으로. 임신 시작과 출산을 49번 되풀이해 봤다. 유산 없음은 세어서 확인했다(켠 채 25번에 0, 끈 채 27번에 5). 임신 확률과 출산 중 사망의 항목, 하루가 넘어갈 때 스스로 나아가는지, 주민의 임신은 재지 못했다 |
+| 월드: 계절·세계 지도·늑대·광산·게임의 저장 | 계획: `plans/2026-10-06-cheat-menu-world.md` | 됐다(모듈 0.26.x, `research/25`). 가혹한 계절까지 남은 시간을 보이고, 하루 미루기, 지금 단계 끝내기(가혹한 계절에 들어가고 나오는 것까지 봤다), 계절 붙들기, 세계 지도의 안개 걷기(화면에서), 늑대가 나타나지 않음(켠 세 밤에 0, 끈 두 밤에 1·3), 광산의 매장량이 줄지 않음, 게임의 저장 끄기(자동 저장의 시각을 세 번 넘겨 파일이 없었다)를 플레이에서 확인했다. 비·눈을 일으키는 것, 가혹한 계절의 종류 바꾸기, 세계 지도의 이동·행동 속도, 가혹한 계절의 효과는 재지 못했다. 게임이 매복 때 스스로 쏟아 내는 오류를 봤고 대조 실행으로 모듈과 무관함을 가렸다 |
 | 7 | 프리셋, 유틸. 계획: `plans/2026-10-06-cheat-menu-stage7-presets.md` | 프리셋 넷과 시간의 멈춤·다시 흐르게가 됐다(모듈 0.15.x). "18개 영역의 항목이 모두 `Verified`"는 이루지 못했다: 표 52개 가운데 확인된 것은 14개이고, 5·6단계에서 재지 못한 것(전투, 장비, 외교의 관계, 신앙, 계절·날씨, 지도, 이벤트 강제)이 남아 있다 |
 
 ## 11. 오류와 안전
