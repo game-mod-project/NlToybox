@@ -193,6 +193,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     게임이 부르는 꼴: `battle_hit(구조체, 배열, undefined, 정수, 수) -> 구조체`, `ComponentBattle.attack(ref, undefined, undefined, 불리언)`, `set_current_battle(구조체, 구조체)`, `set_surrender(불리언)`,
     `get_close_combat_support_power() -> 수`, `SoulBasic.get_bravery_threshold() -> 수`, `__get_dodge_chance(구조체) -> 수`, `get_battle_lottery_tickets_factor() -> 수`, `is_pain_shock() -> 불리언`.
     아군의 전투 기술이 실제 싸움에서 두 배(상한 20)로 넘어가는 것을 봤다(12·13 → 20). **배율의 효과는 아직 말할 수 없다**(대조가 없고 26명이 일곱을 상대했다).
+    둘째 싸움(도적 기지. 딴 지도이고 거기 있는 동안 `game_time`이 멈춰 있다)에서 적의 표본도 받았다: 4 → 2, 5 → 3, 3 → 2. **추첨의 배율(`get_battle_lottery_tickets_factor`)이 배율을 곱한 뒤의
+    전투 기술과 맞아떨어진다**(값 넷에 맞춘 식 `0.1 + 0.09 x 기술`: 20 → 1.9, 2 → 0.28, 3 → 0.37, 4 → 0.46. 추정). `take_damage`의 셋째 인자는 훈련에서 `true`, 실전에서 `false`였다.
+    지도를 떠나면 분대의 주소가 없어진다: 그 주소로 건 기록은 스크립트 이름으로 멈춘다.
   - **사용자가 하는 게임을 지켜볼 때는 읽기와 `record`만 쓴다**: 값을 쓰지 않고, 게임의 함수를 부르지 않고, `session.ps1`로 끄지 않는다. 끝나면 내가 건 기록만 멈춘다
     (`unrecord <주소>`. `unrecord all`은 치트가 건 것의 기록까지 멈춘다). **기록의 표본은 건 뒤의 처음 여섯뿐이다**: 적의 표본을 받으려면 싸움이 붙은 뒤에 `record`를 다시 보낸다.
     `list <그릇> max=5`는 찾는 칸을 자를 수 있다(칸 하나는 `ask`로 바로 묻는다).
