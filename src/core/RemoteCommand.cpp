@@ -46,12 +46,6 @@ namespace NlCore
 			return tokens;
 		}
 
-		bool GoodPath(const std::string& Text, bool NeedSteps)
-		{
-			const AskPath path = ParseAskPath(Text);
-			return path.Error.empty() && (!NeedSteps || !path.Steps.empty());
-		}
-
 		// 파일 이름이 되는 글: 영문, 숫자, '_', '-' 만.
 		bool GoodName(const std::string& Text)
 		{
@@ -400,7 +394,7 @@ namespace NlCore
 				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, lords also knowledge_all and birth, people also equip (name one person for the rest)");
 			if (person.Act == PersonAct::Equip && !FindLoadout(person.Text))
 				return fail("person equip needs name=<h_swordman|h_axeman|h_spearman|h_hammerhead|any>");
-			if (person.Act == PersonAct::Conceive && (!GoodUuid(person.Text) || person.Text == person.Who))
+			if (person.Act == PersonAct::Conceive && (!IsUuid(person.Text) || person.Text == person.Who))
 				return fail("person conceive needs name=<the father's uuid: 16 hex digits, not the same person>");
 			if (person.Act == PersonAct::Role && !FindRole(person.Text))
 			{

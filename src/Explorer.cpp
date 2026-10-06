@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Search.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Text.hpp"
 
@@ -142,13 +143,6 @@ namespace
 		return g_Watches.back();
 	}
 
-	// 값 하나를 가리키는 주소인가.
-	bool GoodPath(const std::string& Path)
-	{
-		const AskPath path = NlCore::ParseAskPath(Path);
-		return path.Error.empty() && !path.Steps.empty();
-	}
-
 	// ---- 게임 스레드 ----
 
 	void LoadView()
@@ -270,7 +264,7 @@ namespace
 		}
 
 		case Command::Kind::Pin:
-			if (GoodPath(C.Path))
+			if (NlCore::GoodPath(C.Path))
 				NeedWatch(C.Path);
 			else
 				g_Note = "즐겨찾기에 넣을 수 없는 주소: " + C.Path;
@@ -283,7 +277,7 @@ namespace
 
 		case Command::Kind::SetLock:
 		{
-			if (!GoodPath(C.Path))
+			if (!NlCore::GoodPath(C.Path))
 				break;
 			Watch& watch = NeedWatch(C.Path);
 			watch.HasLock = true;
@@ -324,10 +318,10 @@ namespace
 		}
 		else if (Row.IsNumber)
 		{
-			double value = Row.Number;
+			double typed = 0;
 			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::InputDouble("##n", &value, 0, 0, "%.10g", ImGuiInputTextFlags_EnterReturnsTrue))
-				PushPath(Command::Kind::WriteNumber, Path, value);
+			if (NlUi::InputNumber("##n", "value:" + Path, Row.Number, "%.10g", typed))		// 칸을 떠날 때 쓴다(Enter 로만 받던 것을 고쳤다. research/18 의 끝)
+				PushPath(Command::Kind::WriteNumber, Path, typed);
 		}
 		else if (Row.IsString && Row.Raw.size() < 255)
 		{
@@ -543,10 +537,10 @@ namespace
 			if (watch.HasLock)
 			{
 				ImGui::SameLine();
-				double value = watch.LockValue;
+				double typed = 0;
 				ImGui::SetNextItemWidth(110);
-				if (ImGui::InputDouble("##lv", &value, 0, 0, "%.10g", ImGuiInputTextFlags_EnterReturnsTrue))
-					PushPath(Command::Kind::SetLock, watch.Path, value, watch.Locked);
+				if (NlUi::InputNumber("##lv", "lock:" + watch.Path, watch.LockValue, "%.10g", typed))		// 칸을 떠날 때 건다
+					PushPath(Command::Kind::SetLock, watch.Path, typed, watch.Locked);
 				if (!watch.Note.empty())
 				{
 					ImGui::SameLine();

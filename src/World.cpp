@@ -3,7 +3,9 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/Localization.hpp"
 #include "core/SeasonPlan.hpp"
 #include "core/Text.hpp"
@@ -72,12 +74,6 @@ namespace
 	int g_MineWrites = 0;						// 되돌려 쓴 횟수
 	bool g_HoldWasOn = false, g_MineWasOn = false;		// 지난 틱에 켜져 있었는가(끈 틱에 한 번 정리한다)
 
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
-
 	void Log(const std::string& Line)
 	{
 		if (g_Log)
@@ -103,7 +99,7 @@ namespace
 		}
 		std::vector<NlCore::PathStep> steps;		// 도는 동안에는 쓰지 않는다
 		const double children = NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
-			const bool number = NlGame::IsNumber(child) && (static_cast<int>(child.m_Kind) & 0x0ffffff) != VALUE_BOOL;		// 형만 남긴다(YYTK_Shared_Types.hpp 의 VALUE_UNSET 의 폭)
+			const bool number = NlGame::IsRealNumber(child);
 			if (NlCore::ShouldClearCooldown(number, number ? child.ToDouble() : 0))
 				steps.push_back(step);
 			return true;
@@ -125,16 +121,6 @@ namespace
 			}
 		}
 		return out;
-	}
-
-	bool ReadText(const std::string& Path, std::string& Out)
-	{
-		RValue value;		// 이 함수 안에서만 든다
-		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(Path), value, why) || !value.IsString())
-			return false;
-		Out = value.ToString();
-		return true;
 	}
 
 	// 인자 없는 함수를 불러 수(불리언 포함)를 받는다.
@@ -201,14 +187,14 @@ namespace
 			return s;
 		}
 		std::string key;
-		if (ReadText(base + ".__extreme_season.__caption", key))
+		if (NlAccess::ReadText(base + ".__extreme_season.__caption", key))
 		{
 			const auto found = g_SeasonCaptions.find(key);
 			if (found != g_SeasonCaptions.end())
 				s.Name = found->second;
 		}
 		if (s.Name.empty())
-			ReadText(base + ".__extreme_season.__name", s.Name);		// 화면 이름을 못 읽었으면 게임의 이름
+			NlAccess::ReadText(base + ".__extreme_season.__name", s.Name);		// 화면 이름을 못 읽었으면 게임의 이름
 		s.Read = true;
 		return s;
 	}
@@ -342,7 +328,7 @@ namespace
 		std::vector<Fix> fixes;		// 도는 동안에는 쓰지 않는다
 		int mines = 0;
 		NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
-			if (!NlGame::IsNumber(child) || (static_cast<int>(child.m_Kind) & 0x0ffffff) == VALUE_BOOL)
+			if (!NlGame::IsRealNumber(child))
 				return true;
 			mines++;
 			double write = 0;
@@ -441,23 +427,22 @@ namespace
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
-	void Hint(const char* Text)
-	{
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", Text);
-		ImGui::PopTextWrapPos();
-	}
-
 	void DrawLast()
 	{
 		if (!g_Last.empty())
-			Hint(g_Last.c_str());
+			NlUi::Hint(g_Last.c_str());
 	}
+
+	constexpr size_t k_MaxQueue = 4;		// 창이 쌓아 둘 청의 수. 넘치면 받지 않고 결과 줄에 적는다(조용히 버리지 않는다. 2026-10-07 리뷰 R3)
 
 	void Push(WorldAct Act)
 	{
-		if (g_Queue.size() < 4)
-			g_Queue.push_back(Act);
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			(IsSeasonAct(Act) ? g_SeasonLast : g_Last) = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
+		g_Queue.push_back(Act);
 	}
 }
 
@@ -487,7 +472,7 @@ void NlWorld::GameTick(double Now, bool Visible)
 		return;
 	if (g_Queue.empty() && Now < g_NextSeason)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다). 치트 표를 읽는 것도 그 뒤에
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!g_Queue.empty())
 	{
 		const WorldAct act = g_Queue.front();
@@ -516,7 +501,7 @@ void NlWorld::DrawEvents()
 	std::lock_guard lock(g_Mutex);
 	if (ImGui::Button("이벤트 쿨다운 지우기"))
 		Push(WorldAct::CooldownsClear);
-	Hint("게임이 이벤트를 고를 때 보는 '남은 날'(이벤트마다, 묶음마다)을 0 으로 씁니다. 써지는 것까지 봤고, 이벤트가 더 일찍 오는지는 확인 전입니다. "
+	NlUi::Hint("게임이 이벤트를 고를 때 보는 '남은 날'(이벤트마다, 묶음마다)을 0 으로 씁니다. 써지는 것까지 봤고, 이벤트가 더 일찍 오는지는 확인 전입니다. "
 		"쿨다운은 세이브에 들어가는 자료입니다(세이브 파일에 그 열쇠가 있습니다). 쓴 채 저장하면 남습니다.");
 	DrawLast();
 }
@@ -526,7 +511,7 @@ void NlWorld::DrawWorld()
 	std::lock_guard lock(g_Mutex);
 	ImGui::SeparatorText("계절");
 	if (!g_Season.Read)
-		Hint(g_Season.Why.empty() ? "계절을 읽는 중입니다" : g_Season.Why.c_str());
+		NlUi::Hint(g_Season.Why.empty() ? "계절을 읽는 중입니다" : g_Season.Why.c_str());
 	else
 	{
 		ImGui::PushTextWrapPos(0.0f);
@@ -540,12 +525,12 @@ void NlWorld::DrawWorld()
 	if (ImGui::Button("지금 단계 끝내기"))
 		Push(WorldAct::SeasonEnd);
 	ImGui::EndDisabled();
-	Hint("게임은 계절을 단계로 나누고 단계마다의 시작 시각에서 남은 시간을 셈합니다. '미루기'는 지금 단계의 시작 시각을 하루 뒤로 써서 가혹한 계절까지 남은 시간을 늘립니다"
+	NlUi::Hint("게임은 계절을 단계로 나누고 단계마다의 시작 시각에서 남은 시간을 셈합니다. '미루기'는 지금 단계의 시작 시각을 하루 뒤로 써서 가혹한 계절까지 남은 시간을 늘립니다"
 		"(지금보다 뒤로는 밀지 않습니다). '지금 단계 끝내기'는 남은 시간을 1분으로 줄입니다: 게임이 다음 정각에 다음 단계로 넘깁니다"
 		"(가혹한 계절 바로 앞의 단계였다면 가혹한 계절이 시작되고, 가혹한 계절 중이었다면 끝납니다). 위의 '계절 붙들기'는 켜 둔 동안 지금 단계에 머물게 합니다. "
 		"계절의 상태는 세이브에 들어가는 자료입니다. 바꾼 채 저장하면 남습니다.");
 	if (!g_SeasonLast.empty())
-		Hint(g_SeasonLast.c_str());
+		NlUi::Hint(g_SeasonLast.c_str());
 }
 
 void NlWorld::DrawReligion()
@@ -553,7 +538,7 @@ void NlWorld::DrawReligion()
 	std::lock_guard lock(g_Mutex);
 	if (ImGui::Button("주교 부르기"))
 		Push(WorldAct::BishopSend);
-	Hint("게임의 디버그 함수로 주교를 바로 오게 합니다(교단의 영주 하나가 영지에 나타납니다). 주교가 이미 있으면 부르지 않습니다. 되돌릴 수 없습니다.");
+	NlUi::Hint("게임의 디버그 함수로 주교를 바로 오게 합니다(교단의 영주 하나가 영지에 나타납니다). 주교가 이미 있으면 부르지 않습니다. 되돌릴 수 없습니다.");
 	DrawLast();
 }
 
@@ -562,6 +547,6 @@ std::string NlWorld::Do(NlCore::WorldAct Act)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return "busy";
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	return Remember(Act, DoNow(Act));
 }

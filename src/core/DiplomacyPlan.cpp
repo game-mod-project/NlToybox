@@ -1,5 +1,7 @@
 #include "DiplomacyPlan.hpp"
 
+#include "Text.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -319,14 +321,7 @@ namespace NlCore
 
 	bool GoodFactionWho(const std::string& Who)
 	{
-		if (Who == "all")
-			return true;
-		if (Who.size() != 16)
-			return false;
-		for (const char c : Who)
-			if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
-				return false;
-		return true;
+		return Who == "all" || IsUuid(Who);
 	}
 
 	bool CheckDiplomacy(const DiplomacyCommand& Command, std::string& Why)

@@ -1,5 +1,7 @@
 #include "PeoplePlan.hpp"
 
+#include "Text.hpp"
+
 #include "FamilyPlan.hpp"
 #include "RolePlan.hpp"
 
@@ -281,7 +283,7 @@ namespace NlCore
 			Why = "모르는 장비 묶음입니다";
 		if (Why.empty() && Command.Act == PersonAct::Role && !FindRole(Command.Text))
 			Why = "모르는 역할 프리셋입니다";
-		if (Why.empty() && Command.Act == PersonAct::Conceive && (!GoodUuid(Command.Text) || Command.Text == Command.Who))
+		if (Why.empty() && Command.Act == PersonAct::Conceive && (!IsUuid(Command.Text) || Command.Text == Command.Who))
 			Why = "아버지를 uuid 로 짚습니다 (자기 자신은 안 됩니다)";
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
 			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";

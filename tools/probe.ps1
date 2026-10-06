@@ -53,6 +53,7 @@ try {
     $seenProcess = $false
     while ((Get-Date) -lt $deadline) {
         Start-Sleep -Seconds 2
+        [void](Clear-NlConsoleSelect)       # Aurie 콘솔이 선택 모드면 게임이 켜지다 선다(research/06)
         if (Test-NlGameRunning) { $seenProcess = $true }
         elseif ($seenProcess) { Write-Host "게임 프로세스가 사라졌습니다 ($(Get-Date -Format 'HH:mm:ss'))."; $exited = $true; break }
         $lines = @(if (Test-Path -LiteralPath $log) { Get-Content -LiteralPath $log -ErrorAction SilentlyContinue })

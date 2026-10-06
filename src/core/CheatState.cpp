@@ -20,13 +20,6 @@ namespace NlCore
 			Name = Trim(Text.substr(0, eq));
 			return !Name.empty() && ParseNumber(Trim(Text.substr(eq + 1)), Value) && std::isfinite(Value);
 		}
-
-		// 값 하나를 가리키는 주소인가(뿌리만 있는 주소는 값이 아니다).
-		bool GoodPath(const std::string& Path)
-		{
-			const AskPath parsed = ParseAskPath(Path);
-			return parsed.Error.empty() && !parsed.Steps.empty();
-		}
 	}
 
 	CheatState ParseCheatState(std::istream& In)

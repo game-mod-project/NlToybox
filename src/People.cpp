@@ -3,8 +3,10 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "Ui.hpp"
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/FamilyPlan.hpp"
@@ -150,12 +152,6 @@ namespace
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
 	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
 
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
-
 	// 표의 항목(플레이어의 사람을 조금씩 돌며 쓴다). 바퀴의 판단은 core/PeoplePlan 의 HoldRound 가 한다.
 	std::vector<PersonRow> g_HoldPeople;
 	NlCore::HoldRound g_Hold;
@@ -171,23 +167,23 @@ namespace
 			g_Log(Line);
 	}
 
+	const std::string k_NoText;		// 없는 글을 참조로 돌려줄 때(RValue 가 아니라 정적으로 둬도 된다)
+
 	// 특성의 화면 이름. 없으면 빈 글. 게임을 불러온 뒤에는 힌트의 제목으로 채운 것도 든다(g_TraitTexts).
 	const std::string& TraitCaption(const std::string& Name)
 	{
-		static const std::string none;
 		const auto text = g_TraitTexts.find(Name);
 		if (text != g_TraitTexts.end())
 			return text->second.Caption;
 		const auto found = g_TraitCaptions.find(Name);
-		return found != g_TraitCaptions.end() ? found->second : none;
+		return found != g_TraitCaptions.end() ? found->second : k_NoText;
 	}
 
 	// 특성의 설명. 없으면 빈 글.
 	const std::string& TraitHint(const std::string& Name)
 	{
-		static const std::string none;
 		const auto text = g_TraitTexts.find(Name);
-		return text != g_TraitTexts.end() ? text->second.Hint : none;
+		return text != g_TraitTexts.end() ? text->second.Hint : k_NoText;
 	}
 
 	// 그 특성의 명칭이 힌트의 제목에서 온 것인가(이름 줄이 없는 특성).
@@ -688,11 +684,6 @@ namespace
 		return std::binary_search(g_Now.TraitNames.begin(), g_Now.TraitNames.end(), Name);
 	}
 
-	bool Has(const std::vector<std::string>& List, const std::string& Name)
-	{
-		return std::find(List.begin(), List.end(), Name) != List.end();
-	}
-
 	// 수 하나를 쓴다(있는 자리에만. 쓴 뒤 다시 읽어 확인한다).
 	bool WriteAt(const std::string& Path, double Value, std::string& Note)
 	{
@@ -743,7 +734,7 @@ namespace
 		}
 		std::vector<std::string> traits;
 		ReadTraits(Soul, traits);
-		if (!Has(traits, Name))
+		if (!NlCore::Has(traits, Name))
 		{
 			Note = "게임이 붙이지 않았습니다";		// 까닭은 재지 않았다(재능 71개를 붙일 때는 거부가 없었다. research/21)
 			return false;
@@ -833,7 +824,7 @@ namespace
 			there = StillThere(Row, Soul);
 			std::vector<std::string> after;
 			const bool read = there && ReadTraits(Soul, after);
-			if (called && read && !Has(after, step.Name))
+			if (called && read && !NlCore::Has(after, step.Name))
 				removed++;
 			else
 				fail(what, !there ? "그 자리의 사람이 바뀌었습니다" : !called ? note : !read ? "그 사람의 특성을 읽지 못했습니다" : "게임이 떼지 않았습니다");
@@ -940,7 +931,7 @@ namespace
 			ReadTraits(soul_value, traits);
 			size_t removed = 0;
 			for (const char* wound : NlCore::WoundTraits())
-				if (Has(traits, wound) && Detach(Row, wound, Note))
+				if (NlCore::Has(traits, wound) && Detach(Row, wound, Note))
 					removed++;
 			Note = removed ? "부상 " + std::to_string(removed) + "개를 뗐습니다" : "";
 			return true;
@@ -949,7 +940,7 @@ namespace
 		{
 			std::vector<std::string> traits;
 			ReadTraits(soul_value, traits);
-			if (Has(traits, C.Text))
+			if (NlCore::Has(traits, C.Text))
 			{
 				Note = "이미 있는 특성입니다";
 				return true;
@@ -1040,7 +1031,7 @@ namespace
 				Note = "나이를 18 로 맞췄지만 아이 특성이 남아 있습니다";
 				return false;
 			}
-			Note = Has(traits, "untitled_lord") ? "어른이 됐습니다. 게임이 소영주(untitled_lord)로 만들었습니다: 진영이 바뀌어 영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다)"
+			Note = NlCore::Has(traits, "untitled_lord") ? "어른이 됐습니다. 게임이 소영주(untitled_lord)로 만들었습니다: 진영이 바뀌어 영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다)"
 				: "아이 특성이 없어졌습니다 (소영주의 특성은 보이지 않습니다)";
 			return true;
 		}
@@ -1153,7 +1144,7 @@ namespace
 		{
 			std::vector<std::string> traits;
 			ReadTraits(soul_value, traits);
-			if (!Has(traits, C.Text))
+			if (!NlCore::Has(traits, C.Text))
 			{
 				Note = "없는 특성입니다";
 				return false;
@@ -1824,17 +1815,10 @@ namespace
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다(긴 안내 글이 창 밖으로 잘리지 않게).
-	void Hint(const std::string& Text)
-	{
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", Text.c_str());
-		ImGui::PopTextWrapPos();
-	}
-
 	void DrawLast()
 	{
 		if (!g_Now.Last.empty())
-			Hint(g_Now.Last);
+			NlUi::Hint(g_Now.Last);
 	}
 
 	// "마우스 자리에 소환" 단추들. 누르면 틱이 디버그 소환기를 부른다(그리는 쪽은 청만 쌓는다).
@@ -1885,9 +1869,9 @@ namespace
 			Push(PersonAct::Role, Row.Uuid, -1, 0, role.Id);
 		ImGui::EndDisabled();
 		// 요약은 제 줄에 둔다(단추 옆에 두자 기본 너비의 창에서 오른쪽이 잘렸다. 0.24.0 의 화면에서 봤다).
-		Hint(NlCore::RolePreview(todo));
+		NlUi::Hint(NlCore::RolePreview(todo));
 		if (g_RoleLastFor == Row.Uuid && !g_RoleLast.empty())
-			Hint("마지막 결과 - " + g_RoleLast);
+			NlUi::Hint("마지막 결과 - " + g_RoleLast);
 
 		// 능력치: 프리셋의 것을 차례대로. 지금 값이 더 높으면 그대로 둔다.
 		// 한 능력치의 글("… 4 -> 20")이 줄 사이에서 갈리지 않게 조각마다 따로 그리고, 다음 조각이 들어갈 때만 옆에 둔다.
@@ -1925,7 +1909,7 @@ namespace
 		bool owned = false;
 		for (const char* name : role.Remove)
 		{
-			if (!Has(One.Traits, name))
+			if (!NlCore::Has(One.Traits, name))
 			{
 				absent += (absent.empty() ? "" : ", ") + TraitLabel(name);
 				continue;
@@ -1937,20 +1921,20 @@ namespace
 			if (note[0])
 			{
 				ImGui::Indent();
-				Hint(note);		// 제 줄에, 창의 너비에서 줄을 바꾼다
+				NlUi::Hint(note);		// 제 줄에, 창의 너비에서 줄을 바꾼다
 				ImGui::Unindent();
 			}
 		}
 		if (!owned)
 			ImGui::TextDisabled("뗄 것이 없습니다");
 		if (!absent.empty())
-			Hint("이 사람에게 없는 것: " + absent);
+			NlUi::Hint("이 사람에게 없는 것: " + absent);
 		ImGui::Unindent();
 		ImGui::TextUnformatted("붙일 특성:");
 		ImGui::Indent();
 		for (const char* name : role.Add)
 		{
-			if (Has(One.Traits, name))
+			if (NlCore::Has(One.Traits, name))
 				ImGui::TextDisabled("있음    %s", TraitLabel(name).c_str());
 			else if (!KnownTrait(name))
 				ImGui::TextDisabled("게임에 없음    %s", name);
@@ -1959,7 +1943,7 @@ namespace
 			TraitTooltip(name);
 		}
 		ImGui::Unindent();
-		Hint("능력치는 올리기만 합니다(이미 더 높은 것과 프리셋에 없는 것은 그대로 둡니다). 특성은 게임의 설명 글을 읽고 골랐고, 재능마다의 효과를 플레이에서 재지는 않았습니다. "
+		NlUi::Hint("능력치는 올리기만 합니다(이미 더 높은 것과 프리셋에 없는 것은 그대로 둡니다). 특성은 게임의 설명 글을 읽고 골랐고, 재능마다의 효과를 플레이에서 재지는 않았습니다. "
 			"한 번에 되돌리는 단추는 없습니다: 붙인 특성은 아래 '특성'에서 하나씩 떼고, 능력치는 아래 '능력치'에서 내립니다.");
 	}
 
@@ -1968,12 +1952,12 @@ namespace
 	{
 		if (!NlCore::IsPlayersLord(Row))
 		{
-			Hint("임신·성장의 단추는 플레이어의 영주에게만 둡니다 (주민·손님·다른 진영에게는 게임의 함수를 불러 본 적이 없습니다).");
+			NlUi::Hint("임신·성장의 단추는 플레이어의 영주에게만 둡니다 (주민·손님·다른 진영에게는 게임의 함수를 불러 본 적이 없습니다).");
 			return;
 		}
 		const int stage = NlCore::PregnancyStage(One.Traits);
 		const bool kid = NlCore::IsKid(One.Traits);
-		const bool forbid = Has(One.Traits, NlCore::k_PregnantForbid);
+		const bool forbid = NlCore::Has(One.Traits, NlCore::k_PregnantForbid);
 		const char* gender = One.Gender == NlCore::k_Female ? "여성" : One.Gender == NlCore::k_Male ? "남성" : "성별을 읽지 못했습니다";
 		if (stage > 0)
 			ImGui::Text("%s, 임신 %d/3기", gender, stage);
@@ -2019,7 +2003,7 @@ namespace
 				Push(PersonAct::Conceive, Row.Uuid, -1, 0, father->Uuid);
 			ImGui::EndDisabled();
 		}
-		Hint("'임신 다음 단계'와 '바로 출산'은 게임의 디버그 함수를 부릅니다(1/3기, 2/3기, 3/3기, 출산). 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다"
+		NlUi::Hint("'임신 다음 단계'와 '바로 출산'은 게임의 디버그 함수를 부릅니다(1/3기, 2/3기, 3/3기, 출산). 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다"
 			"('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다). '임신 시키기'는 아버지를 적고 임신 1/3기를 붙입니다. "
 			"'어른으로'는 나이를 18 로 맞춥니다: 게임이 아이를 소영주로 만들어 영주 목록에서 빠집니다. 되돌리는 단추는 없습니다.");
 	}
@@ -2062,7 +2046,7 @@ namespace
 		ImGui::SameLine();
 		if (ImGui::Button("능력치 모두 20"))
 			Push(PersonAct::SkillsMax, who);
-		Hint("기분은 게임이 생각의 합으로 다시 셈합니다. '행복하게'는 게임의 디버그용 생각(+100, 하루)을 붙입니다. 능력치는 0~20, 나이는 1~120 입니다.");
+		NlUi::Hint("기분은 게임이 생각의 합으로 다시 셈합니다. '행복하게'는 게임의 디버그용 생각(+100, 하루)을 붙입니다. 능력치는 0~20, 나이는 1~120 입니다.");
 
 		// 짧은 것을 위에 둔다(역할 프리셋의 미리 보기가 길어 그 아래의 것은 스크롤해야 보였다).
 		ImGui::SeparatorText("임신·성장");
@@ -2163,7 +2147,7 @@ namespace
 					if (!NlCore::TraitMatches(g_TraitFilter, name, caption) && !NlCore::TraitMatches(g_TraitFilter, "", about))
 						continue;
 					shown++;
-					if (Has(one.Traits, name))
+					if (NlCore::Has(one.Traits, name))
 						ImGui::TextDisabled("있음");
 					else
 					{
@@ -2189,7 +2173,7 @@ namespace
 					if (!about.empty())
 					{
 						ImGui::Indent();
-						Hint(about);		// 칸의 너비에서 줄을 바꾼다
+						NlUi::Hint(about);		// 칸의 너비에서 줄을 바꾼다
 						ImGui::Unindent();
 					}
 				}
@@ -2199,7 +2183,7 @@ namespace
 			ImGui::EndChild();
 			ImGui::TextDisabled("%d개 (게임의 특성 %d개)", shown, static_cast<int>(g_Now.TraitNames.size()));
 		}
-		Hint(("명칭과 설명은 게임의 한국어 글입니다. 한국어가 비어 있는 것은 영어로 보입니다(" + g_TraitTextNote + ". " + g_TraitHintNote + "). "
+		NlUi::Hint(("명칭과 설명은 게임의 한국어 글입니다. 한국어가 비어 있는 것은 영어로 보입니다(" + g_TraitTextNote + ". " + g_TraitHintNote + "). "
 			"설명의 '(값)'은 게임의 글에 {…} 로 적혀 있는 자리입니다(게임이 화면에서 채워 넣는 자리로 보입니다). "
 			"이름의 줄이 없는 특성은 설명의 제목을 흐린 글씨의 명칭으로 보이고(여러 특성이 한 설명을 함께 쓰면 같은 제목이 됩니다), 그것도 없으면 게임의 이름만 보입니다. "
 			"종과 죽음의 특성(human, dead 같은 것)은 붙이거나 뗄 수 없습니다.").c_str());
@@ -2232,7 +2216,7 @@ void NlPeople::GameTick(double Now, bool Active)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)		// 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어왔다
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 
 	HoldTick(Now);
 	BattleTick(Now);
@@ -2341,7 +2325,7 @@ void NlPeople::DrawKnowledge()
 	if (row && !(NlCore::IsPlayers(*row) && row->Character))
 		row = nullptr;							// 다른 패널에서 주민이나 손님을 골라 둔 채 왔다
 	ImGui::BeginChild("one", ImVec2(0, 0));
-	Hint("지식은 영주가 가집니다. 준 지식은 되돌릴 수 없고 세이브에 남습니다. 교과서 지식은 능력치도 올리고 재능과 별명이 붙을 수 있습니다. "
+	NlUi::Hint("지식은 영주가 가집니다. 준 지식은 되돌릴 수 없고 세이브에 남습니다. 교과서 지식은 능력치도 올리고 재능과 별명이 붙을 수 있습니다. "
 		"모든 지식을 가진 영주가 있으면 지식으로 잠겨 있던 건물(창고, 사원, 무기고에서 봤습니다)을 지을 수 있습니다.");
 	if (!row)
 		ImGui::TextDisabled("왼쪽에서 영주를 고르세요.");
@@ -2424,10 +2408,10 @@ void NlPeople::DrawArmy()
 		if (ImGui::Button(loadout.Label))
 			Push(PersonAct::Equip, "people", -1, 0, loadout.Key);
 	}
-	Hint("플레이어의 병사(고용한 병사와 기사도)마다 게임의 '선호 장비'를 그 묶음으로 바꾸고, 그 갑옷·무기·방패 가운데 없는 것을 소지품에 하나씩 넣습니다(넣으면 바로 착용됩니다). "
+	NlUi::Hint("플레이어의 병사(고용한 병사와 기사도)마다 게임의 '선호 장비'를 그 묶음으로 바꾸고, 그 갑옷·무기·방패 가운데 없는 것을 소지품에 하나씩 넣습니다(넣으면 바로 착용됩니다). "
 		"'아무 장비나'는 선호만 바꾸고 장비는 넣지 않습니다. 앞의 선호 장비는 남기지 않으므로 되돌릴 수 없습니다. "
 		"게임은 선호 장비에 없는 장비를 무기고로 돌려보내는 것으로 보입니다. 바꾼 선호 장비가 여덟 시간 넘게 남는 것까지 봤습니다.");
-	Hint("+1, +5, +10 은 게임의 디버그 함수로 병사를 만듭니다: 지도 가장자리에 나타나 마을로 걸어오고 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
+	NlUi::Hint("+1, +5, +10 은 게임의 디버그 함수로 병사를 만듭니다: 지도 가장자리에 나타나 마을로 걸어오고 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
 		"'마우스 자리에 소환'은 게임의 디버그 소환기를 부릅니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다(병사는 경갑과 창). "
 		"병영의 정원과 임금은 따지지 않습니다(재지 않았습니다). 되돌릴 수 없고, 저장하면 세이브에 남을 것으로 보입니다.");
 	DrawLast();
@@ -2438,7 +2422,7 @@ std::vector<std::string> NlPeople::SpawnHere(NlCore::SpawnKind Kind)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	g_Now.Last = SpawnHereNow(Kind);
 	return { g_Now.Last };
 }
@@ -2448,7 +2432,7 @@ std::vector<std::string> NlPeople::SpawnSoldiers(double Count)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	g_Now.Last = SpawnSoldiersNow(Count);
 	return { g_Now.Last };
 }
@@ -2476,7 +2460,7 @@ void NlPeople::DrawItems()
 				Push(PersonAct::MoneyAdd, who, -1, amount);
 			ImGui::PopID();
 		}
-		Hint("소지품과 소지금은 게임의 함수로 바꿉니다(게임의 인물 창에 보입니다). 세이브에 남습니다. 영지 창고의 자원은 '경제'에 있습니다. "
+		NlUi::Hint("소지품과 소지금은 게임의 함수로 바꿉니다(게임의 인물 창에 보입니다). 세이브에 남습니다. 영지 창고의 자원은 '경제'에 있습니다. "
 			"갑옷과 무기는 수만 바뀌고 착용은 바뀌지 않습니다. 착용 중인 것은 뺄 수 없습니다.");
 
 		ImGui::SeparatorText("소지품");
@@ -2528,7 +2512,7 @@ void NlPeople::DrawLords()
 	ImGui::SameLine();
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "lords");
-	Hint("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
+	NlUi::Hint("손님과 다른 진영의 영주에게는 가지 않습니다. 한 사람씩 고치려면 '인물'에서 고릅니다.");
 	ImGui::Checkbox("되돌릴 수 없다는 것을 압니다##birth", &g_BulkBirthArmed);
 	ImGui::SameLine();
 	ImGui::BeginDisabled(!g_BulkBirthArmed);
@@ -2538,9 +2522,9 @@ void NlPeople::DrawLords()
 		g_BulkBirthArmed = false;
 	}
 	ImGui::EndDisabled();
-	Hint("임신한 영주마다 게임의 다음 단계 함수를 출산까지 부릅니다. 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다).");
+	NlUi::Hint("임신한 영주마다 게임의 다음 단계 함수를 출산까지 부릅니다. 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다).");
 	DrawSpawnHere({ NlCore::SpawnKind::Lord });
-	Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
+	NlUi::Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
 	DrawLast();
 }
 
@@ -2558,9 +2542,9 @@ void NlPeople::DrawPeople()
 	ImGui::SameLine();
 	if (ImGui::Button("치료"))
 		Push(PersonAct::Cure, "people");
-	Hint("계속 유지하려면 위의 항목을 켭니다. 인구는 '날마다 추가 이주민'에 수를 넣으면 다음 이주 때(저녁) 그만큼 더 옵니다.");
+	NlUi::Hint("계속 유지하려면 위의 항목을 켭니다. 인구는 '날마다 추가 이주민'에 수를 넣으면 다음 이주 때(저녁) 그만큼 더 옵니다.");
 	DrawSpawnHere({ NlCore::SpawnKind::Peasant, NlCore::SpawnKind::Slave });
-	Hint("게임의 디버그 소환기로 플레이어의 주민이나 노예 하나를 바로 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 집과 일자리는 따지지 않습니다.");
+	NlUi::Hint("게임의 디버그 소환기로 플레이어의 주민이나 노예 하나를 바로 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 집과 일자리는 따지지 않습니다.");
 	DrawLast();
 }
 
@@ -2569,7 +2553,7 @@ std::vector<std::string> NlPeople::Do(const NlCore::PersonCommand& Command)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	Run(Command);
 	return { g_Now.Last };
 }
@@ -2579,7 +2563,7 @@ std::vector<std::string> NlPeople::List(bool All)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	std::vector<std::string> lines;
@@ -2596,7 +2580,7 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	const PersonRow* row = FindRow(Uuid);
@@ -2629,7 +2613,7 @@ std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	// 인물 패널의 찾기도 그 글로 맞춘다(칸보다 긴 글은 글자의 중간에서 자르지 않게 통째로 버린다).
@@ -2688,7 +2672,7 @@ NlPeople::RowsResult NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::st
 		Why = "busy";
 		return RowsResult::Busy;
 	}
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 	{
 		Why = g_Now.Why;

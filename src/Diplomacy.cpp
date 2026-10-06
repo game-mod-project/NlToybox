@@ -2,7 +2,9 @@
 
 #include "Access.hpp"
 #include "Game.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -72,12 +74,6 @@ namespace
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 	int g_SideChoice = 0;				// 창의 선택: 0 양쪽, 1 그쪽이 우리를, 2 우리가 그쪽을
 
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
-
 	void Log(const std::string& Line)
 	{
 		if (g_Log)
@@ -85,16 +81,6 @@ namespace
 	}
 
 	// ---- 게임 스레드 ----
-
-	bool ReadText(const std::string& Path, std::string& Out)
-	{
-		RValue value;		// 이 함수 안에서만 든다
-		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(Path), value, why) || !value.IsString())
-			return false;
-		Out = value.ToString();
-		return true;
-	}
 
 	std::string FactionPath(int Index)
 	{
@@ -149,7 +135,7 @@ namespace
 		RValue list;		// 이 함수 안에서만 든다
 		Holder kind = Holder::None;
 		std::string why;
-		if (!ReadText(std::string(k_Player) + ".__uuid", player) || !NlCore::GoodFactionWho(player) || player == "all")
+		if (!NlAccess::ReadText(std::string(k_Player) + ".__uuid", player) || !NlCore::GoodFactionWho(player) || player == "all")
 		{
 			g_Why = "플레이어의 세력을 읽지 못했습니다";
 			return false;
@@ -323,7 +309,7 @@ namespace
 	{
 		const Kingdom* kingdom = FindKingdom(It.Plan.Uuid);
 		std::string uuid;
-		if (!kingdom || !ReadText(FactionPath(kingdom->Index) + ".__uuid", uuid) || uuid != It.Plan.Uuid)
+		if (!kingdom || !NlAccess::ReadText(FactionPath(kingdom->Index) + ".__uuid", uuid) || uuid != It.Plan.Uuid)
 		{
 			Why = "그 왕국을 찾지 못했습니다";
 			g_Ready = false;		// 자리가 밀렸다. 다음 틱이 다시 모은다(패널이 닫혀 있어도)
@@ -475,13 +461,6 @@ namespace
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
-	void Hint(const char* Text)
-	{
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", Text);
-		ImGui::PopTextWrapPos();
-	}
-
 	char SideChoice()
 	{
 		return g_SideChoice == 1 ? 't' : g_SideChoice == 2 ? 'u' : 'b';
@@ -531,7 +510,7 @@ void NlDiplomacy::GameTick(double Now, bool Active)
 	const bool read = Active && Now >= g_NextRead;
 	if (g_Busy || (!work && !read))
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (read || !g_Ready)
 	{
 		g_NextRead = Now + 1;
@@ -568,7 +547,7 @@ std::vector<std::string> NlDiplomacy::Do(const DiplomacyCommand& Command)
 		return { why };
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Why };
 
@@ -603,7 +582,7 @@ std::vector<std::string> NlDiplomacy::List()
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Why };
 	std::vector<std::string> lines;
@@ -647,10 +626,10 @@ void NlDiplomacy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 왕국과 중립으로"))
 		Push("all", DiplomacyGoal::Neutral, 0);
-	Hint("게임의 디버그용 평판을 왕에게 붙여 관계를 움직이고, 게임의 협정 함수로 협정을 맺습니다. 떼거나 푸는 단추는 없습니다.");
+	NlUi::Hint("게임의 디버그용 평판을 왕에게 붙여 관계를 움직이고, 게임의 협정 함수로 협정을 맺습니다. 떼거나 푸는 단추는 없습니다.");
 	// 긴 설명은 접어 둔다(펼쳐 두면 왕국의 표가 창 아래로 밀린다).
 	if (ImGui::CollapsingHeader("설명"))
-		Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
+		NlUi::Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
 			"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한 번에 한쪽 40개까지. 적대는 철천지원수까지 내립니다). '+'·'-'는 고른 쪽마다 평판 하나를 붙입니다. "
 			"우호가 되기까지 드는 개수는 왕국마다 달랐습니다(1개에서 15개). 붙을 때마다 그 왕의 평판의 수를 세어 붙었는지 봅니다. 우리 왕에게서는 같은 평판이 50개까지만 겹쳤습니다: "
 			"그 뒤로 붙지 않으면 멈추고 그렇게 적습니다. 세어서 확인하지 못한 것은 함수가 돌려준 값으로만 봤다고 적습니다. "
@@ -658,14 +637,14 @@ void NlDiplomacy::Draw()
 			"'평화'·'방어'·'교역'은 게임의 협정 함수로 그 왕국과 협정(평화 협정, 방어 동맹, 교역 협정)을 바로 맺습니다. 이미 맺은 협정은 단추가 아니라 글자로 보입니다. "
 			"방어 동맹을 맺어도 관계가 '동맹'이 되지는 않습니다. 푸는 단추는 없습니다. 게임이 그 협정을 어떻게 따르는지(기한, 침공)는 확인 전입니다.");
 	if (!g_Refused.empty())
-		Hint(g_Refused.c_str());
+		NlUi::Hint(g_Refused.c_str());
 	if (!g_Tally.Empty())
 	{
 		ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
 		// 실패한 줄이 앞에 온다(core 의 DiplomacyTally). 창은 앞의 몇 줄만 보인다.
 		const std::vector<std::string>& lines = g_Tally.Lines();
 		for (size_t i = 0; i < lines.size() && i < k_ShownLines; i++)
-			Hint(lines[i].c_str());
+			NlUi::Hint(lines[i].c_str());
 		if (lines.size() > k_ShownLines)
 			ImGui::TextDisabled("(그 밖에 %d줄. 안 된 것은 위에 먼저 적혀 있습니다)", static_cast<int>(lines.size() - k_ShownLines));
 	}

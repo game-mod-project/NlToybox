@@ -228,25 +228,22 @@ namespace
 			Say("  : " + (global ? why : std::string("no global instance")));
 			return;
 		}
-		// 정식 이름으로만 부른다. 접두 없는 이름은 다른 루틴을 가리킨다(research/07).
-		const std::string name = NlCore::ScriptRoutineName(C.Target);
+		// 정식 이름으로만 부른다. 접두 없는 이름은 다른 루틴을 가리킨다(research/07). 찾기와 부르기는 Game.cpp 가 한다.
+		std::string name;
 		int index = -1;
-		if (!name.empty())
-			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-		if (index < 100000 || index >= 500000)
+		if (!NlGame::FindScript(C.Target, name, index, why))
 		{
-			Say("  : no such script: " + C.Target);
+			Say("  : " + why);
 			return;
 		}
 
 		Say("  calling " + name + " with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
 		Log("remote call " + name + " (" + std::to_string(args.size()) + " arguments)");
 		RValue result;
-		const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, name, global, global, args);
-		if (AurieSuccess(status))
+		if (AurieSuccess(NlGame::CallScriptStatus(name, args, result, why)))
 			SayResult(result);
 		else
-			Say(std::string("  : ") + AurieStatusToString(status));
+			Say("  : " + why);
 	}
 
 	// 메서드를 부른다. 묶인 곳이 없는 메서드(생성자의 정적 메서드)는 주소의 부모에 묶어 부른다(NlAccess::CallMethod).

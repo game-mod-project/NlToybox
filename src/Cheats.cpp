@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Recorder.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Hooks.hpp"
 #include "core/Presets.hpp"
@@ -252,11 +253,11 @@ namespace
 
 	void DrawNumber(Item& It)
 	{
-		double value = It.On ? It.Number : It.Current;
+		double value = It.On ? It.Number : It.Current, typed = 0;
 		ImGui::SetNextItemWidth(130);
-		if (ImGui::InputDouble("##v", &value, 0, 0, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue))
+		if (NlUi::InputNumber("##v", It.Def->Id, value, "%.6g", typed))		// 칸을 떠날 때 넣는다(Enter 로만 받던 것을 고쳤다. research/18 의 끝)
 		{
-			It.Number = std::clamp(value, It.Def->Min, It.Def->Max);
+			It.Number = std::clamp(typed, It.Def->Min, It.Def->Max);
 			It.On = true;
 			It.Restore = false;
 			g_Changed = g_Dirty = true;
@@ -279,7 +280,7 @@ namespace
 			ImGui::TextDisabled("게임을 시작하면 보입니다");
 	}
 
-	// 배율 항목(HookScale, CustomScale): 체크로 켜고 끄고, 수는 Enter 로 넣는다. 1 이 원래 값이다.
+	// 배율 항목(HookScale, CustomScale): 체크로 켜고 끄고, 수는 칸을 떠날 때 넣는다. 1 이 원래 값이다.
 	void DrawScale(Item& It)
 	{
 		bool on = It.On;
@@ -297,11 +298,11 @@ namespace
 				TurnOff(It);
 		}
 		ImGui::SameLine();
-		double value = It.Number > 0 ? It.Number : It.Def->On;
+		double value = It.Number > 0 ? It.Number : It.Def->On, typed = 0;
 		ImGui::SetNextItemWidth(90);
-		if (ImGui::InputDouble("##v", &value, 0, 0, "%.4g", ImGuiInputTextFlags_EnterReturnsTrue))
+		if (NlUi::InputNumber("##v", It.Def->Id, value, "%.4g", typed))		// 칸을 떠날 때 넣는다
 		{
-			It.Number = std::clamp(value, It.Def->Min, It.Def->Max);
+			It.Number = std::clamp(typed, It.Def->Min, It.Def->Max);
 			It.On = true;
 			It.Restore = false;
 			g_Changed = g_Dirty = true;

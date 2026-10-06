@@ -4,6 +4,20 @@
 
 #include <cmath>
 
+const std::vector<NlCore::KnobDef>& NlCore::KnobDefs()
+{
+	static const std::vector<KnobDef> defs = {
+		{ "building_cost", "건물 건설 비용", "건물을 지을 때 드는 자원의 양", KnobTarget::BuildingCost, nullptr },
+		{ "start_resources", "시작 자원", "새 게임을 시작할 때 주어지는 자원(나무, 당근, 약).\n새 게임을 시작하기 전에 정한다", KnobTarget::StartResources, nullptr },
+		{ "book_exp", "교본의 능력치 경험", "교본을 읽어 얻는 능력치 경험", KnobTarget::BookExp, nullptr },
+		{ "bribe_cost", "뇌물 비용", nullptr, KnobTarget::GameplayVar, "bribe_give_rings" },
+		{ "free_lord_stay", "자유 영주 체류 기간", nullptr, KnobTarget::GameplayVar, "free_lord_stay_duration" },
+		{ "church_capacity", "교회 수용 인원", nullptr, KnobTarget::GameplayVar, "church_max_capacity" },
+		{ "tavern_capacity", "선술집 수용 인원", nullptr, KnobTarget::GameplayVar, "tavern_max_capacity" },
+	};
+	return defs;
+}
+
 double NlCore::Scale(double Base, double Factor)
 {
 	const double value = Base * Factor;

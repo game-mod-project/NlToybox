@@ -29,6 +29,9 @@ namespace NlCore
 
 	AskPath ParseAskPath(const std::string& Text);
 
+	// 읽히는 주소인가. NeedSteps 면 뿌리만 있는 주소(그릇이지 값이 아니다)는 거짓이다.
+	bool GoodPath(const std::string& Text, bool NeedSteps = true);
+
 	// 단계 하나를 경로에 붙일 글로. ParseAskPath 가 다시 읽을 수 있다.
 	std::string FormatStep(const PathStep& Step);
 

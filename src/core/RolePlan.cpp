@@ -1,6 +1,7 @@
 #include "RolePlan.hpp"
 
 #include "PeoplePlan.hpp"
+#include "Text.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,11 +17,6 @@ namespace NlCore
 				if (std::string(skills[i].Key) == Key)
 					return static_cast<int>(i);
 			return -1;
-		}
-
-		bool Has(const std::vector<std::string>& List, const char* Name)
-		{
-			return std::find(List.begin(), List.end(), Name) != List.end();
 		}
 	}
 

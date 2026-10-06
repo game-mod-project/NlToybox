@@ -66,18 +66,6 @@ namespace NlCore
 	// 상태 파일에 적을 수 있는 열쇠인가(자원의 열쇠나 "gold": 소문자·숫자·밑줄, 40자까지).
 	bool GoodFloorKey(const std::string& Key);
 
-	// 최소값 칸의 편집. 치는 동안의 수는 들고만 있다가 칸을 떠날 때(Enter, Tab, 다른 곳을 누름) 한 번 넣는다.
-	// Dear ImGui 의 수 입력 칸(InputScalar)은 "Enter 를 눌렀을 때만 참"(EnterReturnsTrue)을 지원하지 않는다(그 함수의 단언. 편집을 마친 것은
-	// IsItemDeactivatedAfterEdit 로 보라고 적혀 있다). 그 플래그에 기대던 칸은 Enter 말고는 수를 넣을 길이 없었고, 칸을 떠나면 친 수가 버려졌다.
-	struct FloorEdit
-	{
-		bool Has = false;		// 치고 있는 수가 있다
-		double Value = 0;
-	};
-	// 프레임마다 칸을 그린 뒤에 부른다. Typed: 이번 프레임에 칸의 수가 바뀌었다(그 수가 Value). Left: 편집한 뒤 칸을 떠났다. Active: 칸이 아직 잡혀 있다.
-	// 참이면 Out 을 넣는다(한 번만). 치지 않고 떠났으면 넣지 않고, 잡혀 있지도 떠나지도 않았는데 남은 수는 버린다.
-	bool StepFloorEdit(FloorEdit& Edit, bool Typed, double Value, bool Left, bool Active, double& Out);
-
 	// 바닥에 못 미치는 것들의 변화량(언제나 양의 정수). 바닥과 같거나 많은 것은 건드리지 않는다(줄이지 않는다).
 	// Gold: 지금 금화. Free: 자원 번호 → 예약되지 않은 수(게임의 화면이 보이는 수). Allowed: 건드려도 되는 자원 번호들.
 	// 읽은 수가 수가 아니면 그것은 하지 않는다. 같은 자원이 두 번 있으면 앞의 것만 본다. 채울 양이 한도(10억)를 넘으면 하지 않는다.

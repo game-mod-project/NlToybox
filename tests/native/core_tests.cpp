@@ -12,9 +12,11 @@
 #include "core/CrimePlan.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/Guard.hpp"
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/Localization.hpp"
+#include "core/NumberEdit.hpp"
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
 #include "core/Presets.hpp"
@@ -302,6 +304,18 @@ int main(int argc, char** argv)
 		CHECK(ParseSettings(again) == values);
 	});
 
+	Test("GoodPath 는 읽히는 주소인지, 값 하나를 가리키는지 본다", [] {
+		// 치트 상태 파일·탐색기·원격 명령이 같은 판정을 따로 두고 있었다(2026-10-07 리뷰). 뿌리만 있는 주소는 그릇이지 값이 아니다.
+		CHECK(GoodPath("global.a.b"));
+		CHECK(GoodPath("inst:o_debug.is_x"));
+		CHECK(!GoodPath("inst:o_debug"));				// 뿌리만: 값이 아니다
+		CHECK(GoodPath("inst:o_debug", false));			// 뿌리만이어도 된다(list, tree)
+		CHECK(!GoodPath("nonsense"));
+		CHECK(!GoodPath("nonsense", false));
+		CHECK(!GoodPath(""));
+		CHECK(!GoodPath("", false));
+	});
+
 	Test("묻는 경로: 뿌리와 단계를 읽는다", [] {
 		const AskPath g = ParseAskPath("global.a.b[3].c");
 		CHECK(g.Error.empty() && g.Root == "global" && g.Steps.size() == 4);
@@ -398,6 +412,48 @@ int main(int argc, char** argv)
 		CHECK_STR(ScriptRoutineName("gml_Script_"), "");
 		CHECK_STR(ScriptRoutineName(""), "");
 		CHECK_STR(ScriptRoutineName("a b"), "");
+	});
+
+	Test("Has 는 글의 목록에 그 글이 있는지 본다", [] {
+		// 특성의 목록에 이름이 있는지 보는 데 쓴다(가족·역할·인물이 같은 것을 따로 두고 있었다. 2026-10-07 리뷰).
+		const std::vector<std::string> traits = { "beauty_pretty", "coward", "pregnant_st1" };
+		CHECK(Has(traits, "coward"));
+		CHECK(Has(traits, std::string("pregnant_st1")));
+		CHECK(!Has(traits, "cowar"));
+		CHECK(!Has(traits, ""));
+		CHECK(!Has(std::vector<std::string>(), "coward"));
+	});
+
+	Test("IsUuid 는 소문자 16진수 열여섯 자만 받는다", [] {
+		// 게임의 __soul.__uuid 와 세력의 uuid 가 그 꼴이다(외교·궁정·가족이 같은 검사를 따로 두고 있었다).
+		CHECK(IsUuid("0123456789abcdef"));
+		CHECK(!IsUuid("0123456789ABCDEF"));		// 대문자
+		CHECK(!IsUuid("0123456789abcde"));		// 열다섯 자
+		CHECK(!IsUuid("0123456789abcdef0"));		// 열일곱 자
+		CHECK(!IsUuid("0123456789abcdeg"));		// 16진수가 아닌 글자
+		CHECK(!IsUuid(""));
+		CHECK(!IsUuid("all"));
+	});
+
+	Test("QueueFullText 는 창의 명령 큐가 가득 찼을 때 결과 줄에 적을 글이다", [] {
+		// 범죄·월드의 큐가 넘치면 아무 말 없이 버렸다(2026-10-07 리뷰 R3). 넘친 것을 사용자가 알게 한다.
+		CHECK_STR(QueueFullText(8), "쌓인 명령이 8개를 넘어 받지 않았습니다. 잠시 뒤에 다시 누르세요");
+		CHECK_STR(QueueFullText(4), "쌓인 명령이 4개를 넘어 받지 않았습니다. 잠시 뒤에 다시 누르세요");
+	});
+
+	Test("ScopedFlag 는 사는 동안 깃발을 세우고 죽으면 내린다", [] {
+		// 재진입 가드: 틱이 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다(패널 다섯이 같은 구조체를 따로 두고 있었다).
+		bool busy = false;
+		{
+			const ScopedFlag guard(busy);
+			CHECK(busy);
+			{
+				const ScopedFlag inner(busy);		// 겹쳐도 사는 동안은 참
+				CHECK(busy);
+			}
+			CHECK(!busy);		// 안쪽이 죽으면 내린다(겹쳐 쓰지 않는다: 바깥은 g_Busy 를 보고 들어오지 않는다)
+		}
+		CHECK(!busy);
 	});
 
 	Test("경제: 자원의 이름과 갈래의 이름", [] {
@@ -1035,6 +1091,20 @@ int main(int argc, char** argv)
 		}
 		CHECK(HasKnobs(Area::Build) && HasKnobs(Area::Knowledge) && HasKnobs(Area::Lord) && !HasKnobs(Area::Explorer) && !HasKnobs(Area::Time) && !HasKnobs(Area::Army));
 		CHECK(KnobArea("no_such_knob") == Area::Explorer);		// 모르는 이름: 어느 영역의 패널에도 그리지 않는다(탐색기에는 배율이 없다)
+	});
+
+	Test("배율 7개의 정의(KnobDefs)는 그리는 자리(KnobPlaces)와 같은 Id 집합이다", [] {
+		// Tweaks 가 쓰는 정의의 표와 CheatTable 의 자리의 표가 따로 있어, 한쪽에 빠뜨리면 창에 나오지 않거나 그려지지 않았다(2026-10-07 리뷰 R19).
+		std::set<std::string> defs, places;
+		for (const KnobDef& def : KnobDefs())
+		{
+			CHECK(def.Id && *def.Id && def.Label && *def.Label);
+			CHECK(defs.insert(def.Id).second);		// Id 가 겹치지 않는다
+			CHECK((def.What == KnobTarget::GameplayVar) == (def.Var != nullptr && *def.Var));		// 게임 변수의 배율만 멤버 이름을 가진다
+		}
+		for (const KnobPlace& place : KnobPlaces())
+			places.insert(place.Id);
+		CHECK(defs.size() == 7 && defs == places);
 	});
 
 	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {
@@ -2814,28 +2884,28 @@ int main(int argc, char** argv)
 	Test("경제: 최소값 칸의 편집 - 치는 동안은 들고 있다가 칸을 떠날 때 한 번 넣는다", [] {
 		// 사용자 보고(2026-10-06): 자원마다의 최소값을 칸에서 정할 수 없다. 칸이 "Enter 를 눌렀을 때만 참"에 기대고 있었는데
 		// Dear ImGui 의 수 입력 칸은 그것을 지원하지 않는다(InputScalar 의 단언). Enter 말고는 수를 넣을 길이 없었고 칸을 떠나면 친 수가 버려졌다.
-		FloorEdit edit;
+		NumberEdit edit;
 		double out = -1;
 		// 2, 20, 200 을 치는 동안에는 넣지 않는다(치는 도중의 수로 창고를 채우지 않게)
-		CHECK(!StepFloorEdit(edit, true, 2, false, true, out));
-		CHECK(!StepFloorEdit(edit, true, 20, false, true, out));
-		CHECK(!StepFloorEdit(edit, false, 20, false, true, out));		// 잡혀 있기만 한 프레임
-		CHECK(!StepFloorEdit(edit, true, 200, false, true, out));
+		CHECK(!StepNumberEdit(edit, true, 2, false, true, out));
+		CHECK(!StepNumberEdit(edit, true, 20, false, true, out));
+		CHECK(!StepNumberEdit(edit, false, 20, false, true, out));		// 잡혀 있기만 한 프레임
+		CHECK(!StepNumberEdit(edit, true, 200, false, true, out));
 		CHECK(edit.Has && edit.Value == 200);
 		// 칸을 떠나면(Enter, Tab, 다른 곳을 누름) 마지막에 친 수를 한 번 넣는다
-		CHECK(StepFloorEdit(edit, false, 0, true, false, out) && out == 200);
+		CHECK(StepNumberEdit(edit, false, 0, true, false, out) && out == 200);
 		CHECK(!edit.Has);
-		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));			// 두 번 넣지 않는다
+		CHECK(!StepNumberEdit(edit, false, 0, true, false, out));			// 두 번 넣지 않는다
 		// 치는 프레임에 바로 떠나도 넣는다
-		CHECK(StepFloorEdit(edit, true, 7, true, false, out) && out == 7 && !edit.Has);
+		CHECK(StepNumberEdit(edit, true, 7, true, false, out) && out == 7 && !edit.Has);
 		// 치지 않고 떠나면 넣지 않는다
-		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));
+		CHECK(!StepNumberEdit(edit, false, 0, true, false, out));
 		// 0 도 친 수다(지운다는 뜻). 넣는다
-		CHECK(!StepFloorEdit(edit, true, 0, false, true, out));
-		CHECK(StepFloorEdit(edit, false, 99, true, false, out) && out == 0);
+		CHECK(!StepNumberEdit(edit, true, 0, false, true, out));
+		CHECK(StepNumberEdit(edit, false, 99, true, false, out) && out == 0);
 		// 치다 만 수가 남았는데 칸이 잡혀 있지도 떠나지도 않았으면(창이 닫혔다) 버린다
-		CHECK(!StepFloorEdit(edit, true, 55, false, true, out));
-		CHECK(!StepFloorEdit(edit, false, 0, false, false, out) && !edit.Has);
+		CHECK(!StepNumberEdit(edit, true, 55, false, true, out));
+		CHECK(!StepNumberEdit(edit, false, 0, false, false, out) && !edit.Has);
 	});
 
 	Test("원격: 모드창에 입력을 넣는 줄(ui click, type, key)", [] {
@@ -2977,7 +3047,7 @@ int main(int argc, char** argv)
 		CHECK(!CheckPersonCommand(c, why));			// 아버지는 uuid 로 짚는다
 		c.Text = "";
 		CHECK(!CheckPersonCommand(c, why));
-		CHECK(GoodUuid("8f2bfdb1951cc39c") && !GoodUuid("8f2bfdb1951cc39") && !GoodUuid("8F2BFDB1951CC39C") && !GoodUuid("zzzzzzzzzzzzzzzz") && !GoodUuid(""));
+		CHECK(IsUuid("8f2bfdb1951cc39c") && !IsUuid("8f2bfdb1951cc39") && !IsUuid("8F2BFDB1951CC39C") && !IsUuid("zzzzzzzzzzzzzzzz") && !IsUuid(""));
 
 		// 원격의 줄
 		CHECK(ParseRemoteLine("person a34ba8b605c96ab7 pregnancy_next").Error.empty() && ParseRemoteLine("person a34ba8b605c96ab7 birth").Error.empty());
@@ -3185,7 +3255,10 @@ int main(int argc, char** argv)
 #pragma warning(suppress: 4996)		// getenv: 읽기만 한다
 		const char* dir = std::getenv("NLTOYBOX_TEST_GAME_DIR");
 		if (!dir || !*dir)
+		{
+			std::printf("  skip: NLTOYBOX_TEST_GAME_DIR 이 없다(평소 시험은 게임 파일에 기대지 않는다)\n");		// 돌았는지 안 돌았는지 보이게(2026-10-07 리뷰 R19)
 			return;
+		}
 		const std::filesystem::path root = std::filesystem::path(dir) / "localization";
 		const auto slurp = [&](const char* name, std::string& out) {
 			std::ifstream in(root / name, std::ios::binary);

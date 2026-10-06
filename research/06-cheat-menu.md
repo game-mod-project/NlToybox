@@ -59,6 +59,22 @@
 
 대응: `NlToyBox.log`가 없고 `aurie.log`가 그 줄에서 끝나면 모듈과 무관하다. 다시 켠다(사용자에게 승인받은 횟수 안에서).
 
+### 세 번째 (2026-10-07) — 원인을 찾았다: Aurie 콘솔의 선택 모드
+
+리팩토링 A 의 확인 실행(0.27.2). `load-save.ps1`이 240초 안에 메인 메뉴를 보지 못했다. 프로세스는 살아 있었고(CPU 는 늘고 있었다), `NlToyBox.log`가 없고,
+`aurie.log` 57줄의 마지막이 `Hooks::InitializeStage2Hooks => AURIE_SUCCESS`(07:44:47)였다. 정상 실행(`refs/runtime/stage0b-run2.aurie.log`)에서는 그 줄 15초 뒤에
+`[ElWaitForCurrentProcessWindow] Got process window!`가 오고 그 다음에 `NlToyBox.dll`을 적재한다. 즉 모듈은 적재되기 전이었다.
+
+- 프로세스의 주 창이 Aurie 콘솔이었고 **제목이 `선택 Aurie Framework Log | Press Ctrl+C to close`였다.** Windows 콘솔은 QuickEdit 의 선택 모드에 들어가면 제목에
+  "선택"(영문 "Select")을 붙이고, 그 동안 콘솔에 쓰는 호출(WriteConsole)을 선택이 끝날 때까지 막는다. Aurie 는 추적 줄을 콘솔에도 쓴다.
+- 콘솔 창에 `PostMessage(WM_KEYDOWN/WM_KEYUP, VK_ESCAPE)`를 보내자 제목에서 "선택"이 빠졌고, 20초 안에 `aurie.log`가 88줄까지 이어지고 `NlToyBox.log`에
+  `probe done`·`ui ready`가 적혔다. 그 실행은 그대로 세이브를 불러와 확인을 마쳤다(`refs/runtime/refactor-a-run1.*`).
+- 두 번째의 "멈춘 곳이 Aurie 의 로그 출력 안인지"는 이것으로 설명된다: 선택 모드에 들어간 때에 따라 멈추는 줄이 다르다(첫 `[debug]` 줄, `InitializeStage2Hooks`).
+  누가 선택 모드에 넣었는지는 모른다(콘솔을 누르면 들어간다).
+
+대응: `tools/common.ps1`의 `Clear-NlConsoleSelect`가 Norland 프로세스의 주 창 제목이 "선택 "이나 "Select "로 시작하면 Escape 를 보낸다(진짜 키보드는 건드리지 않는다).
+`load-save.ps1`과 `check-load.ps1`이 기다리는 동안 부른다. 콘솔 창을 누르지 않는다.
+
 ## 실행 2 뒤에 고친 것
 
 실행 2 는 커밋 `bbf94a2`의 DLL 이었다. 그 뒤 전체 검토의 지적을 고쳤다(`9f0cccc`, `ed71578`, `f1dc875`).

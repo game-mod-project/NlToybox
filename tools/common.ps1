@@ -135,11 +135,8 @@ function Stop-NlGame([int]$GraceSec = 15) {
     'killed'
 }
 
-# 게임 창(클래스 YYGameMakerYY)의 핸들들. 게임이 꺼져 있으면 비어 있다.
-function Get-NlGameWindows {
-    $procs = @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)
-    if ($procs.Count -eq 0) { return @() }
-
+# user32 의 창 함수들. 한 번만 만든다.
+function Initialize-NlWin {
     if (-not ('NlToyBox.Win' -as [type])) {
         Add-Type -Namespace NlToyBox -Name Win -MemberDefinition @'
 public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
@@ -149,6 +146,31 @@ public delegate bool EnumProc(System.IntPtr h, System.IntPtr l);
 [DllImport("user32.dll")] public static extern bool PostMessageW(System.IntPtr h, uint msg, System.IntPtr w, System.IntPtr l);
 '@
     }
+}
+
+# Aurie 콘솔 창이 선택(QuickEdit) 모드에 들어가면 콘솔에 쓰는 호출이 막혀 게임이 켜지다 선다(research/06 의 세 번째 멈춤. 2026-10-07 실측).
+# 게임 프로세스의 주 창 제목이 "선택 "이나 "Select "로 시작하면 그 창에 Escape 를 보내 푼다(진짜 키보드는 건드리지 않는다).
+# 켜지기를 기다리는 루프에서 부른다. 돌려주는 값: 풀었으면 참.
+function Clear-NlConsoleSelect {
+    $cleared = $false
+    foreach ($p in @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)) {
+        $title = $p.MainWindowTitle
+        if (-not $title -or $p.MainWindowHandle -eq [IntPtr]::Zero) { continue }
+        if (-not ($title.StartsWith('선택 ') -or $title.StartsWith('Select '))) { continue }
+        Initialize-NlWin
+        [void][NlToyBox.Win]::PostMessageW($p.MainWindowHandle, 0x0100, [IntPtr]0x1B, [IntPtr]::Zero)   # WM_KEYDOWN VK_ESCAPE
+        [void][NlToyBox.Win]::PostMessageW($p.MainWindowHandle, 0x0101, [IntPtr]0x1B, [IntPtr]::Zero)   # WM_KEYUP
+        Write-Host "Aurie 콘솔이 선택 모드였습니다. Escape 를 보내 풀었습니다: $title"
+        $cleared = $true
+    }
+    $cleared
+}
+
+# 게임 창(클래스 YYGameMakerYY)의 핸들들. 게임이 꺼져 있으면 비어 있다.
+function Get-NlGameWindows {
+    $procs = @(Get-Process -Name $script:NlProcessName -ErrorAction SilentlyContinue)
+    if ($procs.Count -eq 0) { return @() }
+    Initialize-NlWin
 
     $ids = @($procs.Id)
     $windows = New-Object System.Collections.Generic.List[IntPtr]
