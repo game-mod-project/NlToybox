@@ -184,6 +184,20 @@ namespace NlCore
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
 				N, 0, 0, 0, 50, true, "다음 이주 때(하루에 한 번, 저녁) 이 수만큼 더 온다. 값을 정해 두면 날마다 그만큼 더 온다" },
 
+			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/Production.cpp 의 WalkVars. 열쇠는 core/FamilyPlan).
+			// global.__gameplay_vars 에 pregnancy_chance, pregnancy_from_dummy_chance, pregnancy_miscarriage_chance, pregnancy_mother_die, trait_death_in_childbirth 가 있다.
+			// 켜면 값이 써지고 끄면 되돌려지는 것을 봤다(실행 2: 0.5·0.3 → 1·0.6, 0.2 → 0, 0.1·0.1 → 0).
+			// 유산 없음은 게임이 따른다(실행 3: 켠 채 임신 25번에 유산 0, 끈 채 27번에 유산 5. 유산 확률이 0.2 일 때 25번에 한 번도 없을 확률은 0.4% 다).
+			// 임신 확률은 재지 못했다(모듈의 임신 시작은 그 확률을 타지 않는다). 출산 중 사망은 가리지 못했다(끈 채 22번의 출산에서도 어머니가 죽지 않았다).
+			// slave_pregnant_chance(30)는 단위가 달라 보여 넣지 않았다. 뜻은 모두 이름에서 읽은 것이다.
+			{ "pregnancy_chance", Area::People, "임신 확률 배율", "global.__gameplay_vars.pregnancy_chance", CS, 2, 0, 1, 2, false,
+				"게임 변수 pregnancy_chance 와 pregnancy_from_dummy_chance 에 곱한다. 이름으로 보아 임신이 더 잘 될 것으로 보인다" },
+			{ "no_miscarriage", Area::People, "유산 없음", "global.__gameplay_vars.pregnancy_miscarriage_chance", C, 1, 0, 0, 0, true,
+				"게임 변수 pregnancy_miscarriage_chance 를 0 으로 쓴다. 켠 채로 임신 25번에 유산이 없었고, 끈 채로는 27번에 5번 났다" },
+			{ "safe_childbirth", Area::People, "출산 중 사망 없음", "global.__gameplay_vars.pregnancy_mother_die", C, 1, 0, 0, 0, false,
+				"게임 변수 pregnancy_mother_die 와 trait_death_in_childbirth 를 0 으로 쓴다. 이름으로 보아 출산으로 죽지 않을 것으로 보인다 "
+				"(끈 채 22번의 출산에서도 어머니가 죽지 않아 가리지 못했다)" },
+
 			{ "rest_decrease", Area::People, "휴식 감소(시간당)", "inst:o_debug.debug_rest_decrease_per_hour", N, 0, 0, 0, 20, false,
 				"한 시간에 휴식이 줄어드는 양으로 보인다(원래 3). 0 이면 피로가 쌓이지 않을 것으로 보인다" },
 			{ "no_occupational_disease", Area::People, "직업병 끔", "inst:o_debug.debug_is_occupational_disease_enabled", T, 0, 1, 0, 0, false,

@@ -6,6 +6,7 @@
 #include "DiplomacyPlan.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
+#include "FamilyPlan.hpp"
 #include "RolePlan.hpp"
 #include "Presets.hpp"
 #include "WorldPlan.hpp"
@@ -368,7 +369,7 @@ namespace NlCore
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
 				return fail("person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, "
-					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role)");
+					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role, pregnancy_next, birth, grow_up, conceive)");
 			command.Target = tokens[1];
 			if (!options(3))
 				return command;
@@ -395,9 +396,11 @@ namespace NlCore
 			if (trait && IsProtectedTrait(person.Text))
 				return fail(std::string("person ") + tokens[2] + " does not take that trait (species and death states are protected)");
 			if (!BulkAllowed(person.Who, person.Act))
-				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, lords also knowledge_all, people also equip (name one person for the rest)");
+				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, lords also knowledge_all and birth, people also equip (name one person for the rest)");
 			if (person.Act == PersonAct::Equip && !FindLoadout(person.Text))
 				return fail("person equip needs name=<h_swordman|h_axeman|h_spearman|h_hammerhead|any>");
+			if (person.Act == PersonAct::Conceive && (!GoodUuid(person.Text) || person.Text == person.Who))
+				return fail("person conceive needs name=<the father's uuid: 16 hex digits, not the same person>");
 			if (person.Act == PersonAct::Role && !FindRole(person.Text))
 			{
 				std::string ids;

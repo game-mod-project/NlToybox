@@ -1,5 +1,6 @@
 #include "PeoplePlan.hpp"
 
+#include "FamilyPlan.hpp"
 #include "RolePlan.hpp"
 
 #include <algorithm>
@@ -22,6 +23,7 @@ namespace NlCore
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
 			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
 			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" }, { PersonAct::Role, "role" },
+			{ PersonAct::PregnancyNext, "pregnancy_next" }, { PersonAct::Birth, "birth" }, { PersonAct::GrowUp, "grow_up" }, { PersonAct::Conceive, "conceive" },
 		};
 
 		bool Clamp(double Value, double Low, double High, bool Whole, double& Out)
@@ -97,7 +99,8 @@ namespace NlCore
 
 	bool NeedsText(PersonAct Act)
 	{
-		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip || Act == PersonAct::Role;
+		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip || Act == PersonAct::Role
+			|| Act == PersonAct::Conceive;
 	}
 
 	bool GoodWho(const std::string& Who)
@@ -120,6 +123,8 @@ namespace NlCore
 			return true;
 		if (Act == PersonAct::Equip)
 			return Who == "people";		// 플레이어의 사람 가운데 병사에게만 간다(부르는 쪽이 고른다). 영주는 병사가 아니다
+		if (Act == PersonAct::Birth)
+			return Who == "lords";		// 임신한 영주 모두(부르는 쪽이 고른다). 주민에게는 다음 단계 함수를 불러 보지 않았다
 		return Act == PersonAct::KnowledgeAll && Who == "lords";		// 주민은 지식을 갖지 않는다
 	}
 
@@ -276,6 +281,8 @@ namespace NlCore
 			Why = "모르는 장비 묶음입니다";
 		if (Why.empty() && Command.Act == PersonAct::Role && !FindRole(Command.Text))
 			Why = "모르는 역할 프리셋입니다";
+		if (Why.empty() && Command.Act == PersonAct::Conceive && (!GoodUuid(Command.Text) || Command.Text == Command.Who))
+			Why = "아버지를 uuid 로 짚습니다 (자기 자신은 안 됩니다)";
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
 			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
 		if (Why.empty() && trait && IsProtectedTrait(Command.Text))
@@ -293,6 +300,11 @@ namespace NlCore
 	bool IsPlayers(const PersonRow& Row)
 	{
 		return !Row.Dead && Row.Faction == "player";
+	}
+
+	bool IsPlayersLord(const PersonRow& Row)
+	{
+		return IsPlayers(Row) && Row.Character;
 	}
 
 	std::vector<size_t> PickTargets(const std::vector<PersonRow>& People, const std::string& Who)
