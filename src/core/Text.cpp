@@ -1,5 +1,6 @@
 #include "Text.hpp"
 
+#include <algorithm>
 #include <charconv>
 #include <cmath>
 #include <cstdio>
@@ -28,6 +29,16 @@ namespace NlCore
 			Value >>= 4;
 		} while (Value != 0);
 		return "@" + text;
+	}
+
+	bool Has(const std::vector<std::string>& List, const std::string& Name)
+	{
+		return std::find(List.begin(), List.end(), Name) != List.end();
+	}
+
+	bool IsUuid(const std::string& Text)
+	{
+		return Text.size() == 16 && std::all_of(Text.begin(), Text.end(), [](unsigned char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 	}
 
 	std::string Trim(const std::string& Text)

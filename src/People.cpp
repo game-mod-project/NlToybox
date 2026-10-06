@@ -5,6 +5,7 @@
 #include "Game.hpp"
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/FamilyPlan.hpp"
@@ -149,12 +150,6 @@ namespace
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
 	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
-
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
 
 	// 표의 항목(플레이어의 사람을 조금씩 돌며 쓴다). 바퀴의 판단은 core/PeoplePlan 의 HoldRound 가 한다.
 	std::vector<PersonRow> g_HoldPeople;
@@ -688,11 +683,6 @@ namespace
 		return std::binary_search(g_Now.TraitNames.begin(), g_Now.TraitNames.end(), Name);
 	}
 
-	bool Has(const std::vector<std::string>& List, const std::string& Name)
-	{
-		return std::find(List.begin(), List.end(), Name) != List.end();
-	}
-
 	// 수 하나를 쓴다(있는 자리에만. 쓴 뒤 다시 읽어 확인한다).
 	bool WriteAt(const std::string& Path, double Value, std::string& Note)
 	{
@@ -743,7 +733,7 @@ namespace
 		}
 		std::vector<std::string> traits;
 		ReadTraits(Soul, traits);
-		if (!Has(traits, Name))
+		if (!NlCore::Has(traits, Name))
 		{
 			Note = "게임이 붙이지 않았습니다";		// 까닭은 재지 않았다(재능 71개를 붙일 때는 거부가 없었다. research/21)
 			return false;
@@ -833,7 +823,7 @@ namespace
 			there = StillThere(Row, Soul);
 			std::vector<std::string> after;
 			const bool read = there && ReadTraits(Soul, after);
-			if (called && read && !Has(after, step.Name))
+			if (called && read && !NlCore::Has(after, step.Name))
 				removed++;
 			else
 				fail(what, !there ? "그 자리의 사람이 바뀌었습니다" : !called ? note : !read ? "그 사람의 특성을 읽지 못했습니다" : "게임이 떼지 않았습니다");
@@ -940,7 +930,7 @@ namespace
 			ReadTraits(soul_value, traits);
 			size_t removed = 0;
 			for (const char* wound : NlCore::WoundTraits())
-				if (Has(traits, wound) && Detach(Row, wound, Note))
+				if (NlCore::Has(traits, wound) && Detach(Row, wound, Note))
 					removed++;
 			Note = removed ? "부상 " + std::to_string(removed) + "개를 뗐습니다" : "";
 			return true;
@@ -949,7 +939,7 @@ namespace
 		{
 			std::vector<std::string> traits;
 			ReadTraits(soul_value, traits);
-			if (Has(traits, C.Text))
+			if (NlCore::Has(traits, C.Text))
 			{
 				Note = "이미 있는 특성입니다";
 				return true;
@@ -1040,7 +1030,7 @@ namespace
 				Note = "나이를 18 로 맞췄지만 아이 특성이 남아 있습니다";
 				return false;
 			}
-			Note = Has(traits, "untitled_lord") ? "어른이 됐습니다. 게임이 소영주(untitled_lord)로 만들었습니다: 진영이 바뀌어 영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다)"
+			Note = NlCore::Has(traits, "untitled_lord") ? "어른이 됐습니다. 게임이 소영주(untitled_lord)로 만들었습니다: 진영이 바뀌어 영주 목록에서 빠집니다('주민·손님도 보기'로 보입니다)"
 				: "아이 특성이 없어졌습니다 (소영주의 특성은 보이지 않습니다)";
 			return true;
 		}
@@ -1153,7 +1143,7 @@ namespace
 		{
 			std::vector<std::string> traits;
 			ReadTraits(soul_value, traits);
-			if (!Has(traits, C.Text))
+			if (!NlCore::Has(traits, C.Text))
 			{
 				Note = "없는 특성입니다";
 				return false;
@@ -1925,7 +1915,7 @@ namespace
 		bool owned = false;
 		for (const char* name : role.Remove)
 		{
-			if (!Has(One.Traits, name))
+			if (!NlCore::Has(One.Traits, name))
 			{
 				absent += (absent.empty() ? "" : ", ") + TraitLabel(name);
 				continue;
@@ -1950,7 +1940,7 @@ namespace
 		ImGui::Indent();
 		for (const char* name : role.Add)
 		{
-			if (Has(One.Traits, name))
+			if (NlCore::Has(One.Traits, name))
 				ImGui::TextDisabled("있음    %s", TraitLabel(name).c_str());
 			else if (!KnownTrait(name))
 				ImGui::TextDisabled("게임에 없음    %s", name);
@@ -1973,7 +1963,7 @@ namespace
 		}
 		const int stage = NlCore::PregnancyStage(One.Traits);
 		const bool kid = NlCore::IsKid(One.Traits);
-		const bool forbid = Has(One.Traits, NlCore::k_PregnantForbid);
+		const bool forbid = NlCore::Has(One.Traits, NlCore::k_PregnantForbid);
 		const char* gender = One.Gender == NlCore::k_Female ? "여성" : One.Gender == NlCore::k_Male ? "남성" : "성별을 읽지 못했습니다";
 		if (stage > 0)
 			ImGui::Text("%s, 임신 %d/3기", gender, stage);
@@ -2163,7 +2153,7 @@ namespace
 					if (!NlCore::TraitMatches(g_TraitFilter, name, caption) && !NlCore::TraitMatches(g_TraitFilter, "", about))
 						continue;
 					shown++;
-					if (Has(one.Traits, name))
+					if (NlCore::Has(one.Traits, name))
 						ImGui::TextDisabled("있음");
 					else
 					{
@@ -2232,7 +2222,7 @@ void NlPeople::GameTick(double Now, bool Active)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)		// 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어왔다
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 
 	HoldTick(Now);
 	BattleTick(Now);
@@ -2438,7 +2428,7 @@ std::vector<std::string> NlPeople::SpawnHere(NlCore::SpawnKind Kind)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	g_Now.Last = SpawnHereNow(Kind);
 	return { g_Now.Last };
 }
@@ -2448,7 +2438,7 @@ std::vector<std::string> NlPeople::SpawnSoldiers(double Count)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	g_Now.Last = SpawnSoldiersNow(Count);
 	return { g_Now.Last };
 }
@@ -2569,7 +2559,7 @@ std::vector<std::string> NlPeople::Do(const NlCore::PersonCommand& Command)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	Run(Command);
 	return { g_Now.Last };
 }
@@ -2579,7 +2569,7 @@ std::vector<std::string> NlPeople::List(bool All)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	std::vector<std::string> lines;
@@ -2596,7 +2586,7 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	const PersonRow* row = FindRow(Uuid);
@@ -2629,7 +2619,7 @@ std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Now.Why };
 	// 인물 패널의 찾기도 그 글로 맞춘다(칸보다 긴 글은 글자의 중간에서 자르지 않게 통째로 버린다).
@@ -2688,7 +2678,7 @@ NlPeople::RowsResult NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::st
 		Why = "busy";
 		return RowsResult::Busy;
 	}
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 	{
 		Why = g_Now.Why;

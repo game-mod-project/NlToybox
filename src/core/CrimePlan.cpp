@@ -1,5 +1,7 @@
 #include "CrimePlan.hpp"
 
+#include "Text.hpp"
+
 #include "FamilyPlan.hpp"
 
 #include <cmath>
@@ -132,7 +134,7 @@ namespace NlCore
 				return true;
 			}
 			const char* everyone = act.Who == 'a' ? "all" : "lords";
-			if (Words.size() != 2 || (Words[1] != everyone && !GoodUuid(Words[1])))
+			if (Words.size() != 2 || (Words[1] != everyone && !IsUuid(Words[1])))
 			{
 				Why = std::string("crime ") + act.Word + " needs a uuid or " + everyone;
 				return false;

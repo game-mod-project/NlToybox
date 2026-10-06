@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -71,12 +72,6 @@ namespace
 	double g_NextRead = 0, g_NextStep = 0;
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 	int g_SideChoice = 0;				// 창의 선택: 0 양쪽, 1 그쪽이 우리를, 2 우리가 그쪽을
-
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
 
 	void Log(const std::string& Line)
 	{
@@ -531,7 +526,7 @@ void NlDiplomacy::GameTick(double Now, bool Active)
 	const bool read = Active && Now >= g_NextRead;
 	if (g_Busy || (!work && !read))
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (read || !g_Ready)
 	{
 		g_NextRead = Now + 1;
@@ -568,7 +563,7 @@ std::vector<std::string> NlDiplomacy::Do(const DiplomacyCommand& Command)
 		return { why };
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Why };
 
@@ -603,7 +598,7 @@ std::vector<std::string> NlDiplomacy::List()
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_Why };
 	std::vector<std::string> lines;

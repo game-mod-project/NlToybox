@@ -12,6 +12,7 @@
 #include "core/CrimePlan.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/Guard.hpp"
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/Localization.hpp"
@@ -302,6 +303,18 @@ int main(int argc, char** argv)
 		CHECK(ParseSettings(again) == values);
 	});
 
+	Test("GoodPath 는 읽히는 주소인지, 값 하나를 가리키는지 본다", [] {
+		// 치트 상태 파일·탐색기·원격 명령이 같은 판정을 따로 두고 있었다(2026-10-07 리뷰). 뿌리만 있는 주소는 그릇이지 값이 아니다.
+		CHECK(GoodPath("global.a.b"));
+		CHECK(GoodPath("inst:o_debug.is_x"));
+		CHECK(!GoodPath("inst:o_debug"));				// 뿌리만: 값이 아니다
+		CHECK(GoodPath("inst:o_debug", false));			// 뿌리만이어도 된다(list, tree)
+		CHECK(!GoodPath("nonsense"));
+		CHECK(!GoodPath("nonsense", false));
+		CHECK(!GoodPath(""));
+		CHECK(!GoodPath("", false));
+	});
+
 	Test("묻는 경로: 뿌리와 단계를 읽는다", [] {
 		const AskPath g = ParseAskPath("global.a.b[3].c");
 		CHECK(g.Error.empty() && g.Root == "global" && g.Steps.size() == 4);
@@ -398,6 +411,42 @@ int main(int argc, char** argv)
 		CHECK_STR(ScriptRoutineName("gml_Script_"), "");
 		CHECK_STR(ScriptRoutineName(""), "");
 		CHECK_STR(ScriptRoutineName("a b"), "");
+	});
+
+	Test("Has 는 글의 목록에 그 글이 있는지 본다", [] {
+		// 특성의 목록에 이름이 있는지 보는 데 쓴다(가족·역할·인물이 같은 것을 따로 두고 있었다. 2026-10-07 리뷰).
+		const std::vector<std::string> traits = { "beauty_pretty", "coward", "pregnant_st1" };
+		CHECK(Has(traits, "coward"));
+		CHECK(Has(traits, std::string("pregnant_st1")));
+		CHECK(!Has(traits, "cowar"));
+		CHECK(!Has(traits, ""));
+		CHECK(!Has(std::vector<std::string>(), "coward"));
+	});
+
+	Test("IsUuid 는 소문자 16진수 열여섯 자만 받는다", [] {
+		// 게임의 __soul.__uuid 와 세력의 uuid 가 그 꼴이다(외교·궁정·가족이 같은 검사를 따로 두고 있었다).
+		CHECK(IsUuid("0123456789abcdef"));
+		CHECK(!IsUuid("0123456789ABCDEF"));		// 대문자
+		CHECK(!IsUuid("0123456789abcde"));		// 열다섯 자
+		CHECK(!IsUuid("0123456789abcdef0"));		// 열일곱 자
+		CHECK(!IsUuid("0123456789abcdeg"));		// 16진수가 아닌 글자
+		CHECK(!IsUuid(""));
+		CHECK(!IsUuid("all"));
+	});
+
+	Test("ScopedFlag 는 사는 동안 깃발을 세우고 죽으면 내린다", [] {
+		// 재진입 가드: 틱이 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다(패널 다섯이 같은 구조체를 따로 두고 있었다).
+		bool busy = false;
+		{
+			const ScopedFlag guard(busy);
+			CHECK(busy);
+			{
+				const ScopedFlag inner(busy);		// 겹쳐도 사는 동안은 참
+				CHECK(busy);
+			}
+			CHECK(!busy);		// 안쪽이 죽으면 내린다(겹쳐 쓰지 않는다: 바깥은 g_Busy 를 보고 들어오지 않는다)
+		}
+		CHECK(!busy);
 	});
 
 	Test("경제: 자원의 이름과 갈래의 이름", [] {
@@ -2977,7 +3026,7 @@ int main(int argc, char** argv)
 		CHECK(!CheckPersonCommand(c, why));			// 아버지는 uuid 로 짚는다
 		c.Text = "";
 		CHECK(!CheckPersonCommand(c, why));
-		CHECK(GoodUuid("8f2bfdb1951cc39c") && !GoodUuid("8f2bfdb1951cc39") && !GoodUuid("8F2BFDB1951CC39C") && !GoodUuid("zzzzzzzzzzzzzzzz") && !GoodUuid(""));
+		CHECK(IsUuid("8f2bfdb1951cc39c") && !IsUuid("8f2bfdb1951cc39") && !IsUuid("8F2BFDB1951CC39C") && !IsUuid("zzzzzzzzzzzzzzzz") && !IsUuid(""));
 
 		// 원격의 줄
 		CHECK(ParseRemoteLine("person a34ba8b605c96ab7 pregnancy_next").Error.empty() && ParseRemoteLine("person a34ba8b605c96ab7 birth").Error.empty());

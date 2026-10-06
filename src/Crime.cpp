@@ -4,6 +4,7 @@
 #include "Game.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/PeoplePlan.hpp"
 
 #include <imgui.h>
@@ -55,12 +56,6 @@ namespace
 	std::string g_LastCrime;			// 부랑자에게 마지막으로 한 일
 	std::string g_LastLords;			// 영주에게 마지막으로 한 일
 	double g_Next = 0;					// 다음에 다시 읽을 시각
-
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
 
 	void Log(const std::string& Line)
 	{
@@ -434,7 +429,7 @@ void NlCrime::GameTick(double Now, bool Visible)
 		return;
 	if (g_Queue.empty() && (!Visible || Now < g_Next))		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다)
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!g_Queue.empty())
 	{
 		bool people_busy = false;
@@ -539,7 +534,7 @@ std::vector<std::string> NlCrime::Do(const NlCore::CrimeCommand& Command)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	bool people_busy = false;
 	return DoNow(Command, people_busy);
 }

@@ -3,10 +3,17 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 namespace NlCore
 {
 	std::string Trim(const std::string& Text);
+
+	// 글의 목록에 그 글이 있는가(특성의 목록에 이름이 있는지 보는 데 쓴다).
+	bool Has(const std::vector<std::string>& List, const std::string& Name);
+
+	// uuid 의 꼴인가: 소문자 16진수 열여섯 자. 게임의 __soul.__uuid 와 세력의 uuid 가 그 꼴이었다.
+	bool IsUuid(const std::string& Text);
 
 	// 주소를 적는 글: "@" 뒤에 소문자 16진수(앞의 0 없이). 기록의 표본과 ask 의 답이 같은 꼴로 적어, 인자로 온 구조체가 어느 것인지 견줄 수 있다.
 	std::string PointerText(std::uintptr_t Value);

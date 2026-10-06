@@ -43,8 +43,6 @@ namespace NlCore
 	bool CanConceive(double Gender, const std::vector<std::string>& Traits, std::string& Why);
 	// 아버지로 삼을 수 있는가: 남성이고 아이가 아니다.
 	bool CanFather(double Gender, const std::vector<std::string>& Traits);
-	// 사람의 uuid 의 꼴인가(소문자 16진수 열여섯 자. 게임의 __soul.__uuid 가 그 꼴이었다).
-	bool GoodUuid(const std::string& Text);
 
 	// 게임 변수(global.__gameplay_vars)의 열쇠들. 값은 게임에서 읽는다(레포에 옮기지 않는다). 게임이 그 값을 따르는지는 보지 못했다.
 	const std::vector<const char*>& PregnancyChanceVars();		// 임신 확률(영주끼리, 주민과)

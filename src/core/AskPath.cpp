@@ -28,6 +28,12 @@ namespace NlCore
 		}
 	}
 
+	bool GoodPath(const std::string& Text, bool NeedSteps)
+	{
+		const AskPath path = ParseAskPath(Text);
+		return path.Error.empty() && (!NeedSteps || !path.Steps.empty());
+	}
+
 	AskPath ParseAskPath(const std::string& Text)
 	{
 		AskPath path;

@@ -3,6 +3,7 @@
 #include "Finder.hpp"
 #include "Game.hpp"
 #include "core/Request.hpp"
+#include "core/Guard.hpp"
 #include "core/Schedule.hpp"
 #include "core/Text.hpp"
 
@@ -453,7 +454,6 @@ void NlDump::Tick(CCode* Code)
 		return;
 	g_LastSample = now;
 
-	g_Busy = true;
+	const NlCore::ScopedFlag busy(g_Busy);
 	Step(now);
-	g_Busy = false;
 }

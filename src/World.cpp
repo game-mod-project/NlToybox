@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/Localization.hpp"
 #include "core/SeasonPlan.hpp"
 #include "core/Text.hpp"
@@ -71,12 +72,6 @@ namespace
 	NlCore::StockBook g_Mines;					// 매장량 붙들기가 광산마다 기억한 수와 그것의 자리(core/WorldPlan)
 	int g_MineWrites = 0;						// 되돌려 쓴 횟수
 	bool g_HoldWasOn = false, g_MineWasOn = false;		// 지난 틱에 켜져 있었는가(끈 틱에 한 번 정리한다)
-
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
 
 	void Log(const std::string& Line)
 	{
@@ -487,7 +482,7 @@ void NlWorld::GameTick(double Now, bool Visible)
 		return;
 	if (g_Queue.empty() && Now < g_NextSeason)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다). 치트 표를 읽는 것도 그 뒤에
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!g_Queue.empty())
 	{
 		const WorldAct act = g_Queue.front();
@@ -562,6 +557,6 @@ std::string NlWorld::Do(NlCore::WorldAct Act)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return "busy";
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	return Remember(Act, DoNow(Act));
 }

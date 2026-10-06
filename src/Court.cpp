@@ -4,6 +4,7 @@
 #include "Game.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/PeoplePlan.hpp"
 #include "core/Text.hpp"
@@ -82,12 +83,6 @@ namespace
 	std::string g_PickHolder, g_PickAbout;		// 창에서 고른 짝
 	bool g_BishopKnown = false;			// 게임에 주교의 uuid 가 있다(그 인물이 영지에 보이지 않아도)
 	std::string g_BishopRefused;		// 종교 패널의 단추가 거부된 까닭(영주 패널의 것과 섞지 않는다)
-
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
 
 	void Log(const std::string& Line)
 	{
@@ -529,7 +524,7 @@ void NlCourt::GameTick(double Now, bool Active)
 	const bool read = Active && Now >= g_NextRead;
 	if (g_Busy || (!work && !read))
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (read || !g_Ready)
 	{
 		g_NextRead = Now + 1;
@@ -573,7 +568,7 @@ std::vector<std::string> NlCourt::Do(const CourtCommand& Command)
 		return { why };
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_ScanSkipped ? std::string("busy") : g_Why };
 
@@ -608,7 +603,7 @@ std::vector<std::string> NlCourt::List()
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!Scan())
 		return { g_ScanSkipped ? std::string("busy") : g_Why };
 	std::vector<std::string> lines;

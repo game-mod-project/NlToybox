@@ -142,13 +142,6 @@ namespace
 		return g_Watches.back();
 	}
 
-	// 값 하나를 가리키는 주소인가.
-	bool GoodPath(const std::string& Path)
-	{
-		const AskPath path = NlCore::ParseAskPath(Path);
-		return path.Error.empty() && !path.Steps.empty();
-	}
-
 	// ---- 게임 스레드 ----
 
 	void LoadView()
@@ -270,7 +263,7 @@ namespace
 		}
 
 		case Command::Kind::Pin:
-			if (GoodPath(C.Path))
+			if (NlCore::GoodPath(C.Path))
 				NeedWatch(C.Path);
 			else
 				g_Note = "즐겨찾기에 넣을 수 없는 주소: " + C.Path;
@@ -283,7 +276,7 @@ namespace
 
 		case Command::Kind::SetLock:
 		{
-			if (!GoodPath(C.Path))
+			if (!NlCore::GoodPath(C.Path))
 				break;
 			Watch& watch = NeedWatch(C.Path);
 			watch.HasLock = true;
