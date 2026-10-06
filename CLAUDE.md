@@ -198,11 +198,15 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **행렬에 바로 쓰지 않는다.** 게임이 `Faction.__update_relations(세력)`로 왕끼리의 평판(`OpinionMinds.get_opinion`)에서 다시 셈해 덮어쓴다(`set_relationship`으로 쓴 값이 되돌아갔다).
     관계를 움직이려면 평판을 갖는 쪽의 `attach_opinion_about_faction(대상 세력, inst:o_data.opinion_mind_debug_positive|negative)`(±5)를 부르고 `__update_relations(대상 세력)`을 부른 뒤 칸을 다시 읽는다.
     떼는 함수는 `detach_opinion_about_faction(대상 세력, 평판의 자료)`(하나를 뗀다. 붙은 것이 없을 때는 불러 보지 않았다).
-  - 왕국은 `__system_name`이 `faction.new.name.<수>`인 세력이다(`NlCore::IsKingdom`. 57개 가운데 25개. 나머지는 도적·상인·교단·플레이어의 꾸러미다). 이름은 `get_caption()`.
+  - 왕국은 `__system_name`이 `faction.new.name.<수>`인 세력이다(`NlCore::IsKingdom`. 57개 가운데 24개. 나머지는 도적·상인·교단·플레이어의 꾸러미다). 이름은 `get_caption()`.
     세력을 `__array_of_factions[n]`으로 가리킬 때는 쓰기 전에 그 자리의 uuid 를 다시 본다.
   - `Faction.get_relation_with(세력)`은 수치가 아니라 관계의 종류를 준다. `is_enemy_with`는 관계가 2(deadly enemies)일 때 참이었고 행렬의 읽기 함수를 거치지 않는다.
   - 문턱(한 쌍에서 잰 것): 평판 28 에서 friends, 음수면 opponent, −20 쯤 enemies, −45 쯤 deadly enemies. 그래서 수가 아니라 관계를 다시 읽으며 한 걸음씩 붙인다(`NlCore::StepToward`).
-  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`. `queue=1`이면 창의 단추와 같은 길(쌓기)을 탄다.
+  - 협정은 `…__factions_manager.__agreement_matrix.__matrix.<A>.<B>`의 비트다: 평화 4, 교역 협정 8, 방어 동맹 192(게임의 판정 `is_declared_*_with`가 `is_has_agreement`에 넘기는 수).
+    협정이 없으면 칸도 없다. `set_agreement(세력, 세력, 비트)`가 양쪽 칸에 쓴다. 이미 든 협정을 지우지 않게 지금의 비트에 더한 수를 넘기고(`NlCore::PactCell`) 쓴 뒤 칸을 다시 읽는다.
+    푸는 함수(`reset_agreement`, 인자 5)는 부르지 않았다.
+  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`.
+    `queue=1`이면 창의 단추와 같은 길(쌓기)을 탄다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.

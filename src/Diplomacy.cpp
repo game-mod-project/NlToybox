@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <deque>
+#include <map>
 #include <mutex>
 
 using namespace YYTK;
@@ -29,7 +30,7 @@ namespace
 	constexpr const char* k_Bad = "inst:o_data.opinion_mind_debug_negative";
 	constexpr double k_StepEvery = 0.02;		// 쌓인 일을 한 묶음씩 하는 간격(초)
 	constexpr int k_StepsPerTick = 8;			// 한 묶음에 붙이는 평판의 수(한 틱이 길어지지 않게)
-	constexpr size_t k_ResultLines = 60;
+	constexpr size_t k_ShownLines = 8;			// 창에 보이는 결과 줄의 수(실패한 줄이 앞에 온다)
 
 	struct Kingdom
 	{
@@ -42,15 +43,13 @@ namespace
 
 	struct Job
 	{
-		std::string Uuid;
-		char Side = 't';			// 't' 그쪽이 우리를 보는 평판, 'u' 우리가 그쪽을 보는 평판
+		NlCore::DiplomacyJob Plan;		// 누구의 어느 쪽, 붙여도 되는 수, 방향(core 의 PlanJobs 가 정한다)
 		DiplomacyGoal Goal = DiplomacyGoal::Neutral;
-		int Left = 0;				// 더 붙여도 되는 평판의 수
-		int Sign = 0;				// Opinion: 방향(+1, -1)
 		NlCore::DiplomacyPact Pact = NlCore::DiplomacyPact::Peace;		// Goal 이 Pact 일 때
 		int Done = 0;				// 붙인 평판의 수(부호가 방향)
 		double Before = -1;			// 시작할 때의 관계
 		bool Started = false;
+		bool Checked = false;		// 그 왕국이 살아 있고 양쪽에 왕이 있는지 봤다
 	};
 
 	std::recursive_mutex g_Mutex;		// 아래 전부를 지킨다
@@ -60,8 +59,11 @@ namespace
 	std::string g_PlayerUuid;
 	std::vector<Kingdom> g_Kingdoms;	// 틱이 채우고 Draw 가 읽는다. RValue 를 담지 않는다
 	std::deque<Job> g_Jobs;				// 창이 쌓고 틱이 한다
-	std::vector<std::string> g_Results;	// 마지막 명령의 결과(줄마다)
-	int g_Asked = 0, g_Failed = 0;		// 마지막 명령의 일의 수와 실패한 수
+	NlCore::DiplomacyTally g_Tally;		// 쌓인 일들의 결과(창이 보인다)
+	std::string g_Refused;				// 창의 단추가 거부된 까닭
+	// 이 실행에서 붙인 디버그 평판의 수. 열쇠: 왕국의 uuid + 쪽('t'·'u') + 방향('+'·'-'). 겹침 한도(50)까지 가지 않게 센다.
+	// 다른 게임을 불러오면 비운다(플레이어의 uuid 가 바뀐다, 게임 화면을 떠난다).
+	std::map<std::string, int> g_Stacked;
 	double g_NextRead = 0, g_NextStep = 0;
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 	int g_SideChoice = 0;				// 창의 선택: 0 양쪽, 1 그쪽이 우리를, 2 우리가 그쪽을
@@ -119,7 +121,17 @@ namespace
 		}
 	}
 
-	// 왕국들을 다시 모은다(이름은 앞서 읽은 것을 쓴다). 못 하면 거짓이고 g_Why 에 까닭.
+	// 쌓인 일을 버린다(하지 못했다). 버린 수를 실패로 세고 까닭을 줄로 남긴다.
+	void DropJobs(const std::string& Why)
+	{
+		if (g_Jobs.empty())
+			return;
+		Log("diplomacy: dropped " + std::to_string(g_Jobs.size()) + " job(s): " + Why);
+		g_Tally.Drop(static_cast<int>(g_Jobs.size()), Why);
+		g_Jobs.clear();
+	}
+
+	// 왕국들을 다시 모은다(이름은 앞서 읽은 것을 쓴다). 못 하면 거짓이고 g_Why 에 까닭. 쌓인 일은 건드리지 않는다(부른 쪽이 버린다).
 	bool Scan()
 	{
 		g_Ready = false;
@@ -127,7 +139,7 @@ namespace
 		{
 			g_Why = "게임 화면이 아닙니다";
 			g_Kingdoms.clear();
-			g_Jobs.clear();
+			g_Stacked.clear();
 			return false;
 		}
 		std::string player;
@@ -187,6 +199,8 @@ namespace
 		}
 		if (g_PlayerUuid != player || found.size() != g_Kingdoms.size())
 			Log("diplomacy: " + std::to_string(found.size()) + " kingdoms, player " + player);
+		if (g_PlayerUuid != player)
+			g_Stacked.clear();		// 다른 게임이다
 		g_PlayerUuid = player;
 		g_Kingdoms = std::move(found);
 		ReadKinds();
@@ -203,10 +217,22 @@ namespace
 		return nullptr;
 	}
 
+	// 그 세력이 살아 있고 왕이 있는가. 게임이 부르는 꼴 그대로 묻는다: is_destroyed() -> 불리언(네 시간에 19,785번),
+	// get_king_character_soul() -> 구조체(34번). 망했거나 왕이 없는 세력에는 평판도 협정도 걸지 않는다(그런 세력에 불러 본 적이 없다).
+	bool Alive(const std::string& Faction, bool CheckDestroyed)
+	{
+		RValue destroyed, king;		// 이 함수 안에서만 든다
+		std::string why;
+		if (CheckDestroyed && (!NlAccess::CallMethod(NlCore::ParseAskPath(Faction + ".is_destroyed"), {}, destroyed, why) || !NlGame::IsNumber(destroyed)
+			|| destroyed.ToDouble() != 0))
+			return false;
+		return NlAccess::CallMethod(NlCore::ParseAskPath(Faction + ".get_king_character_soul"), {}, king, why) && king.IsStruct();
+	}
+
 	// 협정을 맺는다(한 번에 끝난다). 돌려주는 값: core 의 PactReport 의 Outcome.
 	char MakePact(const Job& It, const std::string& Faction, std::string& Why)
 	{
-		const double before = PactCellOf(It.Uuid);
+		const double before = PactCellOf(It.Plan.Uuid);
 		if (NlCore::HasPact(before, It.Pact))
 			return 'a';
 		RValue us, them, result;		// 이 함수 안에서만 든다
@@ -223,7 +249,7 @@ namespace
 		if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_Pacts) + ".set_agreement"), { us, them, RValue(cell) }, result, Why))
 			return 'f';
 		// 쓴 뒤 다시 읽는다: 우리 쪽 칸에 그 협정이 들었는가.
-		if (!NlCore::HasPact(PactCellOf(It.Uuid), It.Pact))
+		if (!NlCore::HasPact(PactCellOf(It.Plan.Uuid), It.Pact))
 		{
 			Why = "협정의 칸이 바뀌지 않았습니다";
 			return 'f';
@@ -234,17 +260,26 @@ namespace
 	// 일의 한 걸음. 돌려주는 값: 0 이면 더 한다, 아니면 끝났다(core 의 DiplomacyReport 의 Outcome). Why 에 실패의 까닭.
 	char StepJob(Job& It, std::string& Why)
 	{
-		const Kingdom* kingdom = FindKingdom(It.Uuid);
+		const Kingdom* kingdom = FindKingdom(It.Plan.Uuid);
 		std::string uuid;
-		if (!kingdom || !ReadText(FactionPath(kingdom->Index) + ".__uuid", uuid) || uuid != It.Uuid)
+		if (!kingdom || !ReadText(FactionPath(kingdom->Index) + ".__uuid", uuid) || uuid != It.Plan.Uuid)
 		{
-			Why = "그 왕국을 찾지 못했습니다";		// 자리가 밀렸다. 다음 읽기가 다시 모은다
+			Why = "그 왕국을 찾지 못했습니다";
+			g_Ready = false;		// 자리가 밀렸다. 다음 틱이 다시 모은다(패널이 닫혀 있어도)
 			return 'f';
 		}
 		const std::string faction = FactionPath(kingdom->Index);
+		if (!It.Checked)
+		{
+			Log("diplomacy call is_destroyed(), get_king_character_soul() on " + faction + " and the player faction");		// 부르기 전에 남긴다
+			if (!Alive(faction, true) || !Alive(k_Player, false))
+				return 'x';
+			It.Checked = true;
+		}
 		if (It.Goal == DiplomacyGoal::Pact)
 			return MakePact(It, faction, Why);
-		const double kind = It.Side == 't' ? Relation(It.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Uuid);
+
+		const double kind = It.Plan.Side == 't' ? Relation(It.Plan.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Plan.Uuid);
 		if (kind < 0)
 		{
 			Why = "관계를 읽지 못했습니다";
@@ -255,18 +290,12 @@ namespace
 			It.Before = kind;
 			It.Started = true;
 		}
-
-		int direction = It.Sign;
-		if (It.Goal != DiplomacyGoal::Opinion)
-		{
-			direction = NlCore::StepToward(kind, It.Goal);
-			if (direction == 0)
-				return It.Done == 0 ? 'a' : 'd';
-			if (direction == 2)
-				return 'k';
-		}
-		if (It.Left <= 0)
-			return It.Goal == DiplomacyGoal::Opinion ? 'd' : 'l';
+		// 무엇을 할지는 core 가 정한다(바라는 관계, 한도, 이 실행에서 이미 붙인 수).
+		const std::string stack = It.Plan.Uuid + It.Plan.Side;
+		const NlCore::DiplomacyStep step = NlCore::PlanStep(kind, It.Goal, It.Plan.Sign, It.Plan.Left, It.Done, g_Stacked[stack + "+"], g_Stacked[stack + "-"]);
+		if (step.Outcome != 0)
+			return step.Outcome;
+		const int direction = step.Direction;
 
 		// 붙일 평판의 자료가 잰 것과 같은지 본다(±5). 아니면 부르지 않는다.
 		const std::string generic_path = direction > 0 ? k_Good : k_Bad;
@@ -279,8 +308,8 @@ namespace
 			return 'f';
 		}
 		// 평판을 갖는 쪽(holder)의 왕이 대상(about)의 왕에게 갖는 평판에 붙인다.
-		const std::string holder = It.Side == 't' ? faction : k_Player;
-		const std::string about_path = It.Side == 't' ? k_Player : faction;
+		const std::string holder = It.Plan.Side == 't' ? faction : k_Player;
+		const std::string about_path = It.Plan.Side == 't' ? k_Player : faction;
 		if (!NlAccess::Read(NlCore::ParseAskPath(about_path), about, Why) || !about.IsStruct())
 		{
 			Why = "세력의 구조체를 읽지 못했습니다";
@@ -293,19 +322,24 @@ namespace
 			return 'f';
 		if (!attached.IsStruct())
 		{
-			Why = "평판이 붙지 않았습니다 (겹침의 한도일 수 있습니다)";
+			Why = "평판을 붙이는 함수가 구조체를 돌려주지 않았습니다 (붙지 않은 것으로 봅니다)";
 			return 'f';
 		}
 		It.Done += direction;
-		It.Left--;
+		It.Plan.Left--;
+		g_Stacked[stack + (direction > 0 ? "+" : "-")]++;
 		// Faction.__update_relations(세력) -> undefined. 게임이 그 꼴로 955번 불렀다. 관계의 종류를 평판에서 다시 셈해 행렬에 쓴다.
+		Log("diplomacy call " + holder + ".__update_relations(" + about_path + ")");
 		if (!NlAccess::CallMethod(NlCore::ParseAskPath(holder + ".__update_relations"), { about }, updated, Why))
+		{
+			Why = "평판은 붙었지만 관계를 다시 셈하게 하지 못했습니다 (" + Why + ")";
 			return 'f';
+		}
 		return 0;
 	}
 
-	// 일 하나를 Budget 걸음까지 한다. 끝났으면 결과를 적고 참을 돌려준다.
-	bool RunJob(Job& It, int Budget)
+	// 일 하나를 Budget 걸음까지 한다. 끝났으면 결과를 Tally 에 적고 참을 돌려준다.
+	bool RunJob(Job& It, int Budget, NlCore::DiplomacyTally& Tally)
 	{
 		std::string why;
 		char outcome = 0;
@@ -314,51 +348,33 @@ namespace
 		if (outcome == 0)
 			return false;
 
-		const Kingdom* kingdom = FindKingdom(It.Uuid);
-		const double after = It.Side == 't' ? Relation(It.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Uuid);
-		const std::string name = kingdom ? kingdom->Name : It.Uuid;
-		const std::string line = It.Goal == DiplomacyGoal::Pact ? NlCore::PactReport(name, It.Pact, outcome, why)
-			: NlCore::DiplomacyReport(name, It.Side, It.Started ? It.Before : after, after, It.Done, outcome, why);
-		Log("diplomacy: " + It.Uuid + " side " + std::string(1, It.Side) + " goal " + NlCore::DiplomacyGoalWord(It.Goal) + ": outcome "
-			+ std::string(1, outcome) + ", steps " + std::to_string(It.Done) + (why.empty() ? "" : ", " + why));
-		if (NlCore::DiplomacyFailed(outcome))
-			g_Failed++;
-		if (g_Results.size() < k_ResultLines)
-			g_Results.push_back(line);
+		const Kingdom* kingdom = FindKingdom(It.Plan.Uuid);
+		const double after = It.Plan.Side == 't' ? Relation(It.Plan.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Plan.Uuid);
+		const std::string name = kingdom ? kingdom->Name : It.Plan.Uuid;
+		const std::string line = It.Goal == DiplomacyGoal::Pact && outcome != 'x' ? NlCore::PactReport(name, It.Pact, outcome, why)
+			: NlCore::DiplomacyReport(name, It.Plan.Side, It.Started ? It.Before : after, after, It.Done, outcome, why);
+		Log("diplomacy: " + It.Plan.Uuid + " side " + std::string(1, It.Plan.Side) + " goal " + NlCore::DiplomacyGoalWord(It.Goal) + ": outcome "
+			+ std::string(1, outcome) + ", attached " + std::to_string(It.Done) + (why.empty() ? "" : ", " + why));
+		Tally.Add(outcome, line);
 		return true;
 	}
 
-	// 명령을 일들로 푼다. Scan 이 참을 돌려준 뒤에 부른다. 돌려주는 값: 쌓은 일의 수.
-	int Enqueue(const DiplomacyCommand& Command, std::deque<Job>& Out)
+	// 명령을 일들로 푼다(core 의 PlanJobs). g_Kingdoms 는 틱이 채운 사본이다(러너를 부르지 않는다).
+	std::vector<Job> MakeJobs(const DiplomacyCommand& Command)
 	{
-		const int steps = Command.Goal == DiplomacyGoal::Opinion ? NlCore::OpinionSteps(Command.Amount) : 0;
-		int count = 0;
+		std::vector<std::string> uuids;
 		for (const Kingdom& kingdom : g_Kingdoms)
+			uuids.push_back(kingdom.Uuid);
+		std::vector<Job> jobs;
+		for (NlCore::DiplomacyJob& plan : NlCore::PlanJobs(Command, uuids))
 		{
-			if (Command.Who != "all" && Command.Who != kingdom.Uuid)
-				continue;
-			for (const char side : { 't', 'u' })
-			{
-				// 협정은 양쪽에 한 번에 쓰인다: 일 하나.
-				if (Command.Goal == DiplomacyGoal::Pact ? side != 't' : (Command.Side != 'b' && Command.Side != side))
-					continue;
-				Job job;
-				job.Uuid = kingdom.Uuid;
-				job.Side = side;
-				job.Goal = Command.Goal;
-				job.Pact = Command.Pact;
-				job.Left = Command.Goal == DiplomacyGoal::Opinion ? (steps > 0 ? steps : -steps) : NlCore::k_OpinionStepsMax;
-				job.Sign = steps > 0 ? 1 : steps < 0 ? -1 : 0;
-				Out.push_back(std::move(job));
-				count++;
-			}
+			Job job;
+			job.Plan = std::move(plan);
+			job.Goal = Command.Goal;
+			job.Pact = Command.Pact;
+			jobs.push_back(std::move(job));
 		}
-		return count;
-	}
-
-	std::string Summary()
-	{
-		return std::to_string(g_Asked - g_Failed) + "/" + std::to_string(g_Asked) + " 개가 됐습니다" + (g_Failed > 0 ? " (안 된 것은 아래에 적혀 있습니다)" : "");
+		return jobs;
 	}
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
@@ -376,18 +392,20 @@ namespace
 		return g_SideChoice == 1 ? 't' : g_SideChoice == 2 ? 'u' : 'b';
 	}
 
-	// 명령을 일로 풀어 쌓는다(g_Kingdoms 는 틱이 채운 사본이다. 러너를 부르지 않는다). 돌려주는 값: 쌓은 일의 수. 거부하면 -1 이고 Why 에 까닭.
+	// 명령을 일로 풀어 쌓는다. 돌려주는 값: 쌓은 일의 수. 거부하면 -1 이고 Why 에 까닭.
 	int PushCommand(const DiplomacyCommand& Command, std::string& Why)
 	{
 		if (!NlCore::CheckDiplomacy(Command, Why))
 			return -1;
 		if (g_Jobs.empty())
+			g_Tally.Reset();		// 앞의 명령이 다 끝났다. 새로 센다
+		int count = 0;
+		for (Job& job : MakeJobs(Command))
 		{
-			g_Results.clear();
-			g_Asked = g_Failed = 0;
+			g_Jobs.push_back(std::move(job));
+			count++;
 		}
-		const int count = Enqueue(Command, g_Jobs);
-		g_Asked += count;
+		g_Tally.Expect(count);
 		return count;
 	}
 
@@ -396,9 +414,9 @@ namespace
 	{
 		DiplomacyCommand command{ Who, Goal, SideChoice(), Amount };
 		command.Pact = Pact;
-		std::string why;
-		if (PushCommand(command, why) < 0)
-			g_Results = { why };
+		g_Refused.clear();
+		if (PushCommand(command, g_Refused) >= 0)
+			g_Refused.clear();
 	}
 }
 
@@ -422,19 +440,14 @@ void NlDiplomacy::GameTick(double Now, bool Active)
 		g_NextRead = Now + 1;
 		if (!Scan())
 		{
-			if (!g_Jobs.empty())
-			{
-				Log("diplomacy: cannot read, dropped " + std::to_string(g_Jobs.size()) + " job(s)");
-				g_Jobs.clear();
-				g_Results.push_back(g_Why);
-			}
+			DropJobs(g_Why);		// 게임 화면을 떠났거나 읽지 못했다. 버린 일을 "됐다"에 남기지 않는다
 			return;
 		}
 	}
 	if (work)
 	{
 		g_NextStep = Now + k_StepEvery;
-		if (RunJob(g_Jobs.front(), k_StepsPerTick))
+		if (RunJob(g_Jobs.front(), k_StepsPerTick, g_Tally))
 		{
 			g_Jobs.pop_front();
 			ReadKinds();
@@ -454,17 +467,17 @@ std::vector<std::string> NlDiplomacy::Do(const DiplomacyCommand& Command)
 	if (!Scan())
 		return { g_Why };
 
-	std::deque<Job> jobs;
-	g_Results.clear();
-	g_Failed = 0;
-	g_Asked = Enqueue(Command, jobs);
-	if (g_Asked == 0)
+	// 제 결과는 따로 센다(창이 쌓아 둔 일들의 셈과 섞지 않는다).
+	NlCore::DiplomacyTally tally;
+	std::vector<Job> jobs = MakeJobs(Command);
+	if (jobs.empty())
 		return { "그 왕국이 없습니다" };
+	tally.Expect(static_cast<int>(jobs.size()));
 	for (Job& job : jobs)
-		RunJob(job, NlCore::k_OpinionStepsMax + 2);		// 끝까지: 한도만큼 붙이고 한 걸음 더 보면 끝난다
+		RunJob(job, NlCore::k_OpinionStepsMax + 2, tally);		// 끝까지: 한도만큼 붙이고 한 걸음 더 보면 끝난다
 	ReadKinds();
-	std::vector<std::string> lines = g_Results;
-	lines.push_back(Summary());
+	std::vector<std::string> lines = tally.Lines();
+	lines.push_back(tally.Summary());
 	return lines;
 }
 
@@ -494,6 +507,13 @@ std::vector<std::string> NlDiplomacy::List()
 			+ ")  us " + NlCore::RelationLabel(kingdom.Ours) + " (" + std::to_string(static_cast<int>(kingdom.Ours)) + ")  pacts " + NlCore::PactText(kingdom.Pacts)
 			+ " (" + std::to_string(static_cast<int>(kingdom.Pacts)) + ")");
 	lines.push_back("(" + std::to_string(g_Kingdoms.size()) + " kingdoms, player " + g_PlayerUuid + ")");
+	// 쌓인 일들의 결과(창의 단추와 queue=1). 실패한 줄이 앞에 온다.
+	if (!g_Tally.Empty())
+	{
+		lines.push_back("queued: " + g_Tally.Summary());
+		for (size_t i = 0; i < g_Tally.Lines().size() && i < k_ShownLines; i++)
+			lines.push_back("  " + g_Tally.Lines()[i]);
+	}
 	return lines;
 }
 
@@ -503,6 +523,8 @@ void NlDiplomacy::Draw()
 	if (!g_Ready)
 	{
 		ImGui::TextDisabled("%s", g_Why.empty() ? "게임을 시작하면 왕국들이 보입니다." : g_Why.c_str());
+		if (!g_Tally.Empty())
+			ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
 		return;
 	}
 
@@ -518,19 +540,24 @@ void NlDiplomacy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 왕국과 중립으로"))
 		Push("all", DiplomacyGoal::Neutral, 0);
-	Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(+5 또는 -5)을 게임의 함수로 붙이고 관계를 다시 셈하게 합니다. "
-		"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한쪽에 40개까지. 적대는 철천지원수까지 내립니다). 동맹·봉신·주군 관계는 건드리지 않습니다. "
-		"붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다. "
+	Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
+		"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한쪽에 40개까지. 적대는 철천지원수까지 내립니다). '평판+'·'평판-'는 하나만 붙입니다. "
+		"하나가 관계를 얼마나 움직이는지는 왕마다 다릅니다. 같은 평판은 50개까지 겹치므로 한 방향으로 그만큼 붙인 왕국에는 더 붙이지 않습니다. "
+		"동맹·봉신·주군 관계와 망한 왕국은 건드리지 않습니다. 붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다. "
 		"'평화'·'동맹'·'교역'은 게임의 협정 함수로 그 왕국과 협정(평화 협정, 방어 동맹, 교역 협정)을 바로 맺습니다. 푸는 단추는 없습니다. "
 		"게임이 그 협정을 어떻게 따르는지(기한, 침공)는 확인 전입니다.");
-	if (!g_Jobs.empty())
-		ImGui::TextDisabled("하는 중: 남은 일 %d개", static_cast<int>(g_Jobs.size()));
-	else if (g_Asked > 0)
-		ImGui::TextDisabled("%s", Summary().c_str());
-	for (size_t i = 0; i < g_Results.size() && i < 6; i++)
-		Hint(g_Results[i].c_str());
-	if (g_Results.size() > 6)
-		ImGui::TextDisabled("(그 밖에 %d줄)", static_cast<int>(g_Results.size() - 6));
+	if (!g_Refused.empty())
+		Hint(g_Refused.c_str());
+	if (!g_Tally.Empty())
+	{
+		ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
+		// 실패한 줄이 앞에 온다(core 의 DiplomacyTally). 창은 앞의 몇 줄만 보인다.
+		const std::vector<std::string>& lines = g_Tally.Lines();
+		for (size_t i = 0; i < lines.size() && i < k_ShownLines; i++)
+			Hint(lines[i].c_str());
+		if (lines.size() > k_ShownLines)
+			ImGui::TextDisabled("(그 밖에 %d줄. 안 된 것은 위에 먼저 적혀 있습니다)", static_cast<int>(lines.size() - k_ShownLines));
+	}
 
 	if (ImGui::BeginTable("kingdoms", 5, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 	{
@@ -560,11 +587,11 @@ void NlDiplomacy::Draw()
 					Push(kingdom.Uuid, goal, 0);
 				ImGui::SameLine();
 			}
-			if (ImGui::SmallButton("+5"))
-				Push(kingdom.Uuid, DiplomacyGoal::Opinion, 5);
+			if (ImGui::SmallButton("평판+"))
+				Push(kingdom.Uuid, DiplomacyGoal::Opinion, 1);
 			ImGui::SameLine();
-			if (ImGui::SmallButton("-5"))
-				Push(kingdom.Uuid, DiplomacyGoal::Opinion, -5);
+			if (ImGui::SmallButton("평판-"))
+				Push(kingdom.Uuid, DiplomacyGoal::Opinion, -1);
 			ImGui::SameLine();
 			if (ImGui::SmallButton("평화"))
 				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Peace);

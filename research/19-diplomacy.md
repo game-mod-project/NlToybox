@@ -6,7 +6,7 @@
 
 ## 세력
 
-- `fm.__array_of_factions[57]`. 왕국은 `__system_name`이 `faction.new.name.<수>`인 25개다(`__tags` 9 또는 4105). 플레이어는 45번(`player`, uuid `0a9e8ec091695bb9`).
+- `fm.__array_of_factions[57]`. 왕국은 `__system_name`이 `faction.new.name.<수>`인 24개다(`__tags` 9 또는 4105). 플레이어는 45번(`player`, uuid `0a9e8ec091695bb9`).
   나머지는 게임의 꾸러미다: `forest_bandits`, `mountain_bandits`, `wolves`, `raid`, `traders`, `holy_synod`, `inquisition`, `free_lords`, `unique_guests`, `player_village`, `player_untitled`,
   `rebellious_*`, `mercenaries`, `migrants`, `main_faceless` …
 - `Faction.get_caption()`(인자 없음. 불러서 봤다) → 현지화된 이름: `X` "크래스터", `pf` "아덴". `get_name()`·`get_raw_caption()`은 열쇠(`"faction.new.name.22"`)를 준다.

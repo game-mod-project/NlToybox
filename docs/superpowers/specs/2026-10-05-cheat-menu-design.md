@@ -261,7 +261,8 @@ lock inst:o_character:0.starving_hours=0
 | | 공격·방어·피해 배율, 받는 피해 0, 사기 | 받는 피해 0: D 상처를 입히는 `SoulBasic.take_damage`를 self 가 플레이어의 영혼일 때만 건너뛴다(`Forced::Who`. 모두에게 건너뛰면 상처가 생기지 않는 것은 쟀다). 아군·적의 전투력과 맷집: D `get_combat_level_in_battle`·`get_mortal_pain_threshold`가 돌려주는 수에 self 로 가린 배율(`ally_power`·`enemy_power`·`ally_toughness`·`enemy_toughness`. 게임이 받는 수가 바뀌는 것까지 봤다. `research/16`). 사기와 분대의 전투는 아직 | 5(아군 무적 됨, 배율은 확인 전) |
 | | 전투 즉시 승리, 적 사기 0 | B 전투 중인 분대의 사기를 찾는다. 안 되면 C | 5 |
 | 외교 | 관계·호감 설정, 적대 제거, 전쟁·평화 강제 | C 왕국 사이의 관계(종류)는 게임이 왕끼리의 평판에서 다시 셈한다. `Faction.attach_opinion_about_faction(대상 세력, o_data.opinion_mind_debug_positive·negative)`로 평판(±5)을 붙이고 `__update_relations`로 다시 셈하게 해, 바라는 관계(우호·중립·적대)가 될 때까지 움직인다(`src/Diplomacy.cpp`, `research/19`). 행렬에 바로 쓴 값은 되돌아간다 | 됨 |
-| | 동맹 강제, 외교 비용·성공률 | 동맹(0)·봉신(5)·주군(6)은 평판으로 닿지 않는 관계라 만들지 않았다(`add_to_alliance_with_leader`, `vassalise_by_faction`, 협정 행렬의 `set_agreement`는 게임이 부르는 꼴을 보지 못했다). 적대 없음: D `Faction.is_enemy_with(세력)`을 거짓으로(모든 세력. 효과는 확인 전) | 6(훅만) |
+| | 평화·동맹 강제(협정) | C 협정 행렬의 `set_agreement(세력, 세력, 비트)`로 평화 협정(4), 교역 협정(8), 방어 동맹(192)을 맺는다(`DiplomacyGoal::Pact`. 양쪽 칸에 쓰이고 게임의 판정 `is_declared_*_with`가 참이 된다. `research/19`) | 됨 |
+| | 외교 비용·성공률, 봉신 | 관계의 종류 동맹(0)·봉신(5)·주군(6)은 건드리지 않는다(`add_to_alliance_with_leader`, `vassalise_by_faction`은 게임이 부르는 꼴을 보지 못했다). 적대 없음: D `Faction.is_enemy_with(세력)`을 거짓으로(모든 세력. 효과는 확인 전) | 6(훅만) |
 | | 반란 끔, 외교 비용 0, 성공률 100% | A `is_rebellions_can_started`, B·D | 2(A), 6 |
 | 종교 | 영향력·전환·설교 효과·비용·수용량 | B `church_donation_runes*`, `church_max_capacity`(있음), `debug_piety_decrease_per_hour`, `__preach_data`. 주교 부르기: C `ReligiosityManager.debug_force_send_bishop()`(됨). 주교의 평판(`attach_opinion_to_bishop`)·예언·설교는 아직 | 2(일부), 6(주교) |
 | 시간 | 게임 속도 0.25~50배 | B `o_time_controller`의 후보 넷을 차례로 써 보고 `__game_time`의 흐름으로 판정한다(§9) | 2 |

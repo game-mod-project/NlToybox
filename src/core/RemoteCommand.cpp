@@ -420,7 +420,7 @@ namespace NlCore
 			else if (diplomacy.Goal == DiplomacyGoal::Opinion)
 			{
 				if (amount == command.Options.end() || !ParseNumber(amount->second, command.Number) || OpinionSteps(command.Number) == 0)
-					return fail("diplomacy opinion needs amount=<a multiple of 5, not 0>");
+					return fail("diplomacy opinion needs amount=<how many opinions to attach: a whole number from -40 to 40, not 0>");
 				diplomacy.Amount = command.Number;
 			}
 			else if (amount != command.Options.end())

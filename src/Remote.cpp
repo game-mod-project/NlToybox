@@ -421,7 +421,7 @@ namespace
 		Say("  " + NlWorld::Do(act));
 	}
 
-	// 외교 패널의 단추와 같은 길(NlDiplomacy::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	// 외교 패널과 같은 일을 한다: 지금 끝까지(NlDiplomacy::Do), 또는 queue=1 이면 단추처럼 쌓기만(NlDiplomacy::Queue). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoDiplomacy(const RemoteCommand& C)
 	{
 		if (C.Target == "list")

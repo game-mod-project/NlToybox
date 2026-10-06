@@ -1728,12 +1728,86 @@ int main(int argc, char** argv)
 				&& StepToward(3.5, goal) == 2 && StepToward(std::numeric_limits<double>::quiet_NaN(), goal) == 2);
 		CHECK(StepToward(3, DiplomacyGoal::Opinion) == 2);		// 평판의 수는 관계를 보지 않는다
 
-		// 평판의 변화량 → 걸음 수(5 의 배수로, 한도 40)
-		CHECK(OpinionSteps(25) == 5 && OpinionSteps(-25) == -5 && OpinionSteps(5) == 1 && OpinionSteps(-5) == -1);
-		CHECK(OpinionSteps(12) == 2 && OpinionSteps(13) == 3 && OpinionSteps(2) == 0 && OpinionSteps(0) == 0);
-		CHECK(OpinionSteps(1000) == k_OpinionStepsMax && OpinionSteps(-1000) == -k_OpinionStepsMax);
+		// 평판의 수: 붙일 디버그 평판의 개수다(부호가 방향). 한 왕에게 하나가 실제로 얼마를 움직이는지는 왕마다 달랐다(검토의 지적: 수치를 약속하지 않는다).
+		// 0 이 아닌 정수, 한 번에 40개까지. 그 밖은 0(받지 않는다. 큰 수를 한도로 당겨 "했다"고 적지 않는다).
+		CHECK(OpinionSteps(1) == 1 && OpinionSteps(-1) == -1 && OpinionSteps(40) == 40 && OpinionSteps(-40) == -40);
+		CHECK(OpinionSteps(41) == 0 && OpinionSteps(-41) == 0 && OpinionSteps(1000) == 0 && OpinionSteps(0) == 0 && OpinionSteps(2.5) == 0);
 		CHECK(OpinionSteps(std::numeric_limits<double>::quiet_NaN()) == 0 && OpinionSteps(std::numeric_limits<double>::infinity()) == 0);
-		CHECK(k_OpinionUnit == 5 && k_OpinionStepsMax < 50);		// 그 평판은 50겹까지다
+		CHECK(k_OpinionUnit == 5 && k_OpinionStepsMax < k_OpinionStackLimit && k_OpinionStackLimit == 50);		// 그 평판은 50겹까지다
+	});
+
+	Test("외교: 한 걸음의 판단과 한도", [] {
+		// (지금의 관계, 목표, 방향, 더 붙여도 되는 수, 붙인 수, 이 실행에서 그 대상에게 붙인 좋은 평판·나쁜 평판의 수)
+		DiplomacyStep step = PlanStep(7, DiplomacyGoal::Friends, 0, 40, 0, 0, 0);
+		CHECK(step.Outcome == 0 && step.Direction == 1);
+		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 40, 0, 0, 0).Outcome == 'a');		// 처음부터 그 관계였다
+		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 33, 7, 7, 0).Outcome == 'd');		// 붙여서 됐다
+		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, 0, 40, 40, 0).Outcome == 'l');		// 한도까지 붙였지만 안 됐다
+		CHECK(PlanStep(5, DiplomacyGoal::Neutral, 0, 40, 0, 0, 0).Outcome == 'k');
+		step = PlanStep(4, DiplomacyGoal::Hostile, 0, 40, 0, 0, 0);
+		CHECK(step.Outcome == 0 && step.Direction == -1);
+		// 평판의 수: 정한 만큼만. 동맹·봉신·주군·모르는 관계에는 붙이지 않는다(목표가 있는 일과 같다).
+		step = PlanStep(3, DiplomacyGoal::Opinion, -1, 2, 0, 0, 0);
+		CHECK(step.Outcome == 0 && step.Direction == -1);
+		CHECK(PlanStep(3, DiplomacyGoal::Opinion, -1, 0, -2, 0, 2).Outcome == 'd');
+		CHECK(PlanStep(0, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k' && PlanStep(6, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k'
+			&& PlanStep(8, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k');
+		CHECK(PlanStep(3, DiplomacyGoal::Opinion, 0, 2, 0, 0, 0).Outcome == 'k');		// 방향이 없다
+		// 같은 평판은 50겹까지다: 이 실행에서 그 방향으로 이미 그만큼 붙였으면 더 붙이지 않는다(한도에서 게임이 무엇을 하는지 잰 적이 없다).
+		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, 40, 0, 50, 0).Outcome == 'l');
+		step = PlanStep(3, DiplomacyGoal::Friends, 0, 40, 0, 49, 50);
+		CHECK(step.Outcome == 0 && step.Direction == 1);
+		CHECK(PlanStep(3, DiplomacyGoal::Opinion, -1, 5, 0, 0, 50).Outcome == 'l');
+		CHECK(PlanStep(3, DiplomacyGoal::Pact, 0, 40, 0, 0, 0).Outcome == 'k');			// 협정은 걸음이 아니다
+	});
+
+	Test("외교: 명령을 일들로 푼다", [] {
+		const std::vector<std::string> kingdoms = { "1fa50db321ce450b", "0d8e3a894f258750", "b113a12eef97ea23" };
+		std::vector<DiplomacyJob> jobs = PlanJobs({ "all", DiplomacyGoal::Neutral, 'b', 0 }, kingdoms);
+		CHECK(jobs.size() == 6 && jobs[0].Uuid == kingdoms[0] && jobs[0].Side == 't' && jobs[1].Uuid == kingdoms[0] && jobs[1].Side == 'u'
+			&& jobs[0].Left == k_OpinionStepsMax && jobs[0].Sign == 0 && jobs[5].Uuid == kingdoms[2]);
+		jobs = PlanJobs({ "0d8e3a894f258750", DiplomacyGoal::Friends, 't', 0 }, kingdoms);
+		CHECK(jobs.size() == 1 && jobs[0].Uuid == "0d8e3a894f258750" && jobs[0].Side == 't');
+		jobs = PlanJobs({ "0d8e3a894f258750", DiplomacyGoal::Opinion, 'u', -3 }, kingdoms);
+		CHECK(jobs.size() == 1 && jobs[0].Side == 'u' && jobs[0].Left == 3 && jobs[0].Sign == -1);
+		jobs = PlanJobs({ "b113a12eef97ea23", DiplomacyGoal::Pact, 'b', 0 }, kingdoms);
+		CHECK(jobs.size() == 1 && jobs[0].Side == 't');		// 협정은 양쪽에 한 번에 쓰인다: 일 하나
+		CHECK(PlanJobs({ "0000000000000000", DiplomacyGoal::Friends, 'b', 0 }, kingdoms).empty());		// 없는 왕국
+		CHECK(PlanJobs({ "all", DiplomacyGoal::Hostile, 'b', 0 }, kingdoms).empty());					// 말이 안 되는 명령은 일을 내지 않는다
+		CHECK(PlanJobs({ "0d8e3a894f258750", DiplomacyGoal::Opinion, 't', 41 }, kingdoms).empty());
+	});
+
+	Test("외교: 결과를 세고 실패한 줄을 앞에 둔다", [] {
+		DiplomacyTally tally;
+		CHECK(tally.Empty() && tally.Asked() == 0 && tally.Lines().empty());
+		tally.Expect(5);
+		tally.Add('d', "A 바꿈");
+		tally.Add('a', "B 그대로");
+		tally.Add('f', "C 실패");
+		tally.Add('k', "D 안 건드림");
+		tally.Add('l', "E 한도");
+		CHECK(!tally.Empty() && tally.Asked() == 5 && tally.Changed() == 1 && tally.Same() == 2 && tally.Failed() == 2 && tally.Pending() == 0);
+		// 검토의 지적: 창은 앞의 몇 줄만 보인다. 실패한 줄이 앞에 와야 "안 된 것"을 읽을 수 있다. 실패끼리, 나머지끼리는 한 차례대로.
+		CHECK(tally.Lines() == (std::vector<std::string>{ "C 실패", "E 한도", "A 바꿈", "B 그대로", "D 안 건드림" }));
+		// "이미 그 관계"와 "건드리지 않음"을 "됐다"에 넣지 않는다.
+		CHECK_STR(tally.Summary(), "5개 가운데 바꾼 것 1개, 그대로 둔 것 2개, 안 된 것 2개");
+		// 하지 못하고 버린 일은 실패로 센다(게임 화면을 떠났다. 검토의 지적: 버린 일이 "됐다"에 남았다).
+		DiplomacyTally dropped;
+		dropped.Expect(48);
+		dropped.Add('d', "A 바꿈");
+		dropped.Drop(47, "게임 화면이 아닙니다");
+		CHECK(dropped.Failed() == 47 && dropped.Pending() == 0 && dropped.Lines()[0] == "하지 못하고 버린 일 47개: 게임 화면이 아닙니다");
+		CHECK_STR(dropped.Summary(), "48개 가운데 바꾼 것 1개, 그대로 둔 것 0개, 안 된 것 47개");
+		dropped.Drop(0, "아무것도");
+		CHECK(dropped.Failed() == 47 && dropped.Lines().size() == 2);
+		// 아직 하는 중
+		DiplomacyTally busy;
+		busy.Expect(3);
+		busy.Add('x', "망한 왕국");
+		CHECK(busy.Pending() == 2 && busy.Same() == 1);
+		CHECK_STR(busy.Summary(), "3개 가운데 바꾼 것 0개, 그대로 둔 것 1개, 안 된 것 0개 (남은 일 2개)");
+		busy.Reset();
+		CHECK(busy.Empty() && busy.Lines().empty() && busy.Pending() == 0);
 	});
 
 	Test("외교: 명령의 낱말과 검사", [] {
@@ -1759,19 +1833,23 @@ int main(int argc, char** argv)
 		CHECK(!CheckDiplomacy({ "all", DiplomacyGoal::Hostile, 'b', 0 }, why) && !why.empty());
 		CHECK(!CheckDiplomacy({ "all", DiplomacyGoal::Opinion, 'b', 25 }, why));
 		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Hostile, 'u', 0 }, why));
-		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', -25 }, why));
-		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 2 }, why));		// 5 의 배수로 반올림하면 0 이다
+		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', -25 }, why) && CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 2 }, why));
+		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 0 }, why) && !why.empty());
+		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 41 }, why) && !CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 2.5 }, why));
 		CHECK(!CheckDiplomacy({ "nobody", DiplomacyGoal::Friends, 'b', 0 }, why));
 		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Friends, 'x', 0 }, why));
 
 		// 결과의 글: 무엇이 어떻게 바뀌었는지, 안 된 것은 안 됐다고
-		CHECK_STR(DiplomacyReport("크래스터", 't', 7, 3, 1, 'd', ""), "크래스터: 그쪽이 우리를 대립 -> 중립 (평판 +5 를 1번)");
-		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 2, -11, 'd', ""), "크래스터: 우리가 그쪽을 중립 -> 철천지원수 (평판 -5 를 11번)");
+		// 붙인 것은 개수로 적는다("+5 를 N번"이라 적지 않는다: 하나가 움직이는 크기가 왕마다 달랐다).
+		CHECK_STR(DiplomacyReport("크래스터", 't', 7, 3, 1, 'd', ""), "크래스터: 그쪽이 우리를 대립 -> 중립 (좋은 평판 1개)");
+		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 2, -11, 'd', ""), "크래스터: 우리가 그쪽을 중립 -> 철천지원수 (나쁜 평판 11개)");
 		CHECK_STR(DiplomacyReport("크래스터", 't', 4, 4, 0, 'a', ""), "크래스터: 그쪽이 우리를 이미 우호입니다");
 		CHECK_STR(DiplomacyReport("크래스터", 't', 5, 5, 0, 'k', ""), "크래스터: 그쪽이 우리를 봉신 관계는 건드리지 않습니다");
-		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 40, 'l', ""), "크래스터: 그쪽이 우리를 중립 -> 중립 (평판 +5 를 40번). 한도까지 붙였지만 바라는 관계가 되지 않았습니다");
-		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 3, 2, 'f', "no such method"), "크래스터: 우리가 그쪽을 중립 -> 중립 (평판 +5 를 2번). 실패: no such method");
-		CHECK(DiplomacyFailed('l') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a') && !DiplomacyFailed('k'));
+		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 40, 'l', ""), "크래스터: 그쪽이 우리를 중립 -> 중립 (좋은 평판 40개). 한도까지 붙였지만 바라는 관계가 되지 않았습니다");
+		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 3, 2, 'f', "no such method"), "크래스터: 우리가 그쪽을 중립 -> 중립 (좋은 평판 2개). 실패: no such method");
+		CHECK_STR(DiplomacyReport("크래스터", 't', -1, -1, 0, 'f', "관계를 읽지 못했습니다"), "크래스터: 그쪽이 우리를 ? -> ?. 실패: 관계를 읽지 못했습니다");
+		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 0, 'x', ""), "크래스터: 망했거나 왕이 없는 왕국입니다. 건드리지 않습니다");
+		CHECK(DiplomacyFailed('l') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a') && !DiplomacyFailed('k') && !DiplomacyFailed('x'));
 
 		// 원격 명령
 		const RemoteCommand list = ParseRemoteLine("diplomacy list");
@@ -1782,9 +1860,13 @@ int main(int argc, char** argv)
 		CHECK(all.Error.empty() && all.Target == "all" && all.Options.at("goal") == "neutral" && all.Options.count("side") == 0);
 		const RemoteCommand opinion = ParseRemoteLine("diplomacy 1fa50db321ce450b opinion amount=-25 side=us");
 		CHECK(opinion.Error.empty() && opinion.Number == -25);
+		// 단추와 같은 길(쌓기)
+		const RemoteCommand queued = ParseRemoteLine("diplomacy 1fa50db321ce450b friends queue=1");
+		CHECK(queued.Error.empty() && queued.Options.count("queue") == 1 && queued.Options.at("goal") == "friends");
 		for (const char* bad : { "diplomacy", "diplomacy all", "diplomacy all hostile", "diplomacy all opinion amount=25", "diplomacy nobody friends",
 			"diplomacy 1fa50db321ce450b allies", "diplomacy 1fa50db321ce450b friends side=sideways", "diplomacy 1fa50db321ce450b opinion",
-			"diplomacy 1fa50db321ce450b opinion amount=2", "diplomacy list now" })
+			"diplomacy 1fa50db321ce450b opinion amount=0", "diplomacy 1fa50db321ce450b opinion amount=41", "diplomacy 1fa50db321ce450b opinion amount=2.5",
+			"diplomacy 1fa50db321ce450b friends amount=5", "diplomacy 1fa50db321ce450b friends now", "diplomacy list now" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 	});
 
