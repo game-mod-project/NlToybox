@@ -29,7 +29,9 @@ namespace
 	constexpr const char* k_Bad = "inst:o_data.opinion_mind_debug_negative";
 	constexpr double k_StepEvery = 0.02;		// 쌓인 일을 한 묶음씩 하는 간격(초)
 	constexpr int k_StepsPerTick = 6;			// 한 묶음의 걸음 수(한 틱이 길어지지 않게)
-	constexpr size_t k_ShownLines = 8;			// 창에 보이는 결과 줄의 수(실패한 줄이 앞에 온다)
+	constexpr size_t k_ShownLines = 8;			// 원격의 답에 적는 결과 줄의 수(실패한 줄이 앞에 온다)
+	constexpr size_t k_PanelLines = 2;			// 창에 바로 보이는 결과 줄의 수(더 두면 영주의 표가 창 아래로 밀린다. 나머지는 접어 둔다)
+	constexpr size_t k_PanelMore = 40;			// 펼쳤을 때 더 보이는 줄의 한도
 	const double k_Unread = std::numeric_limits<double>::quiet_NaN();
 
 	struct Lord
@@ -628,10 +630,10 @@ void NlCourt::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("따르는 사람들의 충성 대상 모두 지우기"))
 		Push("lords", CourtGoal::Release, "");
-	Hint("게임의 디버그용 평판을 영주에게 붙이거나 떼어 서로를 보는 평판을 움직입니다. 왕에 대한 충성은 왕을 보는 평판입니다.");
-	// 긴 설명은 접어 둔다.
+	// 긴 설명은 접어 둔다(펼쳐 두면 영주의 표가 창 아래로 밀린다).
 	if (ImGui::CollapsingHeader("설명##court"))
-		Hint("영주가 다른 영주를 보는 평판은 게임이 여러 평판의 합으로 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것 +5, 나쁜 것 -5. 사람에 따라 +6 인 것도 봤습니다)을 "
+		Hint("게임의 디버그용 평판을 영주에게 붙이거나 떼어 서로를 보는 평판을 움직입니다. 왕에 대한 충성은 왕을 보는 평판입니다. "
+			"영주가 다른 영주를 보는 평판은 게임이 여러 평판의 합으로 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것 +5, 나쁜 것 -5. 사람에 따라 +6 인 것도 봤습니다)을 "
 			"게임의 함수로 하나씩 붙이고 뗍니다. 올릴 때 나쁜 것이 붙어 있으면 그것부터 뗍니다(좋은 것과 나쁜 것을 함께 두지 않습니다). 걸음마다 게임이 세어 준 수로 붙었는지 확인합니다. "
 			"올리고 내리는 일은 한 번에 한 짝에 40걸음까지 하고(떼기는 다 뗄 때까지), 같은 평판은 50개까지만 겹칩니다. "
 			"충성 칸의 '낮음·보통·높음'은 게임의 충성 상태의 수(0, 1, 2)에 이 모드가 붙인 이름입니다: 평판이 오르면 수도 올랐습니다(55 에서 2, -19 에서 0 을 봤습니다). "
@@ -645,10 +647,11 @@ void NlCourt::Draw()
 		ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
 		// 실패한 줄이 앞에 온다(core 의 DiplomacyTally). 창은 앞의 몇 줄만 보인다.
 		const std::vector<std::string>& lines = g_Tally.Lines();
-		for (size_t i = 0; i < lines.size() && i < k_ShownLines; i++)
+		for (size_t i = 0; i < lines.size() && i < k_PanelLines; i++)
 			Hint(lines[i].c_str());
-		if (lines.size() > k_ShownLines)
-			ImGui::TextDisabled("(그 밖에 %d줄. 안 된 것은 위에 먼저 적혀 있습니다)", static_cast<int>(lines.size() - k_ShownLines));
+		if (lines.size() > k_PanelLines && ImGui::CollapsingHeader(("결과 " + std::to_string(lines.size() - k_PanelLines) + "줄 더 (안 된 것이 먼저)###court_more").c_str()))
+			for (size_t i = k_PanelLines; i < lines.size() && i < k_PanelLines + k_PanelMore; i++)
+				Hint(lines[i].c_str());
 	}
 
 	if (ImGui::BeginTable("court_lords", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))

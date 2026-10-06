@@ -502,7 +502,7 @@ namespace NlCore
 		}
 		else if (verb == "traits")
 		{
-			// traits [find=<글>] [max=<수>]      게임의 특성들: 이름과 화면 이름(모듈이 게임의 현지화 파일에서 읽은 것). max 는 1 ~ 100000
+			// traits [find=<글>] [max=<수>]      게임의 특성들: 이름, 화면 이름, 설명의 앞부분(모듈이 게임의 현지화 파일에서 읽은 것). max 는 1 ~ 100000
 			if (!options(1))
 				return command;
 			for (const auto& [key, value] : command.Options)

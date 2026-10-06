@@ -26,6 +26,23 @@ namespace NlCore
 	//   글꼴에 없는 긴 줄표(U+2014)는 "-"로. 빈 줄은 하나까지만 두고 앞뒤의 빈 글을 뗀다.
 	std::string PlainHint(std::string_view Raw, std::string_view Caption);
 
+	// 힌트의 글을 제목(첫 줄)과 본문으로 가른다. 특성의 힌트 228개에서 첫 줄은 언제나 짧은 제목이었다(18자 이하, 한 줄뿐인 힌트는 없었다. research/20).
+	// 제목과 본문을 모두 PlainHint 로 다듬는다. 앞의 빈 줄은 건너뛴다.
+	struct HintText
+	{
+		std::string Title, Body;
+	};
+	HintText SplitHint(std::string_view Raw);
+
+	// 게임의 속성 함수 gml_Script_trait_property_get(특성의 이름, 번호)가 돌려주는 것(0.5588.9777.0 에서 281개에 불러 봤다. research/20):
+	// 0번은 이름, 1번은 화면 이름의 열쇠("trait.<이름>"), 21번은 힌트(설명)의 열쇠("hint_trait_…", "hint_talent_…", "hint_…". 없으면 빈 글).
+	constexpr int k_TraitNameProperty = 0, k_TraitCaptionKeyProperty = 1, k_TraitHintProperty = 21;
+	// 번호의 배치가 잰 것과 같은가: 0번이 그 이름이고 1번이 "trait.<이름>"이다. 아니면 21번을 설명의 열쇠로 믿지 않는다(게임이 갱신되면 번호가 밀릴 수 있다).
+	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1);
+
+	// 목록의 차례: 화면 이름이 있는 것을 그 이름의 차례로 먼저(UTF-8 의 차례가 한글의 가나다 차례다), 없는 것을 게임의 이름의 차례로 뒤에. 같은 이름끼리는 게임의 이름으로.
+	bool TraitBefore(const std::string& NameA, const std::string& CaptionA, const std::string& NameB, const std::string& CaptionB);
+
 	// 찾는 글이 그 특성에 맞는가: 게임의 이름이나 화면 이름에 들어 있다(영문은 대소문자를 가리지 않는다). 빈 글은 모두 맞는다.
 	bool TraitMatches(std::string_view Filter, std::string_view Name, std::string_view Caption);
 }

@@ -29,8 +29,10 @@
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <iterator>
 #include <limits>
 #include <map>
 #include <set>
@@ -2554,6 +2556,33 @@ int main(int argc, char** argv)
 		CHECK_STR(PlainHint("끝이 {", ""), "끝이 {");
 		CHECK_STR(PlainHint("끝이 {ab", ""), "끝이 {ab");
 
+		// 힌트의 글을 제목(첫 줄)과 본문으로 가른다: 특성의 힌트에서 첫 줄은 언제나 짧은 제목이었다(research/20). 둘 다 다듬는다.
+		HintText split = SplitHint("용감함\n싸움에서 <b>물러서지</b> 않습니다.\n\n{time} 동안 이어집니다.");
+		CHECK_STR(split.Title, "용감함");
+		CHECK_STR(split.Body, "싸움에서 물러서지 않습니다.\n\n(값) 동안 이어집니다.");
+		split = SplitHint("\n  <b>제목</b>  \n본문");
+		CHECK_STR(split.Title, "제목");
+		CHECK_STR(split.Body, "본문");
+		split = SplitHint("제목뿐");
+		CHECK(split.Title == "제목뿐" && split.Body.empty());
+		split = SplitHint("");
+		CHECK(split.Title.empty() && split.Body.empty());
+		split = SplitHint("제목\r\n본문 첫 줄\r\n본문 둘째 줄");
+		CHECK(split.Title == "제목" && split.Body == "본문 첫 줄\n본문 둘째 줄");
+
+		// 게임의 속성 함수(trait_property_get(이름, 번호))의 배치가 잰 것과 같은가: 0번이 이름, 1번이 화면 이름의 열쇠("trait.<이름>").
+		// 아니면(게임이 갱신돼 번호가 밀렸다) 설명의 열쇠(21번)를 믿지 않는다.
+		CHECK(TraitLayoutOk("brave", "brave", "trait.brave"));
+		CHECK(!TraitLayoutOk("brave", "trait.brave", "brave") && !TraitLayoutOk("brave", "brave", "") && !TraitLayoutOk("brave", "", "trait.brave")
+			&& !TraitLayoutOk("brave", "calm", "trait.calm") && !TraitLayoutOk("", "", "trait."));
+		CHECK(k_TraitHintProperty == 21);
+
+		// 목록의 차례: 화면 이름이 있는 것을 그 이름의 차례로 먼저, 없는 것을 게임의 이름의 차례로 뒤에.
+		CHECK(TraitBefore("zeal", "가", "ant", "나") && !TraitBefore("ant", "나", "zeal", "가"));
+		CHECK(TraitBefore("zeal", "가", "ant", "") && !TraitBefore("ant", "", "zeal", "가"));
+		CHECK(TraitBefore("ant", "", "bee", "") && !TraitBefore("bee", "", "ant", ""));
+		CHECK(TraitBefore("ant", "같음", "bee", "같음") && !TraitBefore("ant", "가", "ant", "가"));
+
 		// 찾기: 게임의 이름이나 화면 이름에 들어 있다(영문은 대소문자를 가리지 않는다)
 		CHECK(TraitMatches("", "brave", "용감") && TraitMatches("brav", "brave", "용감") && TraitMatches("BRAV", "brave", "용감") && TraitMatches("용", "brave", "용감"));
 		CHECK(!TraitMatches("x", "brave", "용감") && !TraitMatches("감용", "brave", "용감"));
@@ -2567,6 +2596,46 @@ int main(int argc, char** argv)
 		for (const char* bad : { "traits max=inf", "traits max=1e30", "traits max=2.5", "traits max=-3", "traits max=100001" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 		CHECK(ParseRemoteLine("traits max=100000").Error.empty());
+	});
+
+	Test("현지화: 게임 폴더가 주어지면 진짜 파일을 읽어 본다 (NL_GAME_DIR 이 없으면 건너뛴다)", [] {
+		// 게임 파일의 글을 시험에 싣지 않는다: 여기서는 꼴만 본다(읽히는가, 수가 맞는가, 다듬은 글에 표식이 남지 않는가, 끝나는가).
+		// 게임이 갱신된 뒤 다시 돌려 본다: $env:NL_GAME_DIR = <게임 폴더>; build\\nlcore_tests.exe tools\\probes
+#pragma warning(suppress: 4996)		// getenv: 읽기만 한다
+		const char* dir = std::getenv("NL_GAME_DIR");
+		if (!dir || !*dir)
+			return;
+		const std::filesystem::path root = std::filesystem::path(dir) / "localization";
+		const auto slurp = [&](const char* name, std::string& out) {
+			std::ifstream in(root / name, std::ios::binary);
+			if (!in)
+				return false;
+			out.assign(std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char>());
+			return true;
+		};
+		std::string text, why;
+		std::unordered_map<std::string, std::string> captions, hints;
+		CHECK(slurp("main.csv", text) && ReadLocalization(text, "trait.", { "Korean", "English" }, captions, why));
+		CHECK(captions.size() >= 200);
+		size_t files = 0;
+		for (const char* name : { "hints_tutorial.csv", "hints_with_icons.csv", "hints.csv" })
+			if (slurp(name, text) && ReadLocalization(text, "", { "Korean", "English" }, hints, why))
+				files++;
+		CHECK(files == 3 && hints.size() >= 3000);
+		size_t titled = 0, bodies = 0, tagged = 0, longest = 0;
+		for (const auto& [key, raw] : hints)
+		{
+			const HintText split = SplitHint(raw);
+			titled += split.Title.empty() ? 0 : 1;
+			bodies += split.Body.empty() ? 0 : 1;
+			longest = (std::max)(longest, split.Body.size());
+			// 다듬은 글에 게임의 표식이 남지 않는다
+			if (split.Body.find("<hint=") != std::string::npos || split.Body.find("</hint>") != std::string::npos || split.Body.find("<b>") != std::string::npos
+				|| split.Title.find('<') != std::string::npos)
+				tagged++;
+		}
+		CHECK(titled >= 3000 && bodies >= 2500 && tagged == 0);
+		std::printf("  real files: %zu trait captions, %zu hints (%zu titled, %zu with a body, longest body %zu bytes)\n", captions.size(), hints.size(), titled, bodies, longest);
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

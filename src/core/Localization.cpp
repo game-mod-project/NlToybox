@@ -238,6 +238,31 @@ namespace NlCore
 		return std::string(TrimView(out));
 	}
 
+	HintText SplitHint(std::string_view Raw)
+	{
+		HintText out;
+		Raw = TrimView(Raw);
+		const size_t end = Raw.find('\n');
+		out.Title = PlainHint(Raw.substr(0, end), "");
+		if (end != std::string_view::npos)
+			out.Body = PlainHint(Raw.substr(end + 1), "");
+		return out;
+	}
+
+	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1)
+	{
+		return !Name.empty() && Property0 == Name && Property1 == TraitCaptionKey(Name);
+	}
+
+	bool TraitBefore(const std::string& NameA, const std::string& CaptionA, const std::string& NameB, const std::string& CaptionB)
+	{
+		if (CaptionA.empty() != CaptionB.empty())
+			return !CaptionA.empty();
+		if (CaptionA != CaptionB)
+			return CaptionA < CaptionB;
+		return NameA < NameB;
+	}
+
 	bool TraitMatches(std::string_view Filter, std::string_view Name, std::string_view Caption)
 	{
 		if (Filter.empty())
