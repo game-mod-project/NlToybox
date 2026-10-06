@@ -366,42 +366,6 @@ namespace NlCore
 		return jobs;
 	}
 
-	void DiplomacyTally::Add(char Outcome, const std::string& Line)
-	{
-		if (DiplomacyFailed(Outcome))
-		{
-			m_Failed++;
-			m_Lines.insert(m_Lines.begin() + static_cast<std::ptrdiff_t>(m_FailedLines), Line);
-			m_FailedLines++;
-			return;
-		}
-		(Outcome == 'd' ? m_Changed : m_Same)++;
-		m_Lines.push_back(Line);
-	}
-
-	void DiplomacyTally::Drop(int Jobs, const std::string& Why)
-	{
-		if (Jobs <= 0)
-			return;
-		m_Failed += Jobs;
-		m_Lines.insert(m_Lines.begin() + static_cast<std::ptrdiff_t>(m_FailedLines), "하지 못하고 버린 일 " + std::to_string(Jobs) + "개: " + Why);
-		m_FailedLines++;
-	}
-
-	std::string DiplomacyTally::Summary() const
-	{
-		std::string text = std::to_string(m_Asked) + "개 가운데 한 것 " + std::to_string(m_Changed) + "개, 그대로 둔 것 " + std::to_string(m_Same)
-			+ "개, 안 된 것 " + std::to_string(m_Failed) + "개";
-		if (Pending() > 0)
-			text += " (남은 일 " + std::to_string(Pending()) + "개)";
-		return text;
-	}
-
-	bool DiplomacyFailed(char Outcome)
-	{
-		return Outcome == 'l' || Outcome == 'f' || Outcome == 's';
-	}
-
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why)
 	{
 		const std::string who = Name + (Side == 't' ? ": 그쪽이 우리를 " : ": 우리가 그쪽을 ");

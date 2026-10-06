@@ -307,7 +307,7 @@ namespace
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
 
-	// 값 칸. 수와 불리언과 짧은 글은 고칠 수 있다(Enter 로 써 넣는다).
+	// 값 칸. 수와 불리언과 짧은 글은 고칠 수 있다(수는 칸을 떠날 때, 글은 Enter 로 써 넣는다).
 	void DrawValue(const NlAccess::Row& Row, const std::string& Path)
 	{
 		if (Row.IsBool)

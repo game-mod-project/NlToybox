@@ -177,3 +177,15 @@
 - 그 실행에서 게임이 켜지다 멈췄고 원인을 찾았다: Aurie 콘솔의 선택(QuickEdit) 모드(`research/06` 의 세 번째). `tools/common.ps1` 의 `Clear-NlConsoleSelect` 와 기다리는 루프 넷에 넣었다.
 - 미룬 것(B 로): `Cheats.cpp:430` 의 안내 글 "수는 Enter 로 써 넣습니다"는 이제 틀린 글이다(DLL 이 바뀌므로 B 의 가지에서 고치고 B 의 실행으로 본다). `Explorer.cpp:310` 의 주석도 같다.
 - 자리의 교훈: 값을 써 넣으면 결과 줄이 생겨 아래 줄들이 25px 내려간다. `ui type`은 콜론을 받지 않는다(CLAUDE.md 에 적었다).
+
+## 8. 결과 — 묶음 B (0.27.3, 가지 `chore/refactor-b`, 2026-10-07)
+
+- 한 것: R4(`One` 501줄 → `One<할 일>` 열일곱 + 나누기만 하는 `One`), R5(`ParseRemoteLine` 494줄 → `Parse<동사>Line` 스물다섯 + 넘기기만 하는 `ParseRemoteLine`. `Remote.cpp`의 `Execute` 사슬 30분기 → `k_Handlers` 표),
+  R9(`DiplomacyTally` → `core/JobTally`. 결과 글자의 뜻 `JobFailed`도 함께), R13(`PlanEconomy`의 `Counts` → `Basis`), R19(시험 한 파일 3,500줄 → `test_<묶음>.cpp` 스물 + `common.hpp` + `main.cpp`),
+  A 에서 미룬 안내 글. 커밋 다섯. 본문은 모두 글자 그대로 옮겼다(스크립트로 옮기고 단언으로 자리를 맞췄다).
+- 코어 시험 116 passed 그대로(파서·Tally 의 시험이 그대로 붙었다). 빌드 경고 0.
+- 게임 확인(실행 2, 같은 세이브): 적재 판정 통과. 원격 동사 `state`·`person list/show`·`crime list`·`diplomacy list`(24왕국)·`court list`(5영주)·`economy gold_add ±1`·`call`·`cheat on/off`·`world season`·`traits`·`records`·`window`·`page`·`shot`,
+  `person` 의 길 넷(`skill_add` ±1: 전투 4→5→4, `trait_add`/`trait_remove` coward, `needs_fill`: 욕구 모두 100, `money_add` ±1: 244 그대로). 새 오류 없음.
+  안내 글의 화면은 `shot`과 `window close`를 한 묶음에 보내 창이 닫힌 뒤에 찍혀 보지 못했다(글자만 바뀐 것이라 다시 켜지 않았다. 다음 실행에서 본다).
+- 켜자마자 Aurie 콘솔이 또 선택 모드였고 `load-save.ps1`의 도우미가 풀었다(켤 때마다 나는 것으로 보인다. `research/06`).
+- 남은 것: 묶음 C(§6). 리뷰의 "확인하지 못한 것"(§5)은 그대로다.

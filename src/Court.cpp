@@ -5,6 +5,7 @@
 #include "Ui.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
+#include "core/JobTally.hpp"
 #include "core/Guard.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/PeoplePlan.hpp"
@@ -75,7 +76,7 @@ namespace
 	std::vector<Lord> g_Lords;			// 틱이 채우고 Draw 가 읽는다. RValue 를 담지 않는다
 	std::vector<Follower> g_Followers;
 	std::deque<Job> g_Jobs;				// 창이 쌓고 틱이 한다
-	NlCore::DiplomacyTally g_Tally;		// 쌓인 일들의 결과(창이 보인다)
+	NlCore::JobTally g_Tally;		// 쌓인 일들의 결과(창이 보인다)
 	std::string g_Refused;				// 창의 단추가 거부된 까닭
 	double g_NextRead = 0, g_NextStep = 0;
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
@@ -392,7 +393,7 @@ namespace
 	}
 
 	// 일 하나를 Budget 걸음까지 한다. 끝났으면 결과를 Tally 에 적고 참을 돌려준다.
-	bool RunJob(Job& It, int Budget, NlCore::DiplomacyTally& Tally)
+	bool RunJob(Job& It, int Budget, NlCore::JobTally& Tally)
 	{
 		const Lord* holder = FindLord(It.Plan.Holder);
 		const std::string holder_name = holder ? holder->Name : It.Plan.Holder;
@@ -557,7 +558,7 @@ std::vector<std::string> NlCourt::Do(const CourtCommand& Command)
 		return { g_ScanSkipped ? std::string("busy") : g_Why };
 
 	// 제 결과는 따로 센다(창이 쌓아 둔 일들의 셈과 섞지 않는다).
-	NlCore::DiplomacyTally tally;
+	NlCore::JobTally tally;
 	std::vector<Job> jobs = MakeJobs(Command);
 	if (jobs.empty())
 		return { NoJobs(Command) };
@@ -656,7 +657,7 @@ void NlCourt::Draw()
 	if (!g_Tally.Empty())
 	{
 		ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
-		// 실패한 줄이 앞에 온다(core 의 DiplomacyTally). 창은 앞의 몇 줄만 보인다.
+		// 실패한 줄이 앞에 온다(core 의 JobTally). 창은 앞의 몇 줄만 보인다.
 		const std::vector<std::string>& lines = g_Tally.Lines();
 		for (size_t i = 0; i < lines.size() && i < k_PanelLines; i++)
 			NlUi::Hint(lines[i].c_str());
