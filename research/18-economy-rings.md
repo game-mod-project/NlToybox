@@ -63,3 +63,16 @@
 - 게임을 다시 켠 뒤 상태 파일의 바닥이 그대로 걸리는 것(읽고 쓰는 것은 시험이 본다. `resource_floor`를 확인 항목으로 올린 뒤의 실행에서 본다).
 - 영주의 반지를 준 것이 게임의 인물 창에 보이는가(수와 게임의 읽기 함수까지만 봤다). `character_runes_add`가 받는 구조체.
 - 반지의 값(상단에서 사고파는 가격)을 바꾸는 길. `get_cost_by_runes(1)`, `get_budget_transition_ring_count(5)`의 뜻.
+
+## 최소값 칸이 수를 받지 않던 것 (0.24.2, 2026-10-06)
+
+사용자 보고: 경제 탭에서 자원마다의 최소값을 칸에서 정할 수 없다("표의 자원 모두에 넣기"는 됐다).
+
+- 원인: 칸이 `InputDouble(…, ImGuiInputTextFlags_EnterReturnsTrue)`였다. Dear ImGui v1.91.9 의 수 입력 칸(`InputScalar`)은 그 플래그를 지원하지 않는다
+  (그 함수의 첫머리에 단언이 있고 "편집을 마친 것은 `IsItemDeactivatedAfterEdit()`로 보라"고 적혀 있다. 우리 빌드는 RelWithDebInfo 라 단언이 꺼져 있어 조용히 지나갔다).
+  그 결과 Enter 로만 수가 들어갔고, 다른 칸을 누르거나 Tab 으로 떠나면 친 수가 버려졌다. 칸의 값은 프레임마다 저장된 바닥으로 다시 채워졌다.
+- 0.18 에서 이 칸은 원격 명령(`economy floor …`)으로만 확인했다. 칸에 글자를 쳐 본 적이 없었다(게임 창을 건드리지 않는 실행이었다).
+- 고침: 치는 동안의 수는 들고만 있다가 칸을 떠날 때 한 번 넣는다(`core/EconomyPlan`의 `FloorEdit`·`StepFloorEdit`. Enter, Tab, 다른 곳을 누름).
+- 확인(실행 묶음 `preg-session1`, 화면 `refs\ui\eco2.png`): 모드창의 입력 큐에만 누름·글자·키를 넣어(`ui click`·`ui type`·`ui key`. 진짜 마우스와 키보드는 건드리지 않는다)
+  금화 칸에 123 + Enter → `economy floor gold = 123`, 반지 칸에 45 를 치고 다른 곳을 누름 → `rune = 45`, 표의 첫 줄에 77 + Tab → `meat = 77`,
+  둘째 줄에 88 + Enter → `berry = 88`, 금화 칸에 999 + Escape → 바뀌지 않음.
