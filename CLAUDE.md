@@ -187,6 +187,15 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `SoulBasic.set_preferred_equipment(inst:o_data.__preferred_equipment_data.<묶음>)`(구조체 하나. 게임이 그 꼴로 부른다. `PersonAct::Equip`, `core/PeoplePlan`의 `Loadouts`·`EquipGifts`).
     **병과(`__soul.__soldier_class`)의 구조체에는 쓰지 않는다**: 영혼들이 함께 쓰는 자료다(한 병사의 것에 쓰자 다른 병사와 영주의 것이 함께 바뀌었다).
   - **사람을 여러 시간 따라갈 때는 `inst:o_dummy:<n>`의 번호가 아니라 uuid 로 다시 찾는다**(누가 떠나면 번호가 밀린다. 그래서 한 실험의 결과를 읽지 못했다).
+  - **실제 싸움에서 본 것**(`research/23`. 사용자의 게임에 온 침입: 진영 `raid`의 병사 일곱). 전투의 목록은 `inst:o_game_map_controller.battle_debugger.__array_of_battles`
+    (**훈련도 전투다**: `__cached_is_training`. 그래서 싸움이 없어도 전투 함수가 불린다), 분대는 `…battle_squads_manager.__array_of_squads[n]`(`__cached_average_moral`, `__is_enemy_to_player`),
+    사람의 것은 `c_battle`(`__battle`: 전투 중이면 구조체. `__is_retreat`, `__is_surrender`)이다. 분대의 사기(`BattleSquad.get_average_moral() -> 수`)는 분대원의 기분(`__soul.__moral`)으로 보인다.
+    게임이 부르는 꼴: `battle_hit(구조체, 배열, undefined, 정수, 수) -> 구조체`, `ComponentBattle.attack(ref, undefined, undefined, 불리언)`, `set_current_battle(구조체, 구조체)`, `set_surrender(불리언)`,
+    `get_close_combat_support_power() -> 수`, `SoulBasic.get_bravery_threshold() -> 수`, `__get_dodge_chance(구조체) -> 수`, `get_battle_lottery_tickets_factor() -> 수`, `is_pain_shock() -> 불리언`.
+    아군의 전투 기술이 실제 싸움에서 두 배(상한 20)로 넘어가는 것을 봤다(12·13 → 20). **배율의 효과는 아직 말할 수 없다**(대조가 없고 26명이 일곱을 상대했다).
+  - **사용자가 하는 게임을 지켜볼 때는 읽기와 `record`만 쓴다**: 값을 쓰지 않고, 게임의 함수를 부르지 않고, `session.ps1`로 끄지 않는다. 끝나면 내가 건 기록만 멈춘다
+    (`unrecord <주소>`. `unrecord all`은 치트가 건 것의 기록까지 멈춘다). **기록의 표본은 건 뒤의 처음 여섯뿐이다**: 적의 표본을 받으려면 싸움이 붙은 뒤에 `record`를 다시 보낸다.
+    `list <그릇> max=5`는 찾는 칸을 자를 수 있다(칸 하나는 `ask`로 바로 묻는다).
 - 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다
   (`CheckPreset`과 시험이 막는다). 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켠다(이미 켜져 있고 배율이 같으면 건드리지 않는다). 탐색기의 잠금과 배율 7개는 건드리지 않는다.
   새 항목이 확인되면 맞는 묶음에 한 줄을 더한다. 원격 `preset <normal|easy|sandbox|god>`, `time pause|resume`.
