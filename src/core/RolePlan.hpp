@@ -58,6 +58,11 @@ namespace NlCore
 	// 뗄 것이 이미 없거나 붙일 것이 이미 있으면 거짓: 게임의 함수를 부르지 않는다(그런 상태에서 불러 본 적이 없다). 능력치의 걸음은 언제나 참.
 	bool RoleStepNeeded(const RoleStep& Step, const std::vector<std::string>& TraitsNow);
 
+	// 누르기 전에 보일 요약(걸음의 차례대로): "능력치 2개를 올리고, 특성 1개를 떼고, 3개를 붙입니다". 할 일이 없으면 그렇다고 말한다.
+	std::string RolePreview(const RoleTodo& Todo);
+	// 그 특성을 떼기 전에 알릴 것. **잰 것만 적는다**(재지 않은 특성에는 빈 글).
+	const char* RemoveNote(const std::string& Trait);
+
 	// 결과의 글. Skills·Added·Removed: 한 것의 수. Failed: 하지 못한 것의 수(Why 에 첫 까닭).
 	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why);
 }
