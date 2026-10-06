@@ -18,6 +18,7 @@ namespace NlCore
 			{ Area::Knowledge, "knowledge", "지식", 5, true },
 			{ Area::Items, "items", "아이템", 5, true },
 			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/People.cpp)
+			{ Area::Crime, "crime", "범죄", 7, true },				// 부랑자와 영주의 죄(src/Crime.cpp. research/26)
 			{ Area::Diplomacy, "diplomacy", "외교", 6, true },		// 왕국과의 관계(src/Diplomacy.cpp)
 			{ Area::Religion, "religion", "종교", 6, true },		// 주교 부르기(src/World.cpp)
 			{ Area::Time, "time", "시간", 2, true },
@@ -298,6 +299,26 @@ namespace NlCore
 				"교회 헌금으로 내는 룬의 수로 보인다(원래 1)" },
 			{ "donation_runes_fanatic", Area::Religion, "헌금 룬(광신도)", "inst:o_debug.church_donation_runes_fanatic", N, 0, 0, 0, 100, false,
 				"광신도가 헌금으로 내는 룬의 수로 보인다(원래 2)" },
+
+			// 범죄(research/26). 게임은 저녁 18:00 에 주민을 범죄자("부랑자")로 만든다: 그 사람의 is_criminal_immunity()(인자 없음, 불리언)를 묻고
+			// set_criminal_scum(true, true)나 set_criminal_scum(true)를 부른다. 면책이 참이면 범죄자가 되지 않는다.
+			// 플레이에서 봤다(실행 1·2): 참을 돌려주게 한 두 저녁에는 게임의 시도(두 번, 한 번)에도 범죄자가 생기지 않았고, 그러지 않은 두 저녁에는 다섯 번·한 번의 시도에 다섯·한 명이 생겼다.
+			// 게임이 시도하지 않는 저녁도 있다(실행 3 의 같은 저녁: 시도 0번).
+			// 주소는 o_character 의 것으로 삼는다: 그 구성요소(c_criminal)는 영주·손님에게도 있고 게임 화면에는 o_character 가 언제나 있다. 스크립트는 모든 사람이 함께 쓴다
+			// (주민의 주소로 걸었을 때와 같은 스크립트였다). 그 함수가 저녁의 지정 말고 다른 데서도 불리는지는 모른다(두 실행에서는 저녁에만 불렸다).
+			{ "no_new_criminals", Area::Crime, "주민이 부랑자(범죄자)가 되지 않음", "inst:o_character:0.c_criminal.is_criminal_immunity", H, 1, 0, 0, 0, true,
+				"게임이 주민을 범죄자로 만들기 직전에 묻는 '면책인가'에 언제나 그렇다고 답하게 한다. 켠 저녁 둘에는 게임의 시도 셋이 모두 막혔고, 끈 저녁들에는 시도 여섯이 모두 범죄자를 만들었다. "
+				"이미 범죄자인 사람은 그대로다(아래의 단추로 되돌린다)" },
+			// 범죄의 게임 변수들. 값을 쓰고 되돌리는 것은 모듈의 일이다(src/Production.cpp). 뜻은 이름에서 읽은 것이고, 이틀 동안 범죄자들이 범죄를 저지르지 않아 효과를 보지 못했다.
+			{ "no_bandit_turn", Area::Crime, "주민이 도적으로 넘어가지 않음", "global.__gameplay_vars.dummy_turn_to_bandit_chance", C, 1, 0, 0, 0, false,
+				"이름으로 보아 주민이 도적이 될 확률인 게임 변수 둘(dummy_turn_to_bandit_chance, 그 _peaceful)을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+			{ "thug_days", Area::Crime, "부랑자가 깡패가 되기까지의 날 배율", "global.__gameplay_vars.dummy_criminal_days_to_thug", CS, 10, 0, 1, 100, false,
+				"이름으로 보아 범죄자가 깡패가 되기까지의 날(원래 2)인 게임 변수에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+			{ "crime_minds_off", Area::Crime, "범죄로 인한 기분 저하 없음", "global.__gameplay_vars.mind_crime_not_punished_modify", C, 1, 0, 0, 0, false,
+				"이름으로 보아 범죄의 피해와 '범죄자가 벌받지 않음'의 생각의 크기인 게임 변수 둘(mind_crime_not_punished_modify, mind_crime_victim_modify)을 0 으로 쓴다. "
+				"끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+			{ "theft_none", Area::Crime, "창고 도둑이 가져가는 양 0", "global.__gameplay_vars.dummy_storage_steal_minimal_val", C, 1, 0, 0, 0, false,
+				"이름으로 보아 창고 도둑이 가져가는 양의 범위인 게임 변수 둘(dummy_storage_steal_minimal_val, 그 maximal_val)을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 
 			{ "fast_global_tasks", Area::World, "전역 지도의 행동을 빠르게", "inst:o_debug.is_fast_action_task_on_global_map", T, 1, 0, 0, 0, false,
 				"전역 지도에서 하는 행동을 빨리 끝내는 개발자 스위치로 보인다" },

@@ -9,6 +9,7 @@
 #include "FamilyPlan.hpp"
 #include "RolePlan.hpp"
 #include "Presets.hpp"
+#include "CrimePlan.hpp"
 #include "WorldPlan.hpp"
 #include "Text.hpp"
 
@@ -425,6 +426,17 @@ namespace NlCore
 			if (count != 2 || (tokens[1] != "pause" && tokens[1] != "resume"))
 				return fail("time needs pause or resume");
 			command.Target = tokens[1];
+		}
+		else if (verb == "crime")
+		{
+			// crime list | clear <uuid|all> | return_stolen <uuid|all> | absolve <uuid|lords> | acquit <uuid|lords>      범죄 패널의 단추와 같은 길(core/CrimePlan)
+			CrimeCommand crime;
+			std::string why;
+			if (!ParseCrimeCommand(std::vector<std::string>(tokens.begin() + 1, tokens.end()), crime, why))
+				return fail(why);
+			command.Target = CrimeActWord(crime.Act);
+			if (!crime.Who.empty())
+				command.Options["who"] = crime.Who;
 		}
 		else if (verb == "world")
 		{

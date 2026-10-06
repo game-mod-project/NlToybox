@@ -2674,6 +2674,12 @@ std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
 	return lines;
 }
 
+std::string NlPeople::TraitName(const std::string& Name)
+{
+	std::lock_guard lock(g_Mutex);
+	return TraitLabel(Name);
+}
+
 NlPeople::RowsResult NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why)
 {
 	std::lock_guard lock(g_Mutex);

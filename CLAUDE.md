@@ -316,6 +316,27 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **그 실행에서만 가는 항목은 `Cheat::ThisRunOnly`**(표의 줄 끝에 `true`. 지금은 `no_autosave` 하나): 켠 것을 잊으면 잃는 것이 큰 항목에 쓴다.
   - 날씨를 일으키는 것은 만들지 않았다: `__start_rain(구조체, 수)`의 구조체가 무엇인지 모른다. `fast_map_moving`·`fast_global_tasks`·`no_tree_growth`는 재지 않았다.
   - 원격 `world season|season_delay|season_end`. 새 항목은 프리셋에 넣지 않았다(세이브에 남는 값을 쓰거나 난이도의 것이 아니다. 넣을지는 사용자가 정한다).
+- 범죄(`src/Crime.cpp`, `core/CrimePlan`. `research/26`). 왼쪽 목록의 "범죄" 영역: 표의 항목 아래에 부랑자와 영주의 죄를 그린다.
+  - **범죄자("부랑자")는 주민의 `c_criminal.__is_dummy_criminal`이다**(처음에는 수 0, 지정된 뒤로는 불리언. 0 보다 클 때만 범죄자로 읽는다: `NlCore::IsVagabondFlag`). 그 구성요소는 영주에게도 있다.
+    관리자는 `inst:o_game_map_controller.__province.__criminal_manager`(그 안의 수들은 재지 않았다. 창에 적지 않는다). 화면 왼쪽 위의 넷째 수가 범죄자의 수다.
+  - 게임은 **저녁 18:00** 에 주민을 범죄자로 만든다: 그 사람의 `is_criminal_immunity()`(인자 없음, 불리언)를 묻고 `set_criminal_scum(true, true)`나 `set_criminal_scum(true)`를 부른다.
+    그 답을 참으로 바꾼 시도 셋은 모두 막혔다(표의 `no_new_criminals`. 훅의 주소는 `inst:o_character:0.c_criminal.is_criminal_immunity`: 스크립트는 모두가 함께 쓰고 게임 화면에는 `o_character`가 언제나 있다.
+    그래서 누구의 호출이든 바꾼다). 지정은 `set_criminal_scum(false, true)`로 푼다.
+  - **읽지 못한 것을 "없다"나 "됐다"로 적지 않는다**: 깃발을 읽지 못한 주민과 특성을 읽지 못한 영주는 따로 센다(`CrimeSummary`·`LordsLine`·`TraitClearReport`의 `Unread`).
+    지정 풀기는 부른 뒤 그 자리의 uuid 와 깃발을 다시 읽어 판정하고(`NlCore::AfterClear`), 확인하지 못한 사람은 "부른 뒤 확인하지 못함"으로 센다(`ClearReport`의 `Unsure`).
+  - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)는 되돌리지 않는다**(`NlCore::CanClear`): 게임이 만든 깡패를 본 적이 없어 풀면 어떻게 되는지 재지 못했다.
+  - 훔친 것 되돌리기(`return_back_stolen_to_player_warehouse()`. 인자 없음)는 사람을 짚어 부르고 훔친 금화(`__stolen_gold`)의 앞뒤를 적는다(`StolenReport`). 창의 단추는 훔친 금화가 있는 줄에만 나온다.
+    훔친 것이 있는 사람에게서는 보지 못했다(확인 전).
+  - **죄는 특성이다**(이름이 `sin_`으로 시작한다. 열두 가지). 영주의 범죄 혐의도 특성이다(`character_crime`, `…_blamed_by_bishop`, `…_blamed_by_fanatics`).
+    지울 때는 인물 모듈의 특성 떼기를 그 특성마다 부르고(`NlPeople::Do`의 `TraitRemove`) 특성을 다시 읽어 없어졌는지 본다. 플레이어의 영주에게만 한다.
+    **게임이 건 혐의는 보지 못했다**(직접 붙인 `character_crime`을 떼어 본 것뿐이다). 혐의 지우기의 단추에는 "(확인 전)"이 붙어 있다.
+  - 플레이어의 산 주민만 본다(`NlCore::IsPlayers`). 사람의 번호는 누가 떠나면 밀린다: 부르기 바로 전에 그 자리의 uuid 와 깃발을 다시 본다.
+  - **게임이 범죄자를 만드는 저녁은 실행마다 다르다**(같은 세이브의 7일차 18:00 에 시도 5번, 1번, 0번). 그래서 면책 훅의 근거는 저녁이 아니라 시도마다 센다(그대로 둔 여섯은 모두 생겼고 바꾼 셋은 모두 막혔다).
+    **시험용 범죄자는 게임이 부르는 꼴로 직접 만든다**: 플레이어의 주민(갈래 1)에게 `method inst:o_dummy:<n>.c_criminal.set_criminal_scum b:1 b:1`(그 자리의 uuid 를 먼저 본다. 시간을 흘리지 않아도 된다).
+    영주의 죄와 혐의도 `person <uuid> trait_add name=sin_fight|character_crime`으로 붙여 시험한다. 주민을 슬프게 하는 것만으로는 범죄자가 되지 않았다.
+    범죄자들이 이틀 동안 범죄를 저지르지 않아 도둑질·깡패·도적의 것(게임 변수 넷, 훔친 것 되돌리기)은 확인 전이다.
+  - 범죄의 깃발은 세이브에 남는 자료다(열쇠 `is_dummy_criminal` 들. 게임 변수 일곱의 열쇠는 세이브에 없다).
+  - 원격 `crime list | clear <uuid|all> | return_stolen <uuid|all> | absolve <uuid|lords> | acquit <uuid|lords>`.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   **매복이 진행 중이면 게임이 스스로 오류를 쏟아 낸다**(이벤트 `ambush_squad`, `map_get_building_id`. 게임 시각 1분에 15건쯤. 아덴의 아침 자동 저장에서는 7일차 오후부터).
   모듈의 기능·배속·저장 끄기와 무관하다(대조 실행. `research/25`). 그 파일이 하루에 수십 MB 씩 커지므로 시간을 흘리는 실행은 그 전에 끝내거나, 넘겨야 하면 사용자에게 알린다.
@@ -325,7 +346,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end`, `crime list|clear|return_stolen|absolve|acquit`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.

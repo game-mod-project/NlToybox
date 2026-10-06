@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/CrimePlan.hpp"
 #include "core/FamilyPlan.hpp"
 #include "core/WorldPlan.hpp"
 #include "core/CostBook.hpp"
@@ -214,6 +215,12 @@ namespace
 	bool WalkMiscarriage(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::MiscarriageVars(), Why); }
 	bool WalkChildbirthDeath(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::ChildbirthDeathVars(), Why); }
 
+	// 범죄의 게임 변수들(research/26. 열쇠는 core/CrimePlan). 써지고 되돌려지는 것까지만 본다.
+	bool WalkBanditTurn(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::BanditTurnVars(), Why); }
+	bool WalkCrimeMinds(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::CrimeMindVars(), Why); }
+	bool WalkThugDays(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::ThugDaysVars(), Why); }
+	bool WalkTheftAmount(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::TheftAmountVars(), Why); }
+
 	bool WalkAmounts(const Visit& V, std::string& Why) { return WalkRecipes(V, false, Why); }
 	bool WalkInputs(const Visit& V, std::string& Why) { return WalkRecipes(V, true, Why); }
 
@@ -256,6 +263,10 @@ namespace
 		{ "pregnancy_chance", "pregnancy chance", false, &WalkPregnancyChance, nullptr, 15 },
 		{ "no_miscarriage", "miscarriage chance", true, &WalkMiscarriage, nullptr, 15 },
 		{ "safe_childbirth", "childbirth death chance", true, &WalkChildbirthDeath, nullptr, 15 },
+		{ "no_bandit_turn", "bandit turn chance", true, &WalkBanditTurn, nullptr, 15 },
+		{ "crime_minds_off", "crime minds", true, &WalkCrimeMinds, nullptr, 15 },
+		{ "thug_days", "days to thug", false, &WalkThugDays, nullptr, 15 },
+		{ "theft_none", "storage theft amount", true, &WalkTheftAmount, nullptr, 15 },
 	};
 
 	std::string Place(const std::string& Key, int Level, int Slot)

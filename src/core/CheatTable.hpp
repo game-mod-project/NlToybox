@@ -11,7 +11,7 @@ namespace NlCore
 {
 	enum class Area
 	{
-		Explorer, Economy, Build, Person, Lord, People, Knowledge, Items, Army,
+		Explorer, Economy, Build, Person, Lord, People, Knowledge, Items, Army, Crime,
 		Diplomacy, Religion, Time, World, Events, Util, Presets,
 	};
 
