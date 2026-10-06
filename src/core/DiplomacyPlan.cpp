@@ -271,11 +271,22 @@ namespace NlCore
 		return OursAsked && OursHasKing ? 0 : 'f';
 	}
 
-	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps)
+	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps, bool Stopped)
 	{
 		const std::string before = RelationLabel(Before), after = RelationLabel(After);
-		return Name + (Side == 't' ? ": 그쪽이 우리를 보는 평판에 " : ": 우리가 그쪽을 보는 평판에 ") + (Steps > 0 ? "좋은" : "나쁜") + " 평판 "
-			+ std::to_string(Steps > 0 ? Steps : -Steps) + "개를 붙였습니다 (관계는 " + (before == after ? before + " 그대로" : before + " -> " + after) + ")";
+		const std::string relation = "관계는 " + (before == after ? before + " 그대로" : before + " -> " + after);
+		const std::string who = Name + (Side == 't' ? ": 그쪽이 우리를 보는 평판에 " : ": 우리가 그쪽을 보는 평판에 ");
+		const std::string count = std::string(Steps > 0 ? "좋은" : "나쁜") + " 평판 " + std::to_string(Steps > 0 ? Steps : -Steps) + "개를 ";
+		if (!Stopped)
+			return who + count + "붙였습니다 (" + relation + ")";
+		return who + (Steps == 0 ? std::string("더 붙지 않았습니다") : count + "붙였고 그 뒤로는 더 붙지 않았습니다") + " (같은 평판은 50개까지만 겹칩니다. " + relation + ")";
+	}
+
+	char AttachCheck(double Before, double After)
+	{
+		if (!std::isfinite(Before) || !std::isfinite(After) || Before < 0 || After < 0)
+			return 'u';
+		return After > Before ? 'y' : 'n';
 	}
 
 	bool GoodFactionWho(const std::string& Who)
@@ -365,7 +376,7 @@ namespace NlCore
 
 	bool DiplomacyFailed(char Outcome)
 	{
-		return Outcome == 'l' || Outcome == 'f';
+		return Outcome == 'l' || Outcome == 'f' || Outcome == 's';
 	}
 
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why)
@@ -387,6 +398,8 @@ namespace NlCore
 			return who + RelationLabel(Before) + " 관계는 건드리지 않습니다";
 		case 'l':
 			return who + change + ". 한도까지 붙였지만 바라는 관계가 되지 않았습니다";
+		case 's':
+			return who + change + ". 같은 평판은 50개까지만 겹쳐 더 붙지 않습니다. 바라는 관계가 되지 않았습니다";
 		default:
 			return who + change + ". 실패: " + (Why.empty() ? "모릅니다" : Why);
 		}

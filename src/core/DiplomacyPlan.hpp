@@ -101,13 +101,20 @@ namespace NlCore
 	std::vector<DiplomacyJob> PlanJobs(const DiplomacyCommand& Command, const std::vector<std::string>& Kingdoms);
 
 	// 한 왕국의 한쪽 평판을 움직인 결과를 글로. Side: 't' 또는 'u'. Before·After: 관계의 종류. Steps: 붙인 평판의 수(부호가 방향).
-	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다.
+	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다,
+	// 's' 같은 평판의 겹침 한도에 닿아 더 붙지 않았다(붙은 수는 Steps 에. AttachCheck 가 가린다).
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why);
-	// 그 결과가 실패인가('l', 'f').
+	// 그 결과가 실패인가('l', 'f', 's').
 	bool DiplomacyFailed(char Outcome);
+
+	// 평판 하나가 붙었는가: 붙이기 앞뒤로 그 평판을 갖는 왕의 평판 목록(__opinion_minds)의 원소 수를 견준다.
+	// 붙을 때마다 원소가 하나 늘고, 같은 평판이 50개에 닿으면 함수가 구조체를 돌려줘도 늘지 않는다(research/19).
+	// 돌려주는 값: 'y' 늘었다(붙었다), 'n' 늘지 않았다(붙지 않았다), 'u' 세지 못했다(음수나 수가 아닌 값. 부른 쪽은 반환값을 믿는다).
+	char AttachCheck(double Before, double After);
 	// 평판의 수(목표가 없는 일)를 정한 만큼 붙인 뒤의 글. 붙인 개수와 관계를 따로 적는다(붙인 것을 "바꿨다"고 적지 않는다).
 	// 붙었는지는 게임의 함수가 구조체를 돌려준 것으로 본 것이다(평판의 수를 다시 읽는 길은 재지 못했다).
-	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps);
+	// Stopped: 정한 만큼 붙이기 전에 겹침의 한도에 닿아 멈췄다('s'). Steps 는 실제로 붙은 수다(0 일 수 있다).
+	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps, bool Stopped = false);
 
 	// 명령 하나(또는 쌓인 일들)의 결과를 세고 줄을 모은다. 실패한 줄을 앞에 둔다(창은 앞의 몇 줄만 보인다).
 	// "이미 그 관계였다"와 "건드리지 않았다"는 한 것에 넣지 않는다(그대로 둔 것).

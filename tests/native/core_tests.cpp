@@ -1887,6 +1887,26 @@ int main(int argc, char** argv)
 		CHECK_STR(OpinionReport("라크리아", 't', 4, 3, -1), "라크리아: 그쪽이 우리를 보는 평판에 나쁜 평판 1개를 붙였습니다 (관계는 우호 -> 중립)");
 		CHECK_STR(OpinionReport("라크리아", 't', 3, 3, 3), "라크리아: 그쪽이 우리를 보는 평판에 좋은 평판 3개를 붙였습니다 (관계는 중립 그대로)");
 
+		// 붙었는지는 반환값이 아니라 그 왕의 평판 목록(__opinion_minds)의 원소 수로 본다(research/19: 51번째부터는 구조체가 돌아와도 원소가 늘지 않는다).
+		CHECK(AttachCheck(33, 34) == 'y');			// 하나 늘었다: 붙었다
+		CHECK(AttachCheck(83, 83) == 'n');			// 그대로다: 붙지 않았다(겹침의 한도)
+		CHECK(AttachCheck(83, 82) == 'n');
+		CHECK(AttachCheck(-1, 34) == 'u' && AttachCheck(33, -1) == 'u' && AttachCheck(-1, -1) == 'u');		// 세지 못했다: 모른다(반환값을 믿는다)
+		CHECK(AttachCheck(std::numeric_limits<double>::quiet_NaN(), 5) == 'u');
+		// 한도에 닿아 멈춘 일('s')은 실패다: 청한 만큼 하지 못했다. 붙인 수는 실제로 붙은 것만 적는다.
+		CHECK(DiplomacyFailed('s'));
+		CHECK_STR(OpinionReport("하라우", 'u', 3, 4, 10, true),
+			"하라우: 우리가 그쪽을 보는 평판에 좋은 평판 10개를 붙였고 그 뒤로는 더 붙지 않았습니다 (같은 평판은 50개까지만 겹칩니다. 관계는 중립 -> 우호)");
+		CHECK_STR(OpinionReport("하라우", 'u', 4, 4, 0, true),
+			"하라우: 우리가 그쪽을 보는 평판에 더 붙지 않았습니다 (같은 평판은 50개까지만 겹칩니다. 관계는 우호 그대로)");
+		CHECK_STR(DiplomacyReport("하라우", 'u', 4, 3, -10, 's', ""),
+			"하라우: 우리가 그쪽을 우호 -> 중립 (나쁜 평판 10개). 같은 평판은 50개까지만 겹쳐 더 붙지 않습니다. 바라는 관계가 되지 않았습니다");
+		DiplomacyTally stuck;
+		stuck.Expect(2);
+		stuck.Add('d', "A 됨");
+		stuck.Add('s', "B 한도");
+		CHECK(stuck.Failed() == 1 && stuck.Changed() == 1 && stuck.Lines()[0] == "B 한도");
+
 		// 원격 명령
 		const RemoteCommand list = ParseRemoteLine("diplomacy list");
 		CHECK(list.Error.empty() && list.Verb == "diplomacy" && list.Target == "list");

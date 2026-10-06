@@ -50,6 +50,10 @@ namespace
 		double Before = -1;			// 시작할 때의 관계
 		bool Started = false;
 		bool Checked = false;		// 그 왕국이 살아 있고 양쪽에 왕이 있는지 봤다
+		// 평판을 갖는 왕의 평판 목록(__opinion_minds)의 원소 수. 붙을 때마다 하나 는다. 세지 못하면 -1(그때는 함수의 반환값을 믿는다).
+		bool Counted = false;		// 처음의 수를 세어 봤다
+		double Minds = -1;			// 마지막으로 센 수
+		double MindsFirst = -1;		// 처음의 수(로그에 남긴다)
 	};
 
 	std::recursive_mutex g_Mutex;		// 아래 전부를 지킨다
@@ -211,6 +215,27 @@ namespace
 		return nullptr;
 	}
 
+	// 그 세력의 왕이 가진 평판의 수(__opinion_minds 의 원소 수). 세지 못하면 -1.
+	// Faction.get_king_character_soul() -> 구조체(게임이 그 꼴로 부른다)가 돌려준 것에서 읽기만 한다. 우리 왕의 것은
+	// …__soul.__character_soul.__opinions.__opinion_minds 에서 봤다(붙일 때마다 원소가 하나 늘었다: 33 → 73 → 83. research/19).
+	// 돌려받은 구조체가 그 가운데 어느 층인지는 재지 않았으므로 세 가지 자리를 차례로 본다.
+	double CountMinds(const std::string& Faction)
+	{
+		RValue soul, minds;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(Faction + ".get_king_character_soul"), {}, soul, why) || !soul.IsStruct())
+			return -1;
+		const std::vector<std::vector<NlCore::PathStep>> places = {
+			{ { '.', "__opinions", 0 }, { '.', "__opinion_minds", 0 } },
+			{ { '.', "__character_soul", 0 }, { '.', "__opinions", 0 }, { '.', "__opinion_minds", 0 } },
+			{ { '.', "__soul", 0 }, { '.', "__character_soul", 0 }, { '.', "__opinions", 0 }, { '.', "__opinion_minds", 0 } },
+		};
+		for (const std::vector<NlCore::PathStep>& place : places)
+			if (NlAccess::Follow(soul, place, minds, why) && minds.IsArray())
+				return NlAccess::ForEachChild(minds, Holder::Array, [](const NlCore::PathStep&, const RValue&) { return true; });
+		return -1;
+	}
+
 	// 그 왕국을 건드려도 되는가. 게임이 부르는 꼴 그대로 묻는다: is_destroyed() -> 불리언(네 시간에 19,785번),
 	// get_king_character_soul() -> 구조체(34번). 망했거나 왕이 없는 세력에는 평판도 협정도 걸지 않는다(그런 세력에 불러 본 적이 없다).
 	// 돌려주는 값: core 의 AliveOutcome(0 된다, 'x' 망했거나 왕이 없다, 'f' 묻지 못했다. Why 에 까닭).
@@ -323,6 +348,13 @@ namespace
 			Why = "세력의 구조체를 읽지 못했습니다";
 			return 'f';
 		}
+		// 붙었는지를 가리려고 그 왕의 평판의 수를 센다(일마다 처음 한 번. 그 뒤로는 붙인 뒤에 센 수를 쓴다).
+		if (!It.Counted)
+		{
+			Log("diplomacy call get_king_character_soul() on " + holder + " (counting its opinion minds)");		// 부르기 전에 남긴다
+			It.Minds = It.MindsFirst = CountMinds(holder);
+			It.Counted = true;
+		}
 		// Faction.attach_opinion_about_faction(대상 세력, 평판의 자료) -> 구조체. 게임이 (구조체, 구조체)로 부르는 것을 기록했고,
 		// 그 꼴로 불러 평판이 -7 → -2, 관계가 opponent → neutrals 가 되는 것을 봤다(research/19). 부르기 전에 남긴다.
 		Log("diplomacy call " + holder + ".attach_opinion_about_faction(" + about_path + ", " + (direction > 0 ? "debug_positive" : "debug_negative") + ")");
@@ -333,6 +365,13 @@ namespace
 			Why = "평판을 붙이는 함수가 구조체를 돌려주지 않았습니다 (붙지 않은 것으로 봅니다. 같은 평판의 겹침 한도 50 일 수 있습니다)";
 			return 'f';
 		}
+		// 쓴 뒤 다시 읽는다: 그 왕의 평판이 하나 늘었는가. 같은 평판이 50개에 닿으면 구조체가 돌아와도 늘지 않는다(붙지 않은 것이다. 세지 않는다).
+		const double minds = It.Minds >= 0 ? CountMinds(holder) : -1;
+		const char attached_check = NlCore::AttachCheck(It.Minds, minds);
+		if (attached_check == 'n')
+			return 's';
+		if (attached_check == 'y')
+			It.Minds = minds;
 		It.Done += direction;
 		It.Plan.Left--;
 		// Faction.__update_relations(세력) -> undefined. 게임이 그 꼴로 955번 불렀다. 관계의 종류를 평판에서 다시 셈해 행렬에 쓴다.
@@ -361,11 +400,13 @@ namespace
 		const double before = It.Started ? It.Before : after;
 		// 망한 왕국('x')과 묻지 못한 것('f', 관계를 읽기 전)은 어느 일이든 같은 글이다. 협정은 제 글, 평판의 수를 다 붙인 것은 붙인 개수와 관계를 따로 적는다.
 		const std::string line = It.Goal == DiplomacyGoal::Pact && outcome != 'x' ? NlCore::PactReport(name, It.Pact, outcome, why)
-			: It.Goal == DiplomacyGoal::Opinion && outcome == 'd' && It.Done != 0 ? NlCore::OpinionReport(name, It.Plan.Side, before, after, It.Done)
+			: It.Goal == DiplomacyGoal::Opinion && ((outcome == 'd' && It.Done != 0) || outcome == 's')
+				? NlCore::OpinionReport(name, It.Plan.Side, before, after, It.Done, outcome == 's')
 			: NlCore::DiplomacyReport(name, It.Plan.Side, before, after, It.Done, outcome, why);
 		Log("diplomacy: " + It.Plan.Uuid + " side " + std::string(1, It.Plan.Side) + " goal " + NlCore::DiplomacyGoalWord(It.Goal)
 			+ (It.Goal == DiplomacyGoal::Pact ? std::string(" ") + NlCore::DiplomacyPactWord(It.Pact) : std::string()) + ": outcome "
-			+ std::string(1, outcome) + ", attached " + std::to_string(It.Done) + (why.empty() ? "" : ", " + why));
+			+ std::string(1, outcome) + ", attached " + std::to_string(It.Done)
+			+ (It.Counted ? ", minds " + NlCore::Shortest(It.MindsFirst) + " -> " + NlCore::Shortest(It.Minds) : std::string()) + (why.empty() ? "" : ", " + why));
 		Tally.Add(outcome, line);
 		return true;
 	}
@@ -563,12 +604,15 @@ void NlDiplomacy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 왕국과 중립으로"))
 		Push("all", DiplomacyGoal::Neutral, 0);
-	Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
-		"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한 번에 한쪽 40개까지. 적대는 철천지원수까지 내립니다). '평판+'·'평판-'는 고른 쪽마다 하나를 붙입니다. "
-		"우호가 되기까지 드는 개수는 왕국마다 달랐습니다(1개에서 15개). 붙었는지는 게임의 함수가 돌려준 값으로 봅니다. 게임의 자료에는 같은 평판이 50개까지 겹친다고 적혀 있습니다. "
-		"동맹·봉신·주군 관계와 망한 왕국은 건드리지 않습니다. 붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다. "
-		"'평화'·'방어'·'교역'은 게임의 협정 함수로 그 왕국과 협정(평화 협정, 방어 동맹, 교역 협정)을 바로 맺습니다. 방어 동맹을 맺어도 위의 관계가 '동맹'이 되지는 않습니다. "
-		"푸는 단추는 없습니다. 게임이 그 협정을 어떻게 따르는지(기한, 침공)는 확인 전입니다.");
+	Hint("게임의 디버그용 평판을 왕에게 붙여 관계를 움직이고, 게임의 협정 함수로 협정을 맺습니다. 떼거나 푸는 단추는 없습니다.");
+	// 긴 설명은 접어 둔다(펼쳐 두면 왕국의 표가 창 아래로 밀린다).
+	if (ImGui::CollapsingHeader("설명"))
+		Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
+			"'우호'·'중립'·'적대'는 그 관계가 될 때까지 붙입니다(한 번에 한쪽 40개까지. 적대는 철천지원수까지 내립니다). '+'·'-'는 고른 쪽마다 평판 하나를 붙입니다. "
+			"우호가 되기까지 드는 개수는 왕국마다 달랐습니다(1개에서 15개). 같은 평판은 한 왕국의 한쪽에 50개까지만 겹칩니다: 그 뒤로는 붙지 않고, 붙지 않았다고 적습니다. "
+			"동맹·봉신·주군 관계와 망한 왕국은 건드리지 않습니다. 붙인 평판을 떼는 단추는 없습니다(반대쪽을 붙여 상쇄합니다). 얼마나 오래 남는지, 세이브에 남는지는 확인 전입니다. "
+			"'평화'·'방어'·'교역'은 게임의 협정 함수로 그 왕국과 협정(평화 협정, 방어 동맹, 교역 협정)을 바로 맺습니다. 이미 맺은 협정은 단추가 아니라 글자로 보입니다. "
+			"방어 동맹을 맺어도 관계가 '동맹'이 되지는 않습니다. 푸는 단추는 없습니다. 게임이 그 협정을 어떻게 따르는지(기한, 침공)는 확인 전입니다.");
 	if (!g_Refused.empty())
 		Hint(g_Refused.c_str());
 	if (!g_Tally.Empty())
@@ -587,8 +631,8 @@ void NlDiplomacy::Draw()
 		ImGui::TableSetupColumn("왕국");
 		ImGui::TableSetupColumn("그쪽이 우리를");
 		ImGui::TableSetupColumn("우리가 그쪽을");
-		ImGui::TableSetupColumn("협정");
-		ImGui::TableSetupColumn("바꾸기");
+		ImGui::TableSetupColumn("관계·평판");
+		ImGui::TableSetupColumn("협정");		// 맨 끝에 둔다: 글이 길어져도 앞의 단추들을 밀어내지 않게
 		ImGui::TableHeadersRow();
 		for (size_t i = 0; i < g_Kingdoms.size(); i++)
 		{
@@ -601,8 +645,6 @@ void NlDiplomacy::Draw()
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(NlCore::RelationLabel(kingdom.Ours));
 			ImGui::TableNextColumn();
-			ImGui::TextUnformatted(NlCore::PactText(kingdom.Pacts).c_str());
-			ImGui::TableNextColumn();
 			ImGui::PushID(static_cast<int>(i));
 			for (const DiplomacyGoal goal : { DiplomacyGoal::Friends, DiplomacyGoal::Neutral, DiplomacyGoal::Hostile })
 			{
@@ -610,20 +652,40 @@ void NlDiplomacy::Draw()
 					Push(kingdom.Uuid, goal, 0);
 				ImGui::SameLine();
 			}
-			if (ImGui::SmallButton("평판+"))
+			if (ImGui::SmallButton("+"))
 				Push(kingdom.Uuid, DiplomacyGoal::Opinion, 1);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("좋은 평판 하나를 붙입니다 (위에서 고른 쪽마다)");
 			ImGui::SameLine();
-			if (ImGui::SmallButton("평판-"))
+			if (ImGui::SmallButton("-"))
 				Push(kingdom.Uuid, DiplomacyGoal::Opinion, -1);
-			ImGui::SameLine();
-			if (ImGui::SmallButton("평화"))
-				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Peace);
-			ImGui::SameLine();
-			if (ImGui::SmallButton("방어"))		// 방어 동맹(협정). 표의 관계 "동맹"(종류 0)과 다른 것이라 낱말을 가른다
-				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Defence);
-			ImGui::SameLine();
-			if (ImGui::SmallButton("교역"))
-				Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, NlCore::DiplomacyPact::Trade);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("나쁜 평판 하나를 붙입니다 (위에서 고른 쪽마다)");
+			ImGui::TableNextColumn();
+			// 협정: 이미 맺은 것은 글자로, 아직 없는 것은 단추로. "방어"는 방어 동맹(협정)이다. 관계의 종류 "동맹"과 다른 것이라 낱말을 가른다.
+			const struct
+			{
+				NlCore::DiplomacyPact Pact;
+				const char* Label;
+			} pacts[] = { { NlCore::DiplomacyPact::Peace, "평화" }, { NlCore::DiplomacyPact::Defence, "방어" }, { NlCore::DiplomacyPact::Trade, "교역" } };
+			for (size_t p = 0; p < 3; p++)
+			{
+				if (p > 0)
+					ImGui::SameLine();
+				if (NlCore::HasPact(kingdom.Pacts, pacts[p].Pact))
+				{
+					ImGui::TextUnformatted(pacts[p].Label);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s: 맺었습니다", NlCore::DiplomacyPactLabel(pacts[p].Pact));
+				}
+				else
+				{
+					if (ImGui::SmallButton(pacts[p].Label))
+						Push(kingdom.Uuid, DiplomacyGoal::Pact, 0, pacts[p].Pact);
+					if (ImGui::IsItemHovered())
+						ImGui::SetTooltip("%s을 맺습니다", NlCore::DiplomacyPactLabel(pacts[p].Pact));
+				}
+			}
 			ImGui::PopID();
 		}
 		ImGui::EndTable();
