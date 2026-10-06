@@ -1561,6 +1561,57 @@ int main(int argc, char** argv)
 		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
 	});
 
+	Test("장비: 선호 장비의 묶음과 넣어 줄 것", [] {
+		PersonAct act = PersonAct::SkillSet;
+		CHECK(ParsePersonAct("equip", act) && act == PersonAct::Equip && std::string(PersonActWord(PersonAct::Equip)) == "equip");
+		CHECK(NeedsText(PersonAct::Equip) && !NeedsAmount(PersonAct::Equip) && !NeedsIndex(PersonAct::Equip));
+
+		// 묶음의 이름: 게임의 선호 장비 자료(o_data.__preferred_equipment_data)의 멤버를 가리킨다(research/17)
+		CHECK(FindLoadout("h_swordman") && std::string(FindLoadout("h_swordman")->Member) == "__h_swordman");
+		CHECK(FindLoadout("any") && std::string(FindLoadout("any")->Member) == "__any");
+		CHECK(!FindLoadout("wolf") && !FindLoadout("") && !FindLoadout("__h_swordman"));
+		CHECK(Loadouts().size() >= 4);
+
+		// 한 사람이나 플레이어의 사람 전원(병사만 고른다)에게. 영주 전원에게는 하지 않는다
+		std::string why;
+		CHECK(CheckPersonCommand(PersonCommand{ PersonAct::Equip, "25556c3312bce178", -1, 0, "h_swordman" }, why));
+		CHECK(CheckPersonCommand(PersonCommand{ PersonAct::Equip, "people", -1, 0, "any" }, why));
+		CHECK(!CheckPersonCommand(PersonCommand{ PersonAct::Equip, "lords", -1, 0, "h_swordman" }, why));
+		CHECK(!CheckPersonCommand(PersonCommand{ PersonAct::Equip, "people", -1, 0, "wolf" }, why));
+		CHECK(!CheckPersonCommand(PersonCommand{ PersonAct::Equip, "people", -1, 0, "" }, why));
+
+		// 넣어 줄 것: 선호 장비의 갑옷·무기·방패 가운데 소지품에 없는 것(자원 번호). -1(없음)과 -2(아무거나)는 주지 않는다
+		std::vector<double> bag(39, 0);
+		CHECK(EquipGifts(7, 12, true, bag) == (std::vector<int>{ 7, 12, k_ShieldResource }));
+		bag[12] = 1;
+		CHECK(EquipGifts(7, 12, true, bag) == (std::vector<int>{ 7, k_ShieldResource }));
+		bag[7] = 1;
+		bag[k_ShieldResource] = 2;
+		CHECK(EquipGifts(7, 12, true, bag).empty());
+		CHECK(EquipGifts(-1, 10, false, std::vector<double>(39, 0)) == (std::vector<int>{ 10 }));
+		CHECK(EquipGifts(-2, -2, true, std::vector<double>(39, 0)).empty());		// "아무 장비나": 정해진 것이 없으니 방패도 넣지 않는다
+		CHECK(EquipGifts(7, 12, true, std::vector<double>(10, 0)) == (std::vector<int>{ 7 }));		// 칸 밖의 번호는 주지 않는다
+		CHECK(EquipGifts(std::numeric_limits<double>::quiet_NaN(), 7.5, false, std::vector<double>(39, 0)).empty());
+		CHECK(EquipGifts(0, 12, false, std::vector<double>(39, 0)) == (std::vector<int>{ 12 }));		// 0 번 자원은 건드리지 않는다
+
+		PersonRow row;
+		row.Character = false;
+		row.Strata = 2;
+		CHECK(IsSoldier(row));
+		row.Strata = 1;
+		CHECK(!IsSoldier(row));
+		row.Strata = 2;
+		row.Character = true;
+		CHECK(!IsSoldier(row));
+
+		RemoteCommand c = ParseRemoteLine("person people equip name=h_swordman");
+		CHECK(c.Error.empty() && c.Verb == "person" && c.Target == "people" && c.Options.at("act") == "equip" && c.Options.at("name") == "h_swordman");
+		CHECK(ParseRemoteLine("person 25556c3312bce178 equip name=any").Error.empty());
+		CHECK(!ParseRemoteLine("person lords equip name=h_swordman").Error.empty());
+		CHECK(!ParseRemoteLine("person people equip name=wolf").Error.empty());
+		CHECK(!ParseRemoteLine("person people equip").Error.empty());
+	});
+
 	Test("전투: 아군과 적에게 따로 거는 배율", [] {
 		// 한 함수에 거는 배율: self 가 플레이어의 것이면 Number, 아니면 Other('p'). 'a' 는 언제나 Number
 		CHECK(HookFactor('a', false, 3, 0.5, true) == 3 && HookFactor('a', true, 3, 0.5, true) == 3);

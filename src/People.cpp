@@ -37,6 +37,8 @@ namespace
 	// 플레이어의 병사 하나를 만드는 게임의 디버그 함수(research/13). 인자를 하나까지 받고 생략할 수 있다(기계어). 인자 없이 불러 병사가 생기고
 	// 병영의 목록과 게임의 군대 창에 올라오는 것을 봤다. 지도 가장자리의 자리에 나타나 마을로 걸어온다.
 	constexpr const char* k_SpawnSoldier = "gml_Script_rebellion_debug_spawn_player_soldier";
+	// 선호 장비의 묶음들(research/17): __h_swordman, __any … 한 묶음은 __armor_resource[0], __weapon_resource[0], __is_need_shield 를 가진 구조체다.
+	constexpr const char* k_PreferredData = "inst:o_data.__preferred_equipment_data";
 	// 게임의 디버그 소환기(CreatureSpawner. research/13). __spawn_soldier 같은 메서드는 인자가 없고(기계어) 마우스가 가리키는 지도의 자리에 만든다.
 	constexpr const char* k_Spawner = "inst:o_debug.debug_spawner";
 	// 상처를 입히는 함수(research/13): SoulBasic.take_damage(상처의 이름, 구조체, 불리언) -> true. 생성자의 정적 메서드라 영주 하나의 영혼에서 스크립트를 찾는다.
@@ -681,6 +683,56 @@ namespace
 			}
 			return true;
 		}
+		case PersonAct::Equip:
+		{
+			// 선호 장비(research/17): 영혼마다 __preferred_equipment 가 있고, 게임은 거기에 없는 장비를 무기고(영지 창고)로 돌려보낸다.
+			// 소환한 병사의 것은 비어 있다("__empty__"). 그래서 소지품에 넣은 장비가 몇 시간 뒤에 벗겨진다.
+			if (!NlCore::IsSoldier(Row))
+			{
+				Note = "병사가 아닙니다";
+				return false;
+			}
+			const NlCore::Loadout* loadout = NlCore::FindLoadout(C.Text);
+			if (!loadout)
+			{
+				Note = "모르는 장비 묶음입니다";
+				return false;
+			}
+			const std::string preset = std::string(k_PreferredData) + "." + loadout->Member;
+			RValue wanted;		// 이 함수 안에서만 든다
+			if (!NlAccess::Read(NlCore::ParseAskPath(preset), wanted, Note) || !wanted.IsStruct())
+			{
+				if (Note.empty())
+					Note = "게임에 그 장비 묶음이 없습니다";
+				return false;
+			}
+			double armor = -1, weapon = -1, shield = 0;
+			NlAccess::ReadNumber(preset + ".__armor_resource[0]", armor);
+			NlAccess::ReadNumber(preset + ".__weapon_resource[0]", weapon);
+			NlAccess::ReadNumber(preset + ".__is_need_shield", shield);
+			// SoulBasic.set_preferred_equipment(선호 장비 구조체) -> undefined: 게임이 구조체 하나로 부르는 것을 기록했고(네 시간에 여덟 번),
+			// 그 꼴로 불러 __preferred_equipment.__name 이 "h_swordman"으로 여덟 시간 넘게 남는 것을 봤다.
+			Log("people call set_preferred_equipment(" + C.Text + ") on " + Row.Uuid);
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".set_preferred_equipment"), { wanted }, result, Note))
+				return false;
+			// 그 장비를 소지품에 넣는다(없는 것만 하나씩). 넣으면 바로 착용된다. ComponentInventory.change(자원 번호, 변화량)은 ItemAdd 와 같은 길이다.
+			std::vector<double> items;
+			ReadNumbers(soul_value, { { '.', "__inventory", 0 }, { '.', "__resources", 0 } }, items);
+			int given = 0, failed = 0;
+			for (const int resource : NlCore::EquipGifts(armor, weapon, shield != 0, items))
+			{
+				RValue changed;
+				std::string why;
+				Log("people call inventory.change(" + std::to_string(resource) + ", 1) on " + Row.Uuid);
+				if (NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__inventory.change"), { RValue(static_cast<double>(resource)), RValue(1.0) }, changed, why))
+					given++;
+				else
+					failed++;
+			}
+			Note = std::string(loadout->Label) + ": 선호 장비로 정하고 " + std::to_string(given) + "개를 넣었습니다"
+				+ (failed > 0 ? " (넣지 못한 것 " + std::to_string(failed) + "개)" : "");
+			return true;
+		}
 		case PersonAct::ItemAdd:
 		{
 			// 한도는 그 사람의 소지품 칸의 수다(영주에서 39칸을 봤다. 주민의 것은 재지 않았다).
@@ -752,10 +804,12 @@ namespace
 		std::vector<PersonRow> targets;
 		for (const size_t at : NlCore::PickTargets(g_Now.People, C.Who))
 			targets.push_back(g_Now.People[at]);
-		if (targets.empty())
-			return "대상이 없습니다";
-
 		const bool bulk = NlCore::IsBulkWho(C.Who);
+		if (bulk && C.Act == PersonAct::Equip)		// 여럿에게 하는 장비 지급은 병사에게만 간다
+			targets.erase(std::remove_if(targets.begin(), targets.end(), [](const PersonRow& row) { return !NlCore::IsSoldier(row); }), targets.end());
+		if (targets.empty())
+			return C.Act == PersonAct::Equip ? "병사가 없습니다" : "대상이 없습니다";
+
 		size_t done = 0;
 		std::string first_failure, note;
 		for (const PersonRow& row : targets)
@@ -1529,6 +1583,16 @@ void NlPeople::DrawArmy()
 		ImGui::PopID();
 	}
 	DrawSpawnHere({ NlCore::SpawnKind::Soldier, NlCore::SpawnKind::Knight });
+	ImGui::Separator();
+	ImGui::TextUnformatted("병사 전원에게 장비 지급");
+	for (const NlCore::Loadout& loadout : NlCore::Loadouts())
+	{
+		ImGui::SameLine();
+		if (ImGui::Button(loadout.Label))
+			Push(PersonAct::Equip, "people", -1, 0, loadout.Key);
+	}
+	Hint("플레이어의 병사마다 게임의 '선호 장비'를 그 묶음으로 정하고, 없는 장비를 소지품에 하나씩 넣습니다(넣으면 바로 착용됩니다). "
+		"선호 장비가 비어 있으면 게임이 장비를 무기고로 돌려보냅니다(소환한 병사가 그렇습니다). 선호 장비는 하루 동안 남는 것을 봤고, 며칠 뒤에도 남는지는 확인 전입니다.");
 	Hint("+1, +5, +10 은 게임의 디버그 함수로 병사를 만듭니다: 지도 가장자리에 나타나 마을로 걸어오고 게임의 군대 창에 전사로 올라옵니다(단검, 갑옷 없음). "
 		"'마우스 자리에 소환'은 게임의 디버그 소환기를 부릅니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다(병사는 경갑과 창). "
 		"병영의 정원과 임금은 따지지 않습니다(재지 않았습니다). 되돌릴 수 없고, 저장하면 세이브에 남을 것으로 보입니다.");

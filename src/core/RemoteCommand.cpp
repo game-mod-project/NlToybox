@@ -353,7 +353,9 @@ namespace NlCore
 			if (trait && IsProtectedTrait(person.Text))
 				return fail(std::string("person ") + tokens[2] + " does not take that trait (species and death states are protected)");
 			if (!BulkAllowed(person.Who, person.Act))
-				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, and lords also knowledge_all (name one person for the rest)");
+				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, lords also knowledge_all, people also equip (name one person for the rest)");
+			if (person.Act == PersonAct::Equip && !FindLoadout(person.Text))
+				return fail("person equip needs name=<h_swordman|h_axeman|h_spearman|h_hammerhead|any>");
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");

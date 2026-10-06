@@ -31,7 +31,7 @@ namespace NlCore
 	enum class PersonAct
 	{
 		SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove,
-		KnowledgeAll, KnowledgeAdd, MoneyAdd, ItemAdd,
+		KnowledgeAll, KnowledgeAdd, MoneyAdd, ItemAdd, Equip,
 	};
 
 	struct PersonCommand
@@ -64,6 +64,26 @@ namespace NlCore
 
 	// 그 자원 번호가 착용 중인 장비인가. Equipped: 착용 중인 것들의 자원 번호(없는 자리는 음수나 수가 아닌 값).
 	bool IsEquipped(int Index, const std::vector<double>& Equipped);
+
+	// 선호 장비의 묶음(research/17). 게임은 영혼마다 선호 장비(__preferred_equipment)를 두고 거기에 없는 장비를 무기고로 돌려보낸다.
+	// Member: 게임의 자료 o_data.__preferred_equipment_data 의 멤버 이름. 그 구조체를 SoulBasic.set_preferred_equipment 에 넘긴다.
+	struct Loadout
+	{
+		const char* Key;		// 원격 명령의 이름
+		const char* Member;
+		const char* Label;		// 창에 보일 이름
+	};
+	const std::vector<Loadout>& Loadouts();
+	const Loadout* FindLoadout(const std::string& Key);
+
+	constexpr int k_ShieldResource = 15;		// 자원 번호 15 = 방패(global.__resource_caption[15] 가 "resource.shield")
+	// 선호 장비의 갑옷·무기·방패 가운데 소지품에 없어서 넣어 줄 것(자원 번호). 1 보다 작은 번호(-1 없음, -2 아무거나, 0 은 건드리지 않는 자원),
+	// 정수가 아닌 수, 소지품의 칸 밖의 번호는 주지 않는다. 방패는 갑옷이나 무기가 정해진 묶음에만 넣는다.
+	std::vector<int> EquipGifts(double Armor, double Weapon, bool Shield, const std::vector<double>& Inventory);
+
+	// 병사인가: 주민 쪽 오브젝트(o_dummy)이고 갈래가 2 다(research/13).
+	struct PersonRow;
+	bool IsSoldier(const PersonRow& Row);
 
 	// 게임의 디버그 소환기(CreatureSpawner)가 만드는 것 가운데 플레이어의 사람(research/13). 마우스가 가리키는 지도의 자리에 나타난다.
 	enum class SpawnKind { Soldier, Knight, Peasant, Slave, Lord };
