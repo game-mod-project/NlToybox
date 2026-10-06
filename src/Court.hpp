@@ -16,11 +16,13 @@ namespace NlCourt
 
 	void Init(LogFn Log);
 
-	// 게임 스레드의 틱. Active: 영주 패널이 보이는가(보일 때만 영주들을 새로 읽는다. 쌓인 일은 보이지 않아도 한다).
+	// 게임 스레드의 틱. Active: 영주 패널이나 종교 패널이 보이는가(보일 때만 영주들을 새로 읽는다. 쌓인 일은 보이지 않아도 한다).
 	void GameTick(double Now, bool Active);
 
 	// 그리는 쪽(영주 영역의 아래에 그린다).
 	void Draw();
+	// 종교 영역의 아래에 그린다: 주교가 우리 왕을 보는 평판(게임의 get_bishop_opinion 이 돌려주는 수)을 같은 길로 움직인다(research/21).
+	void DrawBishop();
 
 	// 원격 명령. 게임 스레드에서 부른다. 돌려주는 것: 답의 줄들.
 	// Do 는 지금 끝까지 한다. Queue 는 창의 단추와 같은 길로 쌓기만 한다(틱이 조금씩 한다. 결과는 List 의 끝에 나온다).

@@ -91,7 +91,7 @@ namespace NlCore
 
 	bool GoodCourtWho(const std::string& Who)
 	{
-		return Who == "lords" || IsUuid(Who);
+		return Who == "lords" || Who == "bishop" || IsUuid(Who);
 	}
 
 	bool GoodCourtAbout(const std::string& About)
@@ -163,9 +163,11 @@ namespace NlCore
 		for (const CourtLord& lord : Lords)
 		{
 			// 충성 올리기는 게임이 충성을 따지는 영주에게만 한다(아이와 왕은 뺀다).
-			if ((Command.Who == "lords" || Command.Who == lord.Uuid) && (!Command.OnlyLoyal || lord.HasLoyalty))
+			// 주교는 "lords"에 들지 않는다(플레이어의 영주가 아니다): "bishop"이나 그 uuid 로만 가리킨다.
+			const bool holds = Command.Who == lord.Uuid || (Command.Who == "lords" && !lord.Bishop) || (Command.Who == "bishop" && lord.Bishop);
+			if (holds && (!Command.OnlyLoyal || lord.HasLoyalty))
 				holders.push_back(lord.Uuid);
-			if (Command.About == "lords" || Command.About == lord.Uuid || (Command.About == "king" && lord.King))
+			if ((Command.About == "lords" && !lord.Bishop) || Command.About == lord.Uuid || (Command.About == "king" && lord.King))
 				abouts.push_back(lord.Uuid);
 		}
 

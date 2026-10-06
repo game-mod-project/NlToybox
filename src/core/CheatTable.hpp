@@ -48,7 +48,8 @@ namespace NlCore
 	// HookScale: Path 의 함수가 돌려주는 수에 창에서 정한 배율을 곱한다(게임의 자료는 건드리지 않는다. 세이브에 남는 것이 없다).
 	//            Path 는 메서드의 주소이거나 이름 있는 스크립트("gml_Script_…")다.
 	// CustomScale: 모듈의 코드가 창에서 정한 배율로 한다(NlCheats::Factor).
-	enum class CheatKind { Toggle, Number, Hook, Custom, HookScale, CustomScale };
+	// HookNumber: Path 의 함수가 돌려주는 값을 수 On 으로 바꾼다(불리언이 아니라 수를 돌려주는 판정 함수. is_under_holy_defence 가 1 을 돌려줬다).
+	enum class CheatKind { Toggle, Number, Hook, Custom, HookScale, CustomScale, HookNumber };
 
 	// 창에서 수를 정하는 종류인가(상태 파일의 num 줄에 든다).
 	constexpr bool HasNumber(CheatKind Kind)
@@ -59,7 +60,7 @@ namespace NlCore
 	// 함수가 돌려주는 값을 바꾸는 종류인가.
 	constexpr bool IsHook(CheatKind Kind)
 	{
-		return Kind == CheatKind::Hook || Kind == CheatKind::HookScale;
+		return Kind == CheatKind::Hook || Kind == CheatKind::HookScale || Kind == CheatKind::HookNumber;
 	}
 
 	struct Cheat

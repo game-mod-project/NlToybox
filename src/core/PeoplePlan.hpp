@@ -154,7 +154,7 @@ namespace NlCore
 	bool ShouldAttachHappy(bool Read, double MindSum, bool Bulk);
 
 	// 켠 항목에 따라 채워 둘 욕구의 번호들(작은 번호부터). 배고픔 없음 → 음식(1), 피로 없음 → 수면(0)·휴식(2), 모두 → 0~5.
-	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All);
+	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All, bool Piety);
 
 	struct PeopleSlice
 	{

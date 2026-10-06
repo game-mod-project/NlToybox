@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/WorldPlan.hpp"
 #include "core/CostBook.hpp"
 #include "core/Knobs.hpp"
 #include "core/Retry.hpp"
@@ -25,6 +26,9 @@ namespace
 	constexpr const char* k_Generic = "gml_Script_get_generic_building";
 	// 창고 종류(hall, storage, granary, armory, default) → __capacity_in_categories.<갈래>.capacity
 	constexpr const char* k_Warehouses = "inst:o_data.__building_warehouse_data.__generic_warehouses";
+	// 게임 변수(데이터 파일의 값이 앉는 구조체)와 설교의 종류 열 가지(__name, __cost …). research/21.
+	constexpr const char* k_GameplayVars = "global.__gameplay_vars";
+	constexpr const char* k_Preaches = "inst:o_data.__preach_data.__preach_list";
 	// 영지 창고가 갈래별 용량의 합을 캐시해 둔다. 창고가 바뀔 때마다 게임이 인자 없이 부르는 것을 기록했다. 부르면 다음에 물을 때 다시 셈한다.
 	constexpr const char* k_CleanCache = "inst:o_game_map_controller.__province.__warehouse.clean_cached_total_capacity_for_storage_type";
 
@@ -125,6 +129,49 @@ namespace
 		return true;
 	}
 
+	// 게임 변수(global.__gameplay_vars)의 열쇠들을 넘긴다. Key 는 그 열쇠다. 없는 열쇠는 건너뛴다.
+	bool WalkVars(const Visit& V, const std::vector<const char*>& Keys, std::string& Why)
+	{
+		RValue vars;		// 이 함수 안에서만 든다
+		if (!NlAccess::Read(NlCore::ParseAskPath(k_GameplayVars), vars, Why) || !vars.IsStruct())
+		{
+			Why = "the gameplay variables are not available";
+			return false;
+		}
+		for (const char* key : Keys)
+		{
+			const PathStep step{ '.', key, 0 };
+			RValue value;
+			std::string ignored;
+			if (NlAccess::Follow(vars, { step }, value, ignored))
+				V(vars, step, key, 0, -1, value);
+		}
+		return true;
+	}
+
+	// 종교 행동의 비용: 게임 변수 여섯과 설교 종류마다의 __cost(inst:o_data.__preach_data.__preach_list. 열쇠는 "preach.<설교의 이름>"). research/21.
+	bool WalkReligionCosts(const Visit& V, std::string& Why)
+	{
+		if (!WalkVars(V, NlCore::ReligionCostVars(), Why))
+			return false;
+		RValue list;
+		std::string why;
+		if (NlAccess::Read(NlCore::ParseAskPath(k_Preaches), list, why) && list.IsArray())
+			NlAccess::ForEachChild(list, Holder::Array, [&](const PathStep&, const RValue& item) {
+				const PathStep step{ '.', "__cost", 0 };
+				RValue name, cost;
+				std::string ignored;
+				if (item.IsStruct() && NlAccess::Follow(item, { { '.', "__name", 0 } }, name, ignored) && name.IsString()
+					&& NlAccess::Follow(item, { step }, cost, ignored))
+					V(item, step, "preach." + name.ToString(), 0, -1, cost);
+				return true;
+			});
+		return true;
+	}
+
+	// 기도와 예배가 신앙심을 되돌리는 양(게임 변수 넷).
+	bool WalkPietyRestore(const Visit& V, std::string& Why) { return WalkVars(V, NlCore::PietyRestoreVars(), Why); }
+
 	bool WalkAmounts(const Visit& V, std::string& Why) { return WalkRecipes(V, false, Why); }
 	bool WalkInputs(const Visit& V, std::string& Why) { return WalkRecipes(V, true, Why); }
 
@@ -161,6 +208,8 @@ namespace
 		{ "storage_capacity", "capacity", false, &WalkCapacity, &CleanCapacityCache, 3 },
 		{ "production_amount", "production amount", false, &WalkAmounts, nullptr, 15 },
 		{ "production_free", "production inputs", true, &WalkInputs, nullptr, 15 },
+		{ "religion_free", "religion costs", true, &WalkReligionCosts, nullptr, 15 },
+		{ "piety_restore", "piety restore", false, &WalkPietyRestore, nullptr, 15 },
 	};
 
 	std::string Place(const std::string& Key, int Level, int Slot)

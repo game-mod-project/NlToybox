@@ -75,7 +75,7 @@ namespace NlCore
 	const std::vector<Cheat>& Cheats()
 	{
 		constexpr CheatKind T = CheatKind::Toggle, N = CheatKind::Number, H = CheatKind::Hook, C = CheatKind::Custom;
-		constexpr CheatKind HS = CheatKind::HookScale, CS = CheatKind::CustomScale;
+		constexpr CheatKind HS = CheatKind::HookScale, CS = CheatKind::CustomScale, HN = CheatKind::HookNumber;
 
 		// 이름과 값은 새 게임 덤프(refs/runtime/stage0b-run2.late1.json 의 instances.o_debug.members)에서 봤다.
 		// Off 는 그 덤프의 값이다. 뜻은 변수 이름에서 읽은 것이고 효과는 아직 재지 않았다(Verified = false).
@@ -248,8 +248,29 @@ namespace NlCore
 			{ "no_rebellions", Area::Diplomacy, "반란이 일어나지 않음", "inst:o_debug.is_rebellions_can_started", T, 0, 1, 0, 0, false,
 				"반란이 시작될 수 있는지를 정하는 값으로 보인다(원래 켜져 있다)" },
 
-			{ "piety_decrease", Area::Religion, "신앙 감소(시간당)", "inst:o_debug.debug_piety_decrease_per_hour", N, 0, 0, 0, 10, false,
-				"한 시간에 신앙이 줄어드는 양으로 보인다(원래 0.83)" },
+			// 신앙심(욕구 3번)은 한 시간에 이 수만큼 줄어든다. 0 으로 쓰고 1.4시간을 흘리자 기도하지 않는 14명의 신앙심이 그대로였다
+			// (그 앞의 1.8시간에는 시간당 0.81 이나 0.40 씩 줄었다. research/21).
+			{ "piety_decrease", Area::Religion, "신앙 감소(시간당)", "inst:o_debug.debug_piety_decrease_per_hour", N, 0, 0, 0, 10, true,
+				"한 시간에 신앙심이 줄어드는 양(원래 0.83). 0 이면 줄지 않는다" },
+			// 신앙심 채워 두기: 욕구를 채워 두는 항목들과 같은 길(src/People.cpp 의 바퀴)로 욕구 3번만 채운다.
+			{ "piety_full", Area::Religion, "신앙심 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, false,
+				"플레이어의 사람 모두의 신앙심을 가득 채워 둔다. 끄면 그때부터 평소대로 줄어든다" },
+			// 성스러운 보호: GameOnboardingManager.is_under_holy_defence()(인자 없음)가 __is_under_holy_defence(1)를 돌려준다. 게임이 여섯 시간에 한 번 불렀다.
+			// 훅으로 1 을 돌려주게 하면 자료를 0 으로 써도 1 이 나온다(research/21). 보호가 풀릴 인구(65)를 넘겨도 공격받지 않는지는 보지 못했다.
+			{ "holy_defence", Area::Religion, "성스러운 보호 유지", "inst:o_game_map_controller.__onboard_manager.is_under_holy_defence", HN, 1, 0, 0, 0, false,
+				"게임이 '성스러운 보호 아래인가'를 물을 때 언제나 그렇다고 답하게 한다. 효과는 확인 전" },
+			// is_allow_to_religious_riot()(인자 없음) -> false 를 한 번 봤다(광신도가 없는 세이브). 참일 때를 보지 못했다.
+			{ "no_religious_riot", Area::Religion, "종교 반란이 일어나지 않음", "inst:o_game_map_controller.__onboard_manager.is_allow_to_religious_riot", H, 0, 1, 0, 0, false,
+				"게임이 '종교 반란을 일으켜도 되는가'를 물을 때 언제나 아니라고 답하게 한다. 효과는 확인 전" },
+			// 종교 행동의 비용: 게임 변수 여섯(고해 3, 이혼 5, 구걸 250, 시성 300·영지마다 200, 제물 설교 50)과 설교 열 가지의 __cost(0 ~ 150).
+			// 써지고 되돌려지는 것을 봤다. 세이브에는 그 열쇠가 없다. 게임의 창이 그 값을 따르는지는 보지 못했다(src/Production.cpp 가 0 으로 쓰고 되돌린다).
+			{ "religion_free", Area::Religion, "종교 행동·설교의 비용 없음", "global.__gameplay_vars.religiosity_confession_cost", C, 1, 0, 0, 0, false,
+				"고해, 이혼, 구걸, 시성, 제물 설교의 비용과 설교 열 가지의 비용을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+			// 기도와 예배가 신앙심을 되돌리는 양: 게임 변수 넷(교회의 기도 15, 제단의 기도 15, 아침 예배 30, 성인과의 대화 20)에 배율을 쓴다.
+			{ "piety_restore", Area::Religion, "기도·예배의 신앙 회복 배율", "global.__gameplay_vars.church_pray_piety_restore", CS, 3, 0, 1, 10, false,
+				"기도와 예배 한 번에 되돌아오는 신앙심에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+			{ "preach_conversion", Area::Religion, "설교 전환 계수", "global.__gameplay_vars.church_preach_conversion_factor", N, 0, 0, 0, 20, false,
+				"이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 수로 보인다(원래 1)" },
 			{ "donation_runes", Area::Religion, "헌금 룬", "inst:o_debug.church_donation_runes", N, 0, 0, 0, 100, false,
 				"교회 헌금으로 내는 룬의 수로 보인다(원래 1)" },
 			{ "donation_runes_fanatic", Area::Religion, "헌금 룬(광신도)", "inst:o_debug.church_donation_runes_fanatic", N, 0, 0, 0, 100, false,
@@ -303,7 +324,7 @@ namespace NlCore
 				return true;
 			// 함수의 답을 바꾸거나 모듈이 게임의 값을 고쳐 쓰는 항목은 효과를 확인한 것만 켠 채로 시작한다. 확인 전의 것은 그 실행에서 사용자가 켠다:
 			// 창을 열지도 않았는데 게임의 판정이 바뀌거나 값이 고쳐 쓰여 세이브에 굳는 일이 없게.
-			return (cheat->Kind == CheatKind::Hook || cheat->Kind == CheatKind::Custom) && !cheat->Verified;
+			return (IsHook(cheat->Kind) || cheat->Kind == CheatKind::Custom) && !cheat->Verified;
 		});
 		for (auto it = State.Numbers.begin(); it != State.Numbers.end();)
 		{

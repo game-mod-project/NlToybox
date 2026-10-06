@@ -812,7 +812,45 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 57);
+		CHECK(Cheats().size() == 63);
+		// 종교(research/21): 신앙심 채워 두기, 성스러운 보호 유지(수 1 을 돌려주게 한다), 종교 반란 없음, 종교 비용 없음, 신앙 회복 배율, 설교 전환 계수.
+		CHECK(FindCheat("piety_full") && FindCheat("piety_full")->Kind == CheatKind::Custom && FindCheat("piety_full")->Where == Area::Religion);
+		CHECK(FindCheat("holy_defence") && FindCheat("holy_defence")->Kind == CheatKind::HookNumber && FindCheat("holy_defence")->On == 1
+			&& FindCheat("holy_defence")->Where == Area::Religion && !FindCheat("holy_defence")->Verified);
+		CHECK(FindCheat("no_religious_riot") && FindCheat("no_religious_riot")->Kind == CheatKind::Hook && FindCheat("no_religious_riot")->On == 0);
+		CHECK(FindCheat("religion_free") && FindCheat("religion_free")->Kind == CheatKind::Custom && FindCheat("religion_free")->Where == Area::Religion);
+		CHECK(FindCheat("piety_restore") && FindCheat("piety_restore")->Kind == CheatKind::CustomScale && FindCheat("piety_restore")->On == 3
+			&& FindCheat("piety_restore")->Min == 1 && FindCheat("piety_restore")->Max == 10);
+		CHECK(FindCheat("preach_conversion") && FindCheat("preach_conversion")->Kind == CheatKind::Number
+			&& std::string(FindCheat("preach_conversion")->Path) == "global.__gameplay_vars.church_preach_conversion_factor");
+		// 신앙 감소는 게임이 따르는 것을 쟀다(0 으로 쓰자 14명의 신앙심이 줄지 않았다)
+		CHECK(FindCheat("piety_decrease") && FindCheat("piety_decrease")->Verified);
+		// 수를 돌려주게 하는 훅: 함수의 답을 바꾸는 종류이고 창에서 수를 정하지 않는다. 확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다.
+		CHECK(IsHook(CheatKind::HookNumber) && !HasNumber(CheatKind::HookNumber));
+		{
+			CheatState saved;
+			saved.On = { "holy_defence", "no_religious_riot", "piety_full", "religion_free" };
+			const CheatState kept = KeepKnown(saved);
+			CHECK(std::find(kept.On.begin(), kept.On.end(), "holy_defence") == kept.On.end());
+			CHECK(std::find(kept.On.begin(), kept.On.end(), "no_religious_riot") == kept.On.end());
+		}
+		// 종교의 게임 변수(global.__gameplay_vars 의 열쇠): 비용 여섯과 신앙 회복 넷. 겹치지 않는다.
+		{
+			const auto& costs = ReligionCostVars();
+			const auto& restores = PietyRestoreVars();
+			CHECK(costs.size() == 6 && restores.size() == 4);
+			const auto has = [](const std::vector<const char*>& list, const char* name) {
+				return std::find_if(list.begin(), list.end(), [&](const char* item) { return std::string(item) == name; }) != list.end();
+			};
+			CHECK(has(costs, "religiosity_confession_cost") && has(costs, "religiosity_divorce_cost") && has(costs, "religiosity_begging_cost")
+				&& has(costs, "religiosity_canonization_cost_gold") && has(costs, "religiosity_canonization_cost_per_province") && has(costs, "religiosity_sacrificer_cost_gold"));
+			CHECK(has(restores, "church_pray_piety_restore") && has(restores, "altar_pray_piety_restore") && has(restores, "church_pray_morning_service_restore")
+				&& has(restores, "trait_saint_piety_talk_restore"));
+			std::set<std::string> all;
+			for (const char* name : costs) all.insert(name);
+			for (const char* name : restores) all.insert(name);
+			CHECK(all.size() == 10);
+		}
 		// 최소값 유지(research/18): 경제 패널의 코드가 한다(Custom). 켜고 끄는 것만 표에 있고 바닥은 상태 파일의 floor 줄에 있다.
 		CHECK(FindCheat("resource_floor") && FindCheat("resource_floor")->Kind == CheatKind::Custom && FindCheat("resource_floor")->Where == Area::Economy);
 		// 플레이에서 확인했다(research/18): 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다.
@@ -2177,12 +2215,17 @@ int main(int argc, char** argv)
 	});
 
 	Test("인구: 켠 항목이 채워 둘 욕구의 번호", [] {
-		CHECK(NeedsToHold(false, false, false).empty());
-		CHECK(NeedsToHold(true, false, false) == std::vector<int>{ 1 });				// 음식
-		CHECK((NeedsToHold(false, true, false) == std::vector<int>{ 0, 2 }));			// 수면, 휴식
-		CHECK((NeedsToHold(true, true, false) == std::vector<int>{ 0, 1, 2 }));
-		CHECK((NeedsToHold(false, false, true) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
-		CHECK((NeedsToHold(true, true, true) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
+		CHECK(NeedsToHold(false, false, false, false).empty());
+		CHECK(NeedsToHold(true, false, false, false) == std::vector<int>{ 1 });				// 음식
+		CHECK((NeedsToHold(false, true, false, false) == std::vector<int>{ 0, 2 }));			// 수면, 휴식
+		CHECK((NeedsToHold(true, true, false, false) == std::vector<int>{ 0, 1, 2 }));
+		CHECK((NeedsToHold(false, false, true, false) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
+		CHECK((NeedsToHold(true, true, true, false) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
+		// 신앙심 채워 두기(종교 영역의 piety_full): 욕구 3번
+		CHECK(NeedsToHold(false, false, false, true) == std::vector<int>{ 3 });
+		CHECK((NeedsToHold(true, false, false, true) == std::vector<int>{ 1, 3 }));
+		CHECK((NeedsToHold(false, true, false, true) == std::vector<int>{ 0, 2, 3 }));
+		CHECK((NeedsToHold(false, false, true, true) == std::vector<int>{ 0, 1, 2, 3, 4, 5 }));
 	});
 
 	Test("인구: 한 틱에 다루는 사람의 수를 묶는다", [] {
@@ -2309,6 +2352,30 @@ int main(int argc, char** argv)
 		// 평판의 수는 한 짝씩만 한다: 여럿을 한꺼번에 내리는 명령을 받지 않는다(여럿에게는 올리기와 떼기만)
 		CHECK(!CheckCourt({ "lords", CourtGoal::Opinion, "king", 3 }, why) && !CheckCourt({ "25556c3312bce178", CourtGoal::Opinion, "lords", -3 }, why));
 		CHECK(!CheckCourt({ "lords", CourtGoal::Opinion, "lords", -40 }, why) && CheckCourt({ "25556c3312bce178", CourtGoal::Opinion, "king", -3 }, why));
+
+		// 주교(research/21): 플레이어의 영주가 아니다. "bishop"으로 가리키고, "lords"에는 들지 않는다(평판을 갖는 쪽으로도 대상으로도).
+		{
+			const std::vector<CourtLord> with_bishop = { { "aaaaaaaaaaaaaaa1", false, true }, { "aaaaaaaaaaaaaaa3", true, false }, { "bbbbbbbbbbbbbbb9", false, false, true } };
+			CHECK(GoodCourtWho("bishop") && !GoodCourtAbout("bishop"));
+			auto bishop_jobs = PlanCourtJobs({ "bishop", CourtGoal::Raise, "king", 0 }, with_bishop);
+			CHECK(bishop_jobs.size() == 1 && bishop_jobs[0].Holder == "bbbbbbbbbbbbbbb9" && bishop_jobs[0].About == "aaaaaaaaaaaaaaa3");
+			bishop_jobs = PlanCourtJobs({ "bishop", CourtGoal::Opinion, "king", -2 }, with_bishop);
+			CHECK(bishop_jobs.size() == 1 && bishop_jobs[0].Sign == -1 && bishop_jobs[0].Left == 2);
+			CHECK(PlanCourtJobs({ "bishop", CourtGoal::Clear, "king", 0 }, with_bishop).size() == 1);
+			// 영주 모두: 주교는 빠진다
+			CHECK(PlanCourtJobs({ "lords", CourtGoal::Raise, "lords", 0 }, with_bishop).size() == 2);
+			CHECK(PlanCourtJobs({ "lords", CourtGoal::Raise, "king", 0 }, with_bishop).size() == 1);
+			CHECK(PlanCourtJobs({ "lords", CourtGoal::Release, "", 0 }, with_bishop).size() == 2);
+			// 주교가 없으면 일이 없다. 충성 올리기는 주교에게 가지 않는다(게임이 충성을 따지지 않는다).
+			CHECK(PlanCourtJobs({ "bishop", CourtGoal::Raise, "king", 0 }, lords).empty());
+			CourtCommand bishop_loyal{ "bishop", CourtGoal::Raise, "king", 0 };
+			bishop_loyal.OnlyLoyal = true;
+			CHECK(PlanCourtJobs(bishop_loyal, with_bishop).empty());
+			// 원격 줄
+			CHECK(ParseRemoteLine("court bishop like about=king").Error.empty() && ParseRemoteLine("court bishop opinion about=king amount=5").Error.empty()
+				&& ParseRemoteLine("court bishop clear about=king").Error.empty());
+			CHECK(!ParseRemoteLine("court bishop like about=bishop").Error.empty());
+		}
 
 		// 한 걸음. 올리기: 나쁜 것이 붙어 있으면 그것부터 뗀다. 좋은 것이 겹침 한도면 멈춘다.
 		CourtJob raise{ "h", "a", CourtGoal::Raise, 40, 1, 100 };
