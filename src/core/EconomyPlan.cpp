@@ -15,7 +15,7 @@ namespace NlCore
 
 		// 키는 global.__resource_caption 에서 봤다(research/07). 한글 이름은 이 레포가 붙였다.
 		constexpr Named k_Resources[] = {
-			{ "rune", "룬" }, { "wood", "나무" }, { "food", "음식" }, { "beer", "맥주" }, { "iron", "철" }, { "instruments", "도구" },
+			{ "rune", "신성 반지" }, { "wood", "나무" }, { "food", "음식" }, { "beer", "맥주" }, { "iron", "철" }, { "instruments", "도구" },
 			{ "light_armor", "경갑" }, { "heavy_armor", "중갑" }, { "bow", "활" }, { "crossbow", "석궁" }, { "wooden_hammer", "나무 망치" },
 			{ "wooden_spear", "나무 창" }, { "sword", "검" }, { "battle_axe", "전투 도끼" }, { "knife", "단검" }, { "shield", "방패" },
 			{ "medicine", "약" }, { "coal", "석탄" }, { "nectar", "넥타" }, { "paper", "종이" }, { "hop", "홉" }, { "rye", "호밀" },
@@ -75,7 +75,8 @@ namespace NlCore
 			EconomyAct Act;
 		} acts[] = {
 			{ "gold_add", EconomyAct::GoldAdd }, { "gold_set", EconomyAct::GoldSet }, { "add", EconomyAct::ResourceAdd },
-			{ "set", EconomyAct::ResourceSet }, { "all", EconomyAct::AllAdd },
+			{ "set", EconomyAct::ResourceSet }, { "all", EconomyAct::AllAdd }, { "floor", EconomyAct::FloorSet },
+			{ "gold_floor", EconomyAct::GoldFloor },
 		};
 		for (const auto& act : acts)
 			if (Word == act.Word)
@@ -88,7 +89,78 @@ namespace NlCore
 
 	bool NeedsResource(EconomyAct Act)
 	{
-		return Act == EconomyAct::ResourceAdd || Act == EconomyAct::ResourceSet;
+		return Act == EconomyAct::ResourceAdd || Act == EconomyAct::ResourceSet || Act == EconomyAct::FloorSet;
+	}
+
+	bool IsFloorAct(EconomyAct Act)
+	{
+		return Act == EconomyAct::FloorSet || Act == EconomyAct::GoldFloor;
+	}
+
+	int RingResource(const std::vector<std::string>& Keys)
+	{
+		for (size_t i = 0; i < Keys.size(); i++)
+			if (Keys[i] == "rune")
+				return static_cast<int>(i);
+		return -1;
+	}
+
+	std::vector<int> EconomyTargets(EconomyAct Act, const std::vector<int>& Stocked, int Ring)
+	{
+		std::vector<int> targets = Stocked;
+		if (Act != EconomyAct::AllAdd && Ring >= 0 && std::find(targets.begin(), targets.end(), Ring) == targets.end())
+			targets.push_back(Ring);
+		return targets;
+	}
+
+	double FloorValue(double Asked)
+	{
+		if (!std::isfinite(Asked))
+			return Asked > 0 ? k_MaxAmount : 0;		// +inf 는 한도, NaN 과 -inf 는 0
+		const double whole = std::round(Asked);
+		return whole <= 0 ? 0 : std::min(whole, k_MaxAmount);
+	}
+
+	bool GoodFloorKey(const std::string& Key)
+	{
+		if (Key.empty() || Key.size() > 40)
+			return false;
+		for (const char c : Key)
+			if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+				return false;
+		return true;
+	}
+
+	std::vector<EconomyChange> PlanFloors(const std::vector<EconomyFloor>& Floors, double Gold, const std::vector<double>& Free,
+		const std::vector<int>& Allowed)
+	{
+		std::vector<EconomyChange> changes;
+		for (const EconomyFloor& floor : Floors)
+		{
+			// 수가 아닌 바닥과 터무니없는 바닥은 유지하지 않는다(FloorValue 는 저장할 때 한도로 당긴다. 여기서는 당기지 않고 버린다).
+			if (!std::isfinite(floor.Min) || floor.Min > k_MaxAmount)
+				continue;
+			const double target = std::round(floor.Min);
+			if (target <= 0)
+				continue;
+			double now = 0;
+			if (floor.Resource == -1)
+				now = Gold;
+			else if (floor.Resource >= 0 && static_cast<size_t>(floor.Resource) < Free.size()
+				&& std::find(Allowed.begin(), Allowed.end(), floor.Resource) != Allowed.end())
+				now = Free[floor.Resource];
+			else
+				continue;
+			if (!std::isfinite(now) || !(now < target))
+				continue;
+			const double delta = std::ceil(target - now);
+			if (delta <= 0 || delta > k_MaxAmount)
+				continue;
+			const bool twice = std::any_of(changes.begin(), changes.end(), [&](const EconomyChange& change) { return change.Resource == floor.Resource; });
+			if (!twice)
+				changes.push_back({ floor.Resource, delta });
+		}
+		return changes;
 	}
 
 	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
@@ -138,6 +210,9 @@ namespace NlCore
 				if (valid(resource))
 					add(resource, Settle(free_of(resource), Command.Amount));
 			break;
+		case EconomyAct::FloorSet:
+		case EconomyAct::GoldFloor:
+			break;			// 바닥을 정할 뿐이다. 모자란 것은 틱이 PlanFloors 로 채운다
 		}
 		return changes;
 	}

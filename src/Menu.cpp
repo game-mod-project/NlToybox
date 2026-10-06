@@ -138,6 +138,7 @@ void NlMenu::Init(const std::filesystem::path& ModuleDir, const std::string& Ver
 		g_State = NlCore::KeepKnown(NlCore::ParseCheatState(in));
 	NlCheats::Init(g_Log, g_State);
 	NlExplorer::Init(g_Log, g_State.Pins, g_State.Locks);
+	NlEconomy::Init(g_Log, g_State.Floors);
 
 	// 시험 설정(NlToyBox.ui.txt). 평소에는 아무 줄도 없다.
 	for (const std::string& page : NlUi::TestValues("page"))
@@ -173,7 +174,8 @@ void NlMenu::GameTick()
 	// 바뀐 것은 0.8초 뒤에 적는다(값을 끄는 동안 파일을 되풀이해 쓰지 않는다).
 	const bool cheats = NlCheats::TakeChanges(g_State.On, g_State.Numbers);
 	const bool explorer = NlExplorer::TakeChanges(g_State.Pins, g_State.Locks);
-	if (cheats || explorer)
+	const bool floors = NlEconomy::TakeChanges(g_State.Floors);
+	if (cheats || explorer || floors)
 	{
 		g_SavePending = true;
 		g_SaveAt = now + 0.8;

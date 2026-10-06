@@ -25,7 +25,7 @@ namespace NlCore
 	constexpr double k_FillAll = 1e9;		// "상한까지 채운다"로 보내는 수(NeedValue 가 상한으로 당긴다). 읽은 상한을 보내지 않는다: 읽지 못했으면 0 이 쓰인다
 
 	constexpr double k_GiftMax = 1e6;		// 소지금·소지품을 한 번에 주거나 빼는 수의 한도
-	constexpr int k_ItemIndexMax = 200;		// 자원 번호의 한도(실제 칸의 수는 부르는 쪽이 그 사람의 소지품에서 읽어 본다. 39개였다). 0 번(룬)은 받지 않는다
+	constexpr int k_ItemIndexMax = 200;		// 자원 번호의 한도(실제 칸의 수는 부르는 쪽이 그 사람의 소지품에서 읽어 본다. 39개였다). 0 번은 신성 반지다
 
 	// KnowledgeAll: 모든 지식을 준다. KnowledgeAdd: 이름으로 지식 하나를 준다. MoneyAdd: 소지금을 더하거나 뺀다. ItemAdd: 소지품의 자원을 더하거나 뺀다(research/12).
 	enum class PersonAct

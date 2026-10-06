@@ -25,7 +25,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.17.1";
+	constexpr const char* k_Version = "0.18.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -145,7 +145,6 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
 	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
-	NlEconomy::Init([](const std::string& Line) { LogLine(Line); });
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); });
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });

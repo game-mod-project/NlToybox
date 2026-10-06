@@ -1668,7 +1668,8 @@ void NlPeople::DrawItems()
 		ImGui::SeparatorText("소지품");
 		if (ImGui::BeginTable("items", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 		{
-			for (size_t i = 1; i < g_Now.Resources.size() && i < one.Items.size(); i++)		// 0 번(룬)은 건드리지 않는다(경제 패널과 같다)
+			// 0 번은 신성 반지다: 영주의 소지품 0 번 칸의 수를 게임의 character_runes_get_count 가 그대로 돌려준다(research/18).
+			for (size_t i = 0; i < g_Now.Resources.size() && i < one.Items.size(); i++)
 			{
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();

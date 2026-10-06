@@ -84,6 +84,11 @@ namespace NlCore
 			// o_debug.is_resources_edit_mode 는 넣지 않는다: 켜도 자원의 목록이 나오지 않아 쓸 수 없었다(사용자가 플레이에서 봤다. research/07).
 			// 금화와 자원은 경제 패널(src/Economy.cpp)이 게임의 함수로 바꾼다.
 
+			// 최소값 유지(research/18). 경제 패널의 '최소' 칸에 적은 수보다 적어진 금화·신성 반지·자원을 그 수까지 채운다(src/Economy.cpp 가 1초마다 본다).
+			// 채우는 길은 패널의 단추와 같다: budget_money_change(변화량), 영지 창고의 change(자원 번호, 변화량). 바닥은 상태 파일의 floor 줄에 남는다.
+			{ "resource_floor", Area::Economy, "최소값 유지", "inst:o_game_map_controller.__province.__warehouse.change", C, 1, 0, 0, 1, false,
+				"아래의 '최소' 칸에 적은 수보다 적어진 금화, 신성 반지, 자원을 그 수까지 채운다(1초마다). 줄이지는 않는다" },
+
 			// 창고 용량(…__warehouse.__cached_total_capacity_for_storage_type.<갈래>)은 아직 넣지 않는다: 게임이 다시 채우는 캐시라
 			// "원래대로"가 낡은 값을 써 넣게 된다. 게임이 그 값을 언제 다시 만드는지 잰 뒤(3나-2)에 넣는다.
 

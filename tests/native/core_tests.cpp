@@ -441,7 +441,7 @@ int main(int argc, char** argv)
 		CHECK(PlanEconomy({ EconomyAct::ResourceAdd, 1, 10 }, 0, { 0, nan }, { 0, nan }, { 1 }).empty());
 		// 맞추기의 차이가 터무니없이 크면 하지 않는다.
 		CHECK(one(EconomyAct::GoldSet, -1, 0, 3e9).empty());
-		// 갈래에 없는 자원(0번 rune)은 하나씩도 건드리지 않는다: 창고의 change 가 그런 자원에 무엇을 하는지 잰 적이 없다.
+		// 건드려도 되는 목록에 없는 자원은 하나씩도 건드리지 않는다(신성 반지 0번은 패널이 EconomyTargets 로 목록에 넣는다).
 		CHECK(one(EconomyAct::ResourceAdd, 0, 5).empty() && one(EconomyAct::ResourceSet, 0, 5).empty());
 		// 예약된 몫은 줄이지 않는다: 줄일 수 있는 양은 예약되지 않은 수까지다. 더하는 것은 그대로다.
 		const std::vector<double> total = { 0, 300 }, unreserved = { 0, 250 };
@@ -470,6 +470,87 @@ int main(int argc, char** argv)
 		CHECK(ParseEconomyAct("set", act) && act == EconomyAct::ResourceSet && NeedsResource(act));
 		CHECK(ParseEconomyAct("all", act) && act == EconomyAct::AllAdd && !NeedsResource(act));
 		CHECK(ParseEconomyAct("gold_add", act) && act == EconomyAct::GoldAdd && !ParseEconomyAct("gold", act) && !ParseEconomyAct("", act));
+	});
+
+	Test("경제: 하나씩은 신성 반지에도, 모두에게는 갈래의 자원에만", [] {
+		// 신성 반지는 자원 0번 rune 이다(현지화 main.csv 의 resource.rune = "신성 반지"). 번호가 아니라 이름으로 찾는다.
+		CHECK(RingResource({ "rune", "wood", "food" }) == 0 && RingResource({ "wood", "rune" }) == 1);
+		CHECK(RingResource({ "wood" }) == -1 && RingResource({}) == -1);
+		CHECK_STR(ResourceLabel("rune"), "신성 반지 (rune)");
+		const std::vector<int> stocked = { 1, 2 };
+		CHECK(EconomyTargets(EconomyAct::ResourceAdd, stocked, 0) == (std::vector<int>{ 1, 2, 0 }));
+		CHECK(EconomyTargets(EconomyAct::ResourceSet, stocked, 0) == (std::vector<int>{ 1, 2, 0 }));
+		CHECK(EconomyTargets(EconomyAct::FloorSet, stocked, 0) == (std::vector<int>{ 1, 2, 0 }));
+		CHECK(EconomyTargets(EconomyAct::AllAdd, stocked, 0) == stocked);			// "모든 자원 +100"이 반지를 100개 만들지 않는다
+		CHECK(EconomyTargets(EconomyAct::ResourceAdd, stocked, -1) == stocked);		// 반지의 자리를 모르면 넣지 않는다
+		CHECK(EconomyTargets(EconomyAct::ResourceAdd, { 0, 1 }, 0) == (std::vector<int>{ 0, 1 }));	// 두 번 넣지 않는다
+		// 반지를 넣은 목록으로는 0번도 하나씩 바뀐다
+		const std::vector<double> counts = { 7, 300 };
+		const auto ring = PlanEconomy({ EconomyAct::ResourceAdd, 0, 5 }, 0, counts, counts, EconomyTargets(EconomyAct::ResourceAdd, { 1 }, 0));
+		CHECK(ring.size() == 1 && ring[0].Resource == 0 && ring[0].Delta == 5);
+		CHECK(PlanEconomy({ EconomyAct::ResourceSet, 0, 3 }, 0, counts, counts, { 1, 0 })[0].Delta == -4);
+		const auto all = PlanEconomy({ EconomyAct::AllAdd, -1, 100 }, 0, counts, counts, EconomyTargets(EconomyAct::AllAdd, { 1 }, 0));
+		CHECK(all.size() == 1 && all[0].Resource == 1);
+	});
+
+	Test("경제: 최소값 유지는 모자란 만큼만 더한다", [] {
+		const double nan = std::numeric_limits<double>::quiet_NaN(), inf = std::numeric_limits<double>::infinity();
+		const std::vector<double> free = { 2, 300, 0, 5.5 };
+		const std::vector<int> allowed = { 0, 1, 2, 3 };
+		// 바닥보다 적은 것만, 모자란 만큼(정수로 올려서). 금화는 -1.
+		const auto changes = PlanFloors({ { -1, 5000 }, { 1, 250 }, { 2, 40 }, { 3, 6 }, { 0, 10 } }, 3000, free, allowed);
+		CHECK(changes.size() == 4);
+		CHECK(changes[0].Resource == -1 && changes[0].Delta == 2000);
+		CHECK(changes[1].Resource == 2 && changes[1].Delta == 40);
+		CHECK(changes[2].Resource == 3 && changes[2].Delta == 1);		// 5.5 → 6: 올림
+		CHECK(changes[3].Resource == 0 && changes[3].Delta == 8);
+		// 바닥과 같거나 많으면 건드리지 않는다. 줄이지 않는다.
+		CHECK(PlanFloors({ { -1, 3000 }, { 1, 300 }, { 1, 10 } }, 3000, free, allowed).empty());
+		// 0 이하, 수가 아닌 바닥, 터무니없는 바닥은 유지하지 않는다. 바닥은 정수로 읽는다(0.4 는 0, 2.6 은 3).
+		CHECK(PlanFloors({ { -1, 0 }, { 1, -5 }, { 2, nan }, { 3, 1e12 }, { -1, inf }, { 2, 0.4 } }, 0, free, allowed).empty());
+		CHECK(PlanFloors({ { 2, 2.6 } }, 0, free, allowed)[0].Delta == 3);
+		// 읽은 수가 수가 아니면 하지 않는다(NaN 을 게임의 함수에 넘기지 않는다)
+		CHECK(PlanFloors({ { -1, 100 } }, nan, free, allowed).empty());
+		CHECK(PlanFloors({ { 1, 100 } }, 0, { 0, nan }, allowed).empty());
+		// 허락되지 않은 자원, 범위 밖의 번호는 하지 않는다
+		CHECK(PlanFloors({ { 2, 40 }, { 9, 40 }, { -2, 40 } }, 0, free, { 1 }).empty());
+		// 같은 자원이 두 번 있으면 한 번만
+		CHECK(PlanFloors({ { 2, 40 }, { 2, 80 } }, 0, free, allowed).size() == 1);
+		// 음수인 금화도 바닥까지 채운다
+		CHECK(PlanFloors({ { -1, 100 } }, -50, free, allowed)[0].Delta == 150);
+	});
+
+	Test("경제: 최소값의 열쇠와 명령", [] {
+		const double nan = std::numeric_limits<double>::quiet_NaN();
+		CHECK(GoodFloorKey("gold") && GoodFloorKey("wood_blanks") && GoodFloorKey("rune") && GoodFloorKey("r2"));
+		CHECK(!GoodFloorKey("") && !GoodFloorKey("a b") && !GoodFloorKey("a=b") && !GoodFloorKey("#3") && !GoodFloorKey("Wood")
+			&& !GoodFloorKey(std::string(41, 'a')));
+		// 저장할 바닥: 0 이하와 수가 아닌 것은 "유지 안 함"(0). 정수로, 한도(10억)까지.
+		CHECK(FloorValue(250.4) == 250 && FloorValue(0.4) == 0 && FloorValue(-3) == 0 && FloorValue(nan) == 0 && FloorValue(1e12) == 1e9);
+		EconomyAct act = EconomyAct::GoldAdd;
+		CHECK(ParseEconomyAct("floor", act) && act == EconomyAct::FloorSet && NeedsResource(act) && IsFloorAct(act));
+		CHECK(ParseEconomyAct("gold_floor", act) && act == EconomyAct::GoldFloor && !NeedsResource(act) && IsFloorAct(act));
+		CHECK(!IsFloorAct(EconomyAct::GoldAdd) && !IsFloorAct(EconomyAct::ResourceSet) && !IsFloorAct(EconomyAct::AllAdd));
+		// 바닥을 정하는 명령은 변화량을 내지 않는다(모자란 것은 틱이 채운다)
+		CHECK(PlanEconomy({ EconomyAct::FloorSet, 1, 50 }, 0, { 0, 0 }, { 0, 0 }, { 1 }).empty());
+		CHECK(PlanEconomy({ EconomyAct::GoldFloor, -1, 50 }, 0, { 0, 0 }, { 0, 0 }, { 1 }).empty());
+		// 원격 명령
+		const RemoteCommand floor = ParseRemoteLine("economy floor resource=1 amount=250");
+		CHECK(floor.Error.empty() && floor.Target == "floor" && floor.Number == 250 && floor.Options.at("resource") == "1");
+		CHECK(ParseRemoteLine("economy gold_floor amount=5000").Error.empty());
+		CHECK(!ParseRemoteLine("economy floor amount=5").Error.empty() && !ParseRemoteLine("economy gold_floor resource=1 amount=5").Error.empty());
+	});
+
+	Test("치트 상태: 최소값(floor)의 줄", [] {
+		CheatState state;
+		state.Floors = { { "gold", 5000 }, { "wood", 250 } };
+		const std::string text = FormatCheatState(state);
+		CHECK(text.find("floor gold=5000\n") != std::string::npos && text.find("floor wood=250\n") != std::string::npos);
+		// 읽을 수 없는 줄(열쇠에 빈칸, 0 이하, 수가 아닌 값)은 버린다. 같은 열쇠는 뒤의 것이 이긴다.
+		std::istringstream in(text + "floor bad key=3\nfloor rune=0\nfloor iron=-2\nfloor food=x\nfloor wood=300\nfloor stone=1e12\n");
+		const CheatState again = ParseCheatState(in);
+		CHECK(again.Floors.size() == 3 && again.Floors.at("gold") == 5000 && again.Floors.at("wood") == 300 && again.Floors.at("stone") == 1e9);
+		CHECK(KeepKnown(again).Floors == again.Floors);
 	});
 
 
@@ -685,7 +766,9 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 56);
+		CHECK(Cheats().size() == 57);
+		// 최소값 유지(research/18): 경제 패널의 코드가 한다(Custom). 켜고 끄는 것만 표에 있고 바닥은 상태 파일의 floor 줄에 있다.
+		CHECK(FindCheat("resource_floor") && FindCheat("resource_floor")->Kind == CheatKind::Custom && FindCheat("resource_floor")->Where == Area::Economy);
 		// 전투(research/16): 영혼의 두 함수에 아군과 적의 배율을 따로 건다(모듈의 코드가 한다: CustomScale). 실제 싸움에서 확인하기 전이다.
 		for (const char* id : { "ally_power", "enemy_power", "ally_toughness", "enemy_toughness" })
 			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale && FindCheat(id)->Where == Area::Army && !FindCheat(id)->Verified);
@@ -1399,19 +1482,23 @@ int main(int argc, char** argv)
 			&& !BulkAllowed("lords", PersonAct::ItemAdd) && BulkAllowed("25556c3312bce178", PersonAct::ItemAdd));
 	});
 
-	Test("인물: 소지품의 번호는 1부터, 착용 중인 장비는 빼지 않는다", [] {
+	Test("인물: 소지품의 번호는 0(신성 반지)부터, 착용 중인 장비는 빼지 않는다", [] {
 		std::string why;
 		PersonCommand c;
 		c.Who = "25556c3312bce178";
 		c.Act = PersonAct::ItemAdd;
 		c.Amount = 5;
-		c.Index = 0;				// 0 번(룬)은 창도 내지 않는다. 원격으로도 건드리지 않는다
+		// 0 번(신성 반지)도 준다: 영주의 소지품 0 번 칸에 넣은 수를 게임의 character_runes_get_count 가 그대로 돌려줬다(research/18).
+		c.Index = 0;
+		CHECK(CheckPersonCommand(c, why) && why.empty());
+		c.Index = -1;
 		CHECK(!CheckPersonCommand(c, why) && !why.empty());
 		c.Index = 1;
 		CHECK(CheckPersonCommand(c, why));
 		c.Index = 199;
 		CHECK(CheckPersonCommand(c, why));
-		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=0 amount=5").Error.empty());
+		CHECK(ParseRemoteLine("person 25556c3312bce178 item_add index=0 amount=5").Error.empty());
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 item_add index=-1 amount=5").Error.empty());
 
 		// "0 으로" 단추는 -k_GiftMax 를 보낸다(가진 것까지만 빠진다). 그 수는 받아야 하고, 그것을 넘는 수는 받지 않는다.
 		c.Index = 1;
