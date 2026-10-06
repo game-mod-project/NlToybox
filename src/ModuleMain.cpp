@@ -27,7 +27,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.26.0";
+	constexpr const char* k_Version = "0.26.1";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 

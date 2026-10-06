@@ -415,11 +415,12 @@ namespace
 	}
 
 	// 한 일의 글을 그 패널의 자리에 둔다(계절의 것은 월드 패널에, 나머지는 이벤트·종교 패널에).
-	const std::string& Remember(WorldAct Act, std::string Text)
+	// 읽기만 한 것(계절 보기)은 "한 일"로 남기지 않는다: 패널이 같은 줄을 이미 보이고 있다.
+	std::string Remember(WorldAct Act, std::string Text)
 	{
-		std::string& slot = IsSeasonAct(Act) ? g_SeasonLast : g_Last;
-		slot = std::move(Text);
-		return slot;
+		if (NlCore::WorldActChanges(Act))
+			(IsSeasonAct(Act) ? g_SeasonLast : g_Last) = Text;
+		return Text;
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
@@ -521,7 +522,8 @@ void NlWorld::DrawWorld()
 		Push(WorldAct::SeasonEnd);
 	ImGui::EndDisabled();
 	Hint("게임은 계절을 단계로 나누고 단계마다의 시작 시각에서 남은 시간을 셈합니다. '미루기'는 지금 단계의 시작 시각을 하루 뒤로 써서 가혹한 계절까지 남은 시간을 늘립니다"
-		"(지금보다 뒤로는 밀지 않습니다). '지금 단계 끝내기'는 남은 시간을 1분으로 줄입니다. 위의 '계절 붙들기'는 켜 둔 동안 지금 단계에 머물게 합니다. "
+		"(지금보다 뒤로는 밀지 않습니다). '지금 단계 끝내기'는 남은 시간을 1분으로 줄입니다: 게임이 다음 정각에 다음 단계로 넘깁니다"
+		"(가혹한 계절 바로 앞의 단계였다면 가혹한 계절이 시작되고, 가혹한 계절 중이었다면 끝납니다). 위의 '계절 붙들기'는 켜 둔 동안 지금 단계에 머물게 합니다. "
 		"계절의 상태는 세이브에 들어가는 자료입니다. 바꾼 채 저장하면 남습니다.");
 	if (!g_SeasonLast.empty())
 		Hint(g_SeasonLast.c_str());

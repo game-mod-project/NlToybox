@@ -822,9 +822,18 @@ int main(int argc, char** argv)
 			&& std::string(FindCheat("reveal_map")->Path) == "inst:o_global_map.__m_global_map.is_initial_area_visible" && HookForcedKind(FindCheat("reveal_map")->Kind) == 'b');
 		// 늑대의 최대 수: WolvesManager.get_max_number_of_wolves()(인자 없음)가 밤에 한 번 불려 수(11.1)를 돌려줬다(research/25). 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
 		CHECK(FindCheat("no_wolves") && FindCheat("no_wolves")->Kind == CheatKind::HookNumber && FindCheat("no_wolves")->On == 0 && FindCheat("no_wolves")->Where == Area::World
-			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n' && !FindCheat("no_wolves")->Verified);
+			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n');
 		// 광산의 매장량 붙들기는 모듈의 일이다(src/World.cpp 가 줄어든 매장량을 되돌려 쓴다).
-		CHECK(FindCheat("mine_stock_hold") && FindCheat("mine_stock_hold")->Kind == CheatKind::Custom && FindCheat("mine_stock_hold")->Where == Area::World && !FindCheat("mine_stock_hold")->Verified);
+		CHECK(FindCheat("mine_stock_hold") && FindCheat("mine_stock_hold")->Kind == CheatKind::Custom && FindCheat("mine_stock_hold")->Where == Area::World);
+		// 실행 2 에서 플레이로 본 것(research/25): 붙든 네 시간 동안 단계가 넘어가지 않았고 끄자 다음 정각에 넘어갔다, 켠 채 자동 저장 시각을 세 번 넘겨도 파일이 생기지 않았다,
+		// 켠 두 밤에는 늑대를 만들지 않았고 끈 두 밤에는 만들었다, 게임이 네 번 캐도 매장량이 그대로였다, 켜자 지도의 안개가 걷히고 끄자 돌아왔다.
+		for (const char* id : { "season_hold", "no_autosave", "no_wolves", "mine_stock_hold", "reveal_map" })
+			CHECK(FindCheat(id)->Verified);
+		CHECK(!FindCheat("fast_map_moving")->Verified && !FindCheat("fast_global_tasks")->Verified);		// 재지 못했다
+		// 확인된 훅과 모듈의 일은 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다. 저장 끄기도 그렇다(값을 쓰는 스위치는 언제나 남는다).
+		CheatState world;
+		world.On = { "season_hold", "no_wolves", "mine_stock_hold", "reveal_map", "no_autosave" };
+		CHECK(KeepKnown(world).On.size() == 5);
 		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
 		// 셋 다 효과를 보기 전이다.
 		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);

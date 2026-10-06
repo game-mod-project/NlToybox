@@ -304,21 +304,27 @@ namespace NlCore
 			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, false,
 				"나무의 성장을 끄는 개발자 스위치로 보인다" },
 			// 계절 붙들기(research/25): 게임은 지금 단계의 남은 시간을 시작 시각(__start_phase_time)에서 셈한다(시작을 하루 뒤로 쓰자 남은 시간이 하루 늘었다).
-			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons"). 단계가 넘어가지 않는 것까지는 아직 보지 못했다.
-			{ "season_hold", Area::World, "계절 붙들기 (지금 단계에 머문다)", "inst:o_game_map_controller.__current_local_map.__season_manager.__start_phase_time", C, 1, 0, 0, 0, false,
-				"지금 계절 단계의 시작 시각을 시간이 흐른 만큼 따라 밀어 가혹한 계절까지 남은 시간이 줄지 않게 한다. 끄면 그때부터 다시 흐른다(밀린 만큼은 되돌리지 않는다). 효과는 확인 전" },
+			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons").
+			// 플레이에서 봤다(실행 2, 0.26.0): 남은 시간을 2시간 반으로 만들고 켠 채 네 시간을 돌리자 남은 시간과 단계가 그대로였고(정각을 네 번 지났다),
+			// 끄자 남은 시간이 다 지난 뒤의 정각에 게임이 __set_phase(1)을 불러 다음 단계로 넘겼다.
+			{ "season_hold", Area::World, "계절 붙들기 (지금 단계에 머문다)", "inst:o_game_map_controller.__current_local_map.__season_manager.__start_phase_time", C, 1, 0, 0, 0, true,
+				"지금 계절 단계의 시작 시각을 시간이 흐른 만큼 따라 밀어 가혹한 계절까지 남은 시간이 줄지 않게 한다(1초마다). 끄면 그때부터 다시 흐른다(밀린 만큼은 되돌리지 않는다). "
+				"남은 시간이 한 시간도 안 될 때 켜면 그 단계는 넘어갈 수 있다" },
 			// 늑대(research/25): WolvesManager.get_max_number_of_wolves()(인자 없음)를 게임이 밤에 한 번 불러 수(11.1)를 받았고 그 밤에 spawn_wolf(구조체)를 한 번 불렀다.
-			// 0 을 돌려주게 한다(수를 돌려주던 함수에 수). 늑대가 나오지 않는지는 아직 보지 못했다.
-			{ "no_wolves", Area::World, "늑대가 나타나지 않음", "inst:o_game_map_controller.__current_local_map.__wolf_manager.get_max_number_of_wolves", HN, 0, 1, 0, 0, false,
-				"게임이 밤에 묻는 '늑대의 최대 수'에 0 을 답하게 한다. 이미 나온 늑대는 그대로다. 효과는 확인 전" },
+			// 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
+			// 플레이에서 봤다(실행 1·2): 켠 두 밤에는 게임이 0 을 받고 spawn_wolf 를 한 번도 부르지 않았고, 끈 두 밤에는 한 번과 세 번 불렀다.
+			{ "no_wolves", Area::World, "늑대가 나타나지 않음", "inst:o_game_map_controller.__current_local_map.__wolf_manager.get_max_number_of_wolves", HN, 0, 1, 0, 0, true,
+				"게임이 밤에 묻는 '늑대의 최대 수'에 0 을 답하게 한다. 켠 밤에는 게임이 늑대를 만들지 않았다. 이미 나온 늑대는 그대로다" },
 			// 광산의 매장량(research/25): MinesManager 의 __mines_stock(광산의 자리 -> 남은 수). 게임이 캘 때마다 __change_mine_stock(광산, 1)을 불렀고 수가 1 줄었다(18 -> 17).
 			// 세이브에 남는 자료다("mines_stock"). src/World.cpp 가 1초마다 줄어든 수를 되돌려 쓴다(core/WorldPlan 의 KeepStock).
-			{ "mine_stock_hold", Area::World, "광산의 매장량이 줄지 않음", "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock", C, 1, 0, 0, 0, false,
-				"켠 동안 광산마다 매장량이 줄면 줄기 전의 수로 되돌려 쓴다(1초마다). 끄면 그때부터 다시 준다. 효과는 확인 전" },
+			// 플레이에서 봤다(실행 2): 끈 채로는 여섯 번 캐서 22 가 16 이 됐고, 켠 뒤로는 게임이 네 번 더 캤는데 16 그대로였다.
+			{ "mine_stock_hold", Area::World, "광산의 매장량이 줄지 않음", "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock", C, 1, 0, 0, 0, true,
+				"켠 동안 광산마다 매장량이 줄면 줄기 전의 수로 되돌려 쓴다(1초마다). 끄면 그때부터 다시 준다. 이미 바닥난 광산을 되살리지는 않는다" },
 			// 지도 공개(research/25): GlobalMapManager.is_initial_area_visible(지역 구조체) -> 불리언. 세계 지도가 열려 있는 동안 게임이 프레임마다 부른다.
-			// 참을 돌려주게 하자(원격 override) 안개 속 지역이 밝아지고 마을의 이름과 지역의 자원 아이콘이 나타났고, 그만두자 원래대로 돌아갔다.
+			// 참을 돌려주게 하자 안개 속 지역이 밝아지고 마을의 이름과 지역의 자원 아이콘이 나타났고, 그만두자 원래대로 돌아갔다
+			// (실행 1 은 원격 override 로, 실행 2 는 이 항목을 켜고 꺼서 화면으로 봤다).
 			// 지도 물체의 is_in_fog_of_war()는 따라 바뀌지 않는다(96개 가운데 83개가 그대로 안개 속으로 읽혔다). 게임의 다른 판정이 그것을 쓰는지는 모른다.
-			{ "reveal_map", Area::World, "세계 지도의 안개 걷기", "inst:o_global_map.__m_global_map.is_initial_area_visible", H, 1, 0, 0, 0, false,
+			{ "reveal_map", Area::World, "세계 지도의 안개 걷기", "inst:o_global_map.__m_global_map.is_initial_area_visible", H, 1, 0, 0, 0, true,
 				"게임이 '이 지역이 보이는가'를 물을 때 언제나 그렇다고 답하게 한다. 세계 지도에서 안개 속 지역의 마을 이름과 자원이 보인다. 끄면 원래대로 돌아간다" },
 			// 세계 지도 관리자(inst:o_global_map.__m_global_map, GlobalMapManager)의 디버그 깃발. 뜻은 이름에서 읽은 것이다. 세이브에 그 열쇠는 없다.
 			{ "fast_map_moving", Area::World, "세계 지도의 이동을 빠르게", "inst:o_global_map.__m_global_map.__debug_fast_moving", T, 1, 0, 0, 0, false,
@@ -327,9 +333,11 @@ namespace NlCore
 			{ "hide_events", Area::Events, "이벤트 표시 끔", "inst:o_debug.is_display_event_disabled", T, 1, 0, 0, 0, false,
 				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다)" },
 
-			// 게임의 저장을 끄는 디버그 깃발로 보인다. 세이브에 그 열쇠는 없다. 자동 저장이 그 깃발을 보는지는 아직 재지 않았다.
-			{ "no_autosave", Area::Util, "게임의 저장 끄기", "inst:o_debug.is_save_disabled", T, 1, 0, 0, 0, false,
-				"게임의 저장을 끄는 개발자 스위치로 보인다(자동 저장도 꺼지는지는 확인 전). 켜 둔 동안에는 직접 하는 저장도 되지 않을 수 있다" },
+			// 게임의 저장을 끄는 디버그 깃발. 세이브에 그 열쇠는 없다.
+			// 플레이에서 봤다(실행 2): 켠 채 자동 저장의 시각을 세 번(저녁, 아침, 저녁) 넘겼는데 세이브 폴더에 새 파일이 생기지 않았다
+			// (끈 채였던 실행 1 에서는 같은 시각에 아침·저녁 자동 저장이 생겼다). 직접 하는 저장이 막히는지는 재지 않았다.
+			{ "no_autosave", Area::Util, "게임의 저장 끄기", "inst:o_debug.is_save_disabled", T, 1, 0, 0, 0, true,
+				"게임의 저장을 끄는 개발자 스위치. 켠 동안 자동 저장 파일이 생기지 않았다. 직접 하는 저장도 되지 않을 수 있으니(재지 않았다) 저장하려면 끄고 한다" },
 			{ "game_debug", Area::Util, "게임의 디버그 모드", "inst:o_debug.is_debug_enabled", T, 1, 0, 0, 0, false,
 				"게임에 들어 있는 디버그 기능의 큰 스위치로 보인다. 켜면 게임의 디버그 창이 뜰 수 있다" },
 			{ "debug_managers", Area::Util, "게임의 디버그 창: 매니저", "inst:o_debug.is_show_debug_managers", T, 1, 0, 0, 0, false,
