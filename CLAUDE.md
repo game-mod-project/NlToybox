@@ -447,9 +447,15 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   **git 태그 `v5.0.0c`를 체크아웃하지 않는다.** 그 태그는 v4 헤더를 가리킨다.
   새로 클론했으면 `git submodule update --init` 먼저.
 - 서브모듈 안의 파일은 고치지 않는다.
-- Aurie와 YYToolkit은 AGPL-3.0이다. 레포는 소스만 공개했다(2026-10-06. 빌드한 DLL 과 `refs/`·`backups/`·`downloads/`는 추적하지 않는다.
-  공개 전에 추적되는 파일 205개에 바이너리·비밀 값·개인 정보가 없는 것을 봤다). **라이선스 파일은 아직 없다**: 무엇으로 할지는 사용자가 정한다.
-  모듈(DLL)을 배포하려면 그 전에 AGPL-3.0 과 맞는 라이선스를 정한다.
+- **이 레포의 라이선스는 AGPL-3.0 이다**(`LICENSE`. 버전 3 만: AGPL-3.0-only. 2026-10-07 에 사용자가 정했다). 모듈은 YYToolkit(AGPL-3.0)의 소스 `YYTK_Shared_Types.cpp`와
+  Dear ImGui(MIT. 기본 글꼴 ProggyClean 과 stb 를 품고 있다)를 함께 빌드한다. 제3자의 고지는 `THIRD-PARTY-NOTICES.md`: 빌드에 들어가는 제3자 코드가 바뀌면 그 파일도 고친다.
+  `LICENSE`의 글은 고치지 않는다(GitHub 의 라이선스 API 가 준 전문이고 서브모듈 `external/YYToolkit/LICENSE`와 줄 끝만 다르다).
+- 레포에는 소스만 있다(빌드한 DLL 과 `refs/`·`backups/`·`downloads/`·`dist/`는 추적하지 않는다. 2026-10-06 의 공개 전에 추적되는 파일 205개에 바이너리·비밀 값·개인 정보가 없는 것을 봤다).
+- **DLL 은 GitHub 릴리스의 묶음으로 낸다**(`NlToyBox-<버전>-win64.zip`: `NlToyBox.dll`, `LICENSE`, `THIRD-PARTY-NOTICES.md`, `README.txt`). 묶음은 `dist\`에서 만든다(추적 안 함).
+  - 넣는 DLL 은 **적재 판정을 받은 바로 그 파일**이다(게임 폴더에 배포돼 있는 것). 다시 빌드한 것은 코드가 같아도 파일이 다르다(빌드가 재현되지 않는다).
+  - 넣기 전에 DLL 의 글에 개인 경로가 없는지 본다(`Users\`, 계정 이름. 지금은 `E:\NlToyBox\…`의 PDB 경로와 헤더 경로 하나만 들어 있다).
+  - 릴리스의 글에 그 DLL 을 만든 소스(태그와 서브모듈의 커밋), 잰 게임 버전, 묶음과 DLL 의 SHA256, 필요한 것(Aurie·YYToolkit, Visual C++ 런타임)을 적는다.
+  - `v0.27.1`의 태그는 `LICENSE`를 넣기 전의 커밋이다(라이선스는 릴리스의 글과 묶음, `main`에 있다). 다음 릴리스부터는 태그의 트리에 들어 있다.
 
 ## 도구
 

@@ -24,6 +24,14 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 
 `check-load.ps1`은 게임을 켜고 `mods\Aurie\NlToyBox.log`를 읽어 `PASS`/`FAIL`을 낸 뒤 게임을 끈다.
 
+### 빌드한 DLL 로 쓰기
+
+릴리스(https://github.com/game-mod-project/NlToybox/releases)의 묶음에 빌드한 `NlToyBox.dll`이 있다. 빌드 도구 없이 쓰려면:
+
+    pwsh -File tools/setup-aurie.ps1     # 한 번. Aurie·YYToolkit 을 게임에 놓는다
+
+그 뒤 게임을 끈 채로 `NlToyBox.dll`을 `<게임 폴더>\mods\Aurie\`에 넣는다. 묶음은 그 릴리스에 적힌 게임 버전에서 잰 것이다.
+
 ## 게임 안의 치트 메뉴
 
 모듈을 놓고(`setup-aurie.ps1`, `build.ps1`, `deploy.ps1`) 게임을 켠 뒤 **F8**을 누르면 모드창이 뜬다. 왼쪽에서 영역을 고른다.
@@ -174,3 +182,22 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 - `research/14-world.md` — 세력·종교·이벤트 감독·게임 조건·계절과 날씨의 관리자와 함수, 주교 부르기, 이벤트 쿨다운, 불러서 게임이 끝난 함수 둘
 - `research/13-army.md` — 병사를 만드는 디버그 함수와 디버그 소환기, 고용 값, 싸움을 붙이는 법과 전투 함수의 꼴, 상처를 입히는 함수, 장비가 남지 않는 까닭
 - `CLAUDE.md` — 레포 규칙
+
+## 라이선스
+
+NlToyBox 는 GNU Affero General Public License 버전 3 (AGPL-3.0-only)으로 배포한다. 전문은 `LICENSE`.
+
+    Copyright (C) 2026 NlToyBox contributors
+
+    This program is free software: you can redistribute it and/or modify
+    it under the terms of the GNU Affero General Public License as published by
+    the Free Software Foundation, version 3.
+
+    This program is distributed in the hope that it will be useful,
+    but WITHOUT ANY WARRANTY; without even the implied warranty of
+    MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+    GNU Affero General Public License for more details.
+
+- 모듈은 YYToolkit(AGPL-3.0)의 소스와 Dear ImGui(MIT)를 함께 빌드한다. 그 고지는 `THIRD-PARTY-NOTICES.md`.
+- 빌드한 DLL 을 다른 사람에게 건넬 때는 `LICENSE`와 `THIRD-PARTY-NOTICES.md`를 함께 넣고, 그 DLL 을 만든 소스(이 저장소의 그 태그와 서브모듈)를 받을 곳을 알린다.
+- 게임 Norland 와 그 파일은 Long Jaunt 의 저작물이고 이 저장소에 들어 있지 않다.
