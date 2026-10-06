@@ -40,7 +40,29 @@ set_target_properties(nlcore PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_compile_options(nlcore PUBLIC /std:c++latest /W3 /utf-8)
 
 # src/core 의 시험. 게임을 켜지 않는다. tools/test-native.ps1 이 돌린다.
-add_executable(nlcore_tests tests/native/core_tests.cpp)
+add_executable(nlcore_tests
+  tests/native/main.cpp
+  tests/native/test_text.cpp
+  tests/native/test_request.cpp
+  tests/native/test_schedule.cpp
+  tests/native/test_askpath.cpp
+  tests/native/test_knobs.cpp
+  tests/native/test_economy.cpp
+  tests/native/test_cheat.cpp
+  tests/native/test_costbook.cpp
+  tests/native/test_hooks.cpp
+  tests/native/test_rate.cpp
+  tests/native/test_remote.cpp
+  tests/native/test_people.cpp
+  tests/native/test_presets.cpp
+  tests/native/test_world.cpp
+  tests/native/test_diplomacy.cpp
+  tests/native/test_court.cpp
+  tests/native/test_localization.cpp
+  tests/native/test_family.cpp
+  tests/native/test_role.cpp
+  tests/native/test_crime.cpp
+)
 set_target_properties(nlcore_tests PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_include_directories(nlcore_tests PRIVATE src)
 target_link_libraries(nlcore_tests PRIVATE nlcore)
