@@ -1,6 +1,7 @@
 #include "CheatState.hpp"
 
 #include "AskPath.hpp"
+#include "EconomyPlan.hpp"
 #include "Text.hpp"
 
 #include <algorithm>
@@ -66,6 +67,8 @@ namespace NlCore
 				else
 					it->Value = value;
 			}
+			else if (word == "floor" && SplitNumber(rest, name, value) && GoodFloorKey(name) && FloorValue(value) > 0)
+				state.Floors[name] = FloorValue(value);
 		}
 		return state;
 	}
@@ -81,6 +84,9 @@ namespace NlCore
 			text += "pin " + path + "\n";
 		for (const LockLine& lock : State.Locks)
 			text += "lock " + lock.Path + "=" + Shortest(lock.Value) + "\n";
+		for (const auto& [key, value] : State.Floors)
+			if (GoodFloorKey(key) && FloorValue(value) > 0)
+				text += "floor " + key + "=" + Shortest(FloorValue(value)) + "\n";
 		return text;
 	}
 }

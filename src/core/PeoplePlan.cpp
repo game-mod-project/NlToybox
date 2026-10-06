@@ -265,8 +265,6 @@ namespace NlCore
 			Why = "한 사람을 짚어서만 할 수 있습니다";
 		else if (NeedsIndex(Command.Act) && (Command.Index < 0 || Command.Index >= IndexLimit(Command.Act)))
 			Why = "번호가 범위 밖입니다";
-		else if (Command.Act == PersonAct::ItemAdd && Command.Index < 1)
-			Why = "0 번 자원은 건드리지 않습니다";		// 경제 패널과 같다(갈래에 없는 자원)
 		if (Why.empty() && NeedsAmount(Command.Act) && !std::isfinite(Command.Amount))
 			Why = "수가 아닙니다";
 		if (Why.empty() && gift && (std::round(Command.Amount) == 0 || std::fabs(Command.Amount) > k_GiftMax))

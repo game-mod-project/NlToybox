@@ -15,7 +15,7 @@ namespace NlCore
 
 		// 키는 global.__resource_caption 에서 봤다(research/07). 한글 이름은 이 레포가 붙였다.
 		constexpr Named k_Resources[] = {
-			{ "rune", "룬" }, { "wood", "나무" }, { "food", "음식" }, { "beer", "맥주" }, { "iron", "철" }, { "instruments", "도구" },
+			{ "rune", "신성 반지" }, { "wood", "나무" }, { "food", "음식" }, { "beer", "맥주" }, { "iron", "철" }, { "instruments", "도구" },
 			{ "light_armor", "경갑" }, { "heavy_armor", "중갑" }, { "bow", "활" }, { "crossbow", "석궁" }, { "wooden_hammer", "나무 망치" },
 			{ "wooden_spear", "나무 창" }, { "sword", "검" }, { "battle_axe", "전투 도끼" }, { "knife", "단검" }, { "shield", "방패" },
 			{ "medicine", "약" }, { "coal", "석탄" }, { "nectar", "넥타" }, { "paper", "종이" }, { "hop", "홉" }, { "rye", "호밀" },
@@ -75,7 +75,8 @@ namespace NlCore
 			EconomyAct Act;
 		} acts[] = {
 			{ "gold_add", EconomyAct::GoldAdd }, { "gold_set", EconomyAct::GoldSet }, { "add", EconomyAct::ResourceAdd },
-			{ "set", EconomyAct::ResourceSet }, { "all", EconomyAct::AllAdd },
+			{ "set", EconomyAct::ResourceSet }, { "all", EconomyAct::AllAdd }, { "floor", EconomyAct::FloorSet },
+			{ "gold_floor", EconomyAct::GoldFloor },
 		};
 		for (const auto& act : acts)
 			if (Word == act.Word)
@@ -88,7 +89,108 @@ namespace NlCore
 
 	bool NeedsResource(EconomyAct Act)
 	{
-		return Act == EconomyAct::ResourceAdd || Act == EconomyAct::ResourceSet;
+		return Act == EconomyAct::ResourceAdd || Act == EconomyAct::ResourceSet || Act == EconomyAct::FloorSet;
+	}
+
+	bool IsFloorAct(EconomyAct Act)
+	{
+		return Act == EconomyAct::FloorSet || Act == EconomyAct::GoldFloor;
+	}
+
+	int RingResource(const std::vector<std::string>& Keys)
+	{
+		for (size_t i = 0; i < Keys.size(); i++)
+			if (Keys[i] == "rune")
+				return static_cast<int>(i);
+		return -1;
+	}
+
+	std::vector<int> EconomyTargets(EconomyAct Act, const std::vector<int>& Stocked, int Ring)
+	{
+		std::vector<int> targets = Stocked;
+		if (Ring < 0)
+			return targets;
+		const auto at = std::find(targets.begin(), targets.end(), Ring);
+		if (Act == EconomyAct::AllAdd)
+			targets.erase(std::remove(targets.begin(), targets.end(), Ring), targets.end());
+		else if (at == targets.end())
+			targets.push_back(Ring);
+		return targets;
+	}
+
+	double FloorValue(double Asked)
+	{
+		if (!GoodFloorAmount(Asked))
+			return 0;
+		const double whole = std::round(Asked);
+		return whole <= 0 ? 0 : whole;
+	}
+
+	bool GoodFloorAmount(double Asked)
+	{
+		return std::isfinite(Asked) && Asked <= k_MaxAmount;
+	}
+
+	bool GoodFloorKey(const std::string& Key)
+	{
+		if (Key.empty() || Key.size() > 40)
+			return false;
+		for (const char c : Key)
+			if (!((c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '_'))
+				return false;
+		return true;
+	}
+
+	std::vector<EconomyChange> PlanFloors(const std::vector<EconomyFloor>& Floors, double Gold, const std::vector<double>& Free,
+		const std::vector<int>& Allowed)
+	{
+		std::vector<EconomyChange> changes;
+		std::vector<int> seen;			// 본 자원. 같은 자원의 둘째 바닥은 앞의 것이 변화를 내지 않았어도 보지 않는다
+		for (const EconomyFloor& floor : Floors)
+		{
+			if (std::find(seen.begin(), seen.end(), floor.Resource) != seen.end())
+				continue;
+			seen.push_back(floor.Resource);
+			// 수가 아닌 바닥과 터무니없는 바닥은 유지하지 않는다(FloorValue 와 같다).
+			const double target = FloorValue(floor.Min);
+			if (target <= 0)
+				continue;
+			double now = 0;
+			if (floor.Resource == -1)
+				now = Gold;
+			else if (floor.Resource >= 0 && static_cast<size_t>(floor.Resource) < Free.size()
+				&& std::find(Allowed.begin(), Allowed.end(), floor.Resource) != Allowed.end())
+				now = Free[floor.Resource];
+			else
+				continue;
+			if (!std::isfinite(now) || !(now < target))
+				continue;
+			const double delta = std::ceil(target - now);
+			if (delta <= 0 || delta > k_MaxAmount)
+				continue;
+			changes.push_back({ floor.Resource, delta });
+		}
+		return changes;
+	}
+
+	FloorRound FloorReport(int Kept, int Asked, int Called, int Short, const std::string& Why)
+	{
+		FloorRound round;
+		const int missed = Asked - Called;
+		if (missed > 0 || Short > 0)
+		{
+			round.Ok = false;
+			round.Note = "최소값: 채우려던 " + std::to_string(Asked) + "개 가운데 ";
+			if (missed > 0)
+				round.Note += std::to_string(missed) + "개를 부르지 못했" + (Short > 0 ? "고" : "습니다") + (Why.empty() ? "" : " (" + Why + ")");
+			if (Short > 0)
+				round.Note += std::string(missed > 0 ? " " : "") + std::to_string(Short) + "개는 불러도 수가 청한 만큼 바뀌지 않았습니다";
+		}
+		else if (Kept <= 0)
+			round.Note = "지킬 최소값이 없습니다 (이 게임에 없는 자원뿐입니다)";
+		else
+			round.Note = "최소값 " + std::to_string(Kept) + "개를 지키는 중" + (Asked > 0 ? " (방금 " + std::to_string(Asked) + "개를 채웠습니다)" : "");
+		return round;
 	}
 
 	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
@@ -138,6 +240,9 @@ namespace NlCore
 				if (valid(resource))
 					add(resource, Settle(free_of(resource), Command.Amount));
 			break;
+		case EconomyAct::FloorSet:
+		case EconomyAct::GoldFloor:
+			break;			// 바닥을 정할 뿐이다. 모자란 것은 틱이 PlanFloors 로 채운다
 		}
 		return changes;
 	}
