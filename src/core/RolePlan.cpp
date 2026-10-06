@@ -161,6 +161,28 @@ namespace NlCore
 		return Step.Kind == 'r' ? has : !has;
 	}
 
+	std::string RolePreview(const RoleTodo& Todo)
+	{
+		if (Todo.Empty())
+			return "바꿀 것이 없습니다 (이미 이 프리셋대로입니다)";
+		const bool removes = !Todo.Remove.empty(), adds = !Todo.Add.empty();
+		std::string text;
+		if (!Todo.Skills.empty())
+			text = "능력치 " + std::to_string(Todo.Skills.size()) + "개를 " + (removes || adds ? "올리고, " : "올립니다");
+		if (removes)
+			text += "특성 " + std::to_string(Todo.Remove.size()) + "개를 " + (adds ? "떼고, " : "뗍니다");
+		if (adds)
+			text += std::string(removes ? "" : "특성 ") + std::to_string(Todo.Add.size()) + "개를 붙입니다";
+		return text;
+	}
+
+	const char* RemoveNote(const std::string& Trait)
+	{
+		// 한 영주에게서 그것만 떼자 생각의 합이 74.94 에서 49.94 가 됐고 다시 붙이자 돌아왔다(research/22).
+		// 다른 특성은 따로 재지 않았다(greedy 를 붙였다 뗀 사람은 그대로였다).
+		return Trait == "stupidity" ? "떼면 그 사람의 생각의 합이 25 내려갑니다 (잰 것. 다시 붙이면 돌아옵니다)" : "";
+	}
+
 	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why)
 	{
 		const std::string head = Name + ": " + Role.Label + " 프리셋 - ";

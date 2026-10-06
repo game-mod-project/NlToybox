@@ -1682,37 +1682,68 @@ namespace
 		if (ImGui::Button("이 역할로"))
 			Push(PersonAct::Role, Row.Uuid, -1, 0, role.Id);
 		ImGui::EndDisabled();
-		ImGui::SameLine();
-		if (todo.Empty())
-			ImGui::TextDisabled("바꿀 것이 없습니다 (이미 이 프리셋대로입니다)");
-		else
-			ImGui::TextDisabled("능력치 %d개를 올리고, 특성 %d개를 붙이고, %d개를 뗍니다", static_cast<int>(todo.Skills.size()), static_cast<int>(todo.Add.size()),
-				static_cast<int>(todo.Remove.size()));
+		// 요약은 제 줄에 둔다(단추 옆에 두자 기본 너비의 창에서 오른쪽이 잘렸다. 0.24.0 의 화면에서 봤다).
+		Hint(NlCore::RolePreview(todo));
 		if (g_RoleLastFor == Row.Uuid && !g_RoleLast.empty())
 			Hint("마지막 결과 - " + g_RoleLast);
 
 		// 능력치: 프리셋의 것을 차례대로. 지금 값이 더 높으면 그대로 둔다.
+		// 한 능력치의 글("… 4 -> 20")이 줄 사이에서 갈리지 않게 조각마다 따로 그리고, 다음 조각이 들어갈 때만 옆에 둔다.
 		const std::vector<NlCore::NamedKey>& skills = NlCore::SkillNames();
-		std::string line = "능력치:";
+		std::vector<std::string> items = { "능력치:" };
 		for (const NlCore::RoleSkill& wanted : role.Skills)
 			for (size_t i = 0; i < skills.size(); i++)
 			{
 				if (std::string(skills[i].Key) != wanted.Skill)
 					continue;
 				const double now = i < One.Skills.size() ? One.Skills[i] : k_Unknown;
-				line += std::string(line.back() == ':' ? " " : ",  ") + SkillLabel(i) + " ";
+				std::string item = std::string(SkillLabel(i)) + " ";
 				if (now == k_Unknown)
-					line += "없음";		// 그 사람에게 없는 능력치(주민은 전투만 있다)
+					item += "없음";		// 그 사람에게 없는 능력치(주민은 전투만 있다)
 				else if (now >= wanted.Level)
-					line += NumberText(now, 0) + " (그대로)";
+					item += NumberText(now, 0) + " (그대로)";
 				else
-					line += NumberText(now, 0) + " -> " + std::to_string(wanted.Level);
+					item += NumberText(now, 0) + " -> " + std::to_string(wanted.Level);
+				items.push_back(std::move(item));
 			}
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextUnformatted(line.c_str());
-		ImGui::PopTextWrapPos();
+		const float gap = ImGui::GetStyle().ItemSpacing.x * 2;
+		const float right = ImGui::GetCursorScreenPos().x + ImGui::GetContentRegionAvail().x;
+		for (size_t i = 0; i < items.size(); i++)
+		{
+			ImGui::TextUnformatted(items[i].c_str());
+			if (i + 1 < items.size() && ImGui::GetItemRectMax().x + gap + ImGui::CalcTextSize(items[i + 1].c_str()).x < right)
+				ImGui::SameLine(0.0f, gap);
+		}
 
 		// 특성: 한 줄에 하나(설명은 풍선 글로). 좁은 창에서도 읽히게 표의 칸에 두지 않는다.
+		// 뗄 것을 먼저 보인다(먼저 떼기도 한다). 가진 것만 한 줄씩 그리고, 이 사람에게 없는 것은 흐린 한 줄로 모은다.
+		ImGui::TextUnformatted("뗄 특성 (이 역할에 해로운 것. 가진 것만 뗍니다):");
+		ImGui::Indent();
+		std::string absent;
+		bool owned = false;
+		for (const char* name : role.Remove)
+		{
+			if (!Has(One.Traits, name))
+			{
+				absent += (absent.empty() ? "" : ", ") + TraitLabel(name);
+				continue;
+			}
+			owned = true;
+			ImGui::Text("뗌    %s", TraitLabel(name).c_str());
+			TraitTooltip(name);
+			const char* note = NlCore::RemoveNote(name);
+			if (note[0])
+			{
+				ImGui::Indent();
+				Hint(note);		// 제 줄에, 창의 너비에서 줄을 바꾼다
+				ImGui::Unindent();
+			}
+		}
+		if (!owned)
+			ImGui::TextDisabled("뗄 것이 없습니다");
+		if (!absent.empty())
+			Hint("이 사람에게 없는 것: " + absent);
+		ImGui::Unindent();
 		ImGui::TextUnformatted("붙일 특성:");
 		ImGui::Indent();
 		for (const char* name : role.Add)
@@ -1723,17 +1754,6 @@ namespace
 				ImGui::TextDisabled("게임에 없음    %s", name);
 			else
 				ImGui::Text("붙임    %s", TraitLabel(name).c_str());
-			TraitTooltip(name);
-		}
-		ImGui::Unindent();
-		ImGui::TextUnformatted("뗄 특성 (이 역할에 해로운 것. 가진 것만 뗍니다):");
-		ImGui::Indent();
-		for (const char* name : role.Remove)
-		{
-			if (Has(One.Traits, name))
-				ImGui::Text("뗌    %s", TraitLabel(name).c_str());
-			else
-				ImGui::TextDisabled("없음    %s", TraitLabel(name).c_str());
 			TraitTooltip(name);
 		}
 		ImGui::Unindent();

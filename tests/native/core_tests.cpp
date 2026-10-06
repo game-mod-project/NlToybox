@@ -2879,6 +2879,28 @@ int main(int argc, char** argv)
 			CHECK(RoleStepNeeded(steps[0], {}) && RoleStepNeeded(steps[0], { "leader" }));
 		}
 
+		// 미리 보기의 요약(누르기 전의 글): 걸음의 차례대로 말한다(올리고, 떼고, 붙인다)
+		{
+			RoleTodo todo;
+			CHECK_STR(RolePreview(todo), "바꿀 것이 없습니다 (이미 이 프리셋대로입니다)");
+			todo.Skills = { { 1, 20 }, { 0, 15 } };
+			CHECK_STR(RolePreview(todo), "능력치 2개를 올립니다");
+			todo.Remove = { "coward" };
+			CHECK_STR(RolePreview(todo), "능력치 2개를 올리고, 특성 1개를 뗍니다");
+			todo.Add = { "leader", "fearless", "brave" };
+			CHECK_STR(RolePreview(todo), "능력치 2개를 올리고, 특성 1개를 떼고, 3개를 붙입니다");
+			todo.Remove.clear();
+			CHECK_STR(RolePreview(todo), "능력치 2개를 올리고, 특성 3개를 붙입니다");
+			todo.Skills.clear();
+			CHECK_STR(RolePreview(todo), "특성 3개를 붙입니다");
+			todo.Add.clear();
+			todo.Remove = { "coward", "nervous" };
+			CHECK_STR(RolePreview(todo), "특성 2개를 뗍니다");
+		}
+		// 떼기 전에 알릴 것은 잰 것만: stupidity 를 떼면 생각의 합이 25 내려간다(research/22). 재지 않은 특성에는 아무 말도 하지 않는다.
+		CHECK(std::string(RemoveNote("stupidity")).find("25") != std::string::npos);
+		CHECK(std::string(RemoveNote("greedy")).empty() && std::string(RemoveNote("nervous")).empty() && std::string(RemoveNote("")).empty());
+
 		// 명령: 한 사람을 짚어서만. 이름은 프리셋의 Id.
 		PersonAct act = PersonAct::SkillSet;
 		CHECK(ParsePersonAct("role", act) && act == PersonAct::Role && std::string(PersonActWord(PersonAct::Role)) == "role");
