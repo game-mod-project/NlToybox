@@ -45,11 +45,11 @@ namespace NlCore
 	};
 
 	// 지금의 수를 보고 명령을 변화량들로 푼다. 넘기는 변화량은 언제나 유한한 정수다(게임의 함수에 그대로 간다). 0 인 변화는 뺀다.
-	// 줄일 때는 줄일 수 있는 양을 넘지 않는다: 금화는 지금 수, 자원은 Counts 와 Free 가운데 작은 쪽(예약된 몫은 줄이지 않는다).
+	// 줄일 때는 줄일 수 있는 양을 넘지 않는다: 금화는 지금 수, 자원은 Basis 와 Free 가운데 작은 쪽(예약된 몫은 줄이지 않는다).
 	// 읽은 수가 수가 아니면 그것은 하지 않는다.
-	// Counts: 자원 번호 → 지금 수(맞추기의 기준). Free: 자원 번호 → 예약되지 않은 수(없으면 Counts 를 쓴다).
+	// Basis: 자원 번호 → 맞추기의 기준이 되는 수(경제 패널은 화면이 보이는, 예약되지 않은 수를 넘긴다. research/08·18). Free: 자원 번호 → 예약되지 않은 수(없으면 Basis 를 쓴다).
 	// Stocked: 창고의 갈래에 든 자원 번호들. 여기에 없는 자원은 하나씩으로도 건드리지 않는다.
-	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
+	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Basis,
 		const std::vector<double>& Free, const std::vector<int>& Stocked);
 
 	// 최소값 유지. 자원마다(금화는 -1) 바닥을 두고, 화면의 수가 그보다 적으면 모자란 만큼 더한다.

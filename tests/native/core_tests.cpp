@@ -2,6 +2,7 @@
 // 사용: nlcore_tests.exe <요청 파일 폴더>     (tools/test-native.ps1 이 부른다)
 
 #include "core/AskPath.hpp"
+#include "core/JobTally.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/Binding.hpp"
 #include "core/CallLog.hpp"
@@ -2020,7 +2021,7 @@ int main(int argc, char** argv)
 	});
 
 	Test("외교: 결과를 세고 실패한 줄을 앞에 둔다", [] {
-		DiplomacyTally tally;
+		JobTally tally;
 		CHECK(tally.Empty() && tally.Asked() == 0 && tally.Lines().empty());
 		tally.Expect(5);
 		tally.Add('d', "A 바꿈");
@@ -2040,7 +2041,7 @@ int main(int argc, char** argv)
 		CHECK(tally.Asked() == 7 && tally.Failed() == 4 && tally.Pending() == 0);
 		CHECK(tally.Lines()[2] == "하지 못하고 버린 일 1개: 게임 화면이 아닙니다" && tally.Lines()[3] == "F 실패" && tally.Lines()[4] == "A 바꿈");
 		// 하지 못하고 버린 일은 실패로 센다(게임 화면을 떠났다. 검토의 지적: 버린 일이 "됐다"에 남았다).
-		DiplomacyTally dropped;
+		JobTally dropped;
 		dropped.Expect(48);
 		dropped.Add('d', "A 바꿈");
 		dropped.Drop(47, "게임 화면이 아닙니다");
@@ -2049,7 +2050,7 @@ int main(int argc, char** argv)
 		dropped.Drop(0, "아무것도");
 		CHECK(dropped.Failed() == 47 && dropped.Lines().size() == 2);
 		// 아직 하는 중
-		DiplomacyTally busy;
+		JobTally busy;
 		busy.Expect(3);
 		busy.Add('x', "망한 왕국");
 		CHECK(busy.Pending() == 2 && busy.Same() == 1);
@@ -2097,7 +2098,7 @@ int main(int argc, char** argv)
 		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 3, 2, 'f', "no such method"), "크래스터: 우리가 그쪽을 중립 -> 중립 (좋은 평판 2개). 실패: no such method");
 		CHECK_STR(DiplomacyReport("크래스터", 't', -1, -1, 0, 'f', "관계를 읽지 못했습니다"), "크래스터: 그쪽이 우리를 ? -> ?. 실패: 관계를 읽지 못했습니다");
 		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 0, 'x', ""), "크래스터: 망했거나 왕이 없는 왕국입니다. 건드리지 않습니다");
-		CHECK(DiplomacyFailed('l') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a') && !DiplomacyFailed('k') && !DiplomacyFailed('x'));
+		CHECK(JobFailed('l') && JobFailed('f') && !JobFailed('d') && !JobFailed('a') && !JobFailed('k') && !JobFailed('x'));
 		// 평판의 수(목표가 없는 일): 붙인 개수와 관계를 따로 적는다. 관계가 그대로면 그대로라고 적는다(둘째 검토의 지적: 붙인 것을 "바꿨다"고 적지 않는다).
 		CHECK_STR(OpinionReport("라크리아", 'u', 3, 3, -2), "라크리아: 우리가 그쪽을 보는 평판에 나쁜 평판 2개를 붙였습니다 (관계는 중립 그대로)");
 		CHECK_STR(OpinionReport("라크리아", 't', 4, 3, -1), "라크리아: 그쪽이 우리를 보는 평판에 나쁜 평판 1개를 붙였습니다 (관계는 우호 -> 중립)");
@@ -2152,7 +2153,7 @@ int main(int argc, char** argv)
 		CHECK_STR(UnsureNote(), " (붙었는지는 게임의 함수가 돌려준 값으로만 봤습니다)");
 
 		// 한도에 닿아 멈춘 일('s')은 실패다: 청한 만큼 하지 못했다. 붙인 수는 실제로 붙은 것만 적는다. 본 것(더 붙지 않았다)을 적고 한도는 그 까닭으로 적는다.
-		CHECK(DiplomacyFailed('s'));
+		CHECK(JobFailed('s'));
 		CHECK_STR(OpinionReport("하라우", 'u', 3, 4, 10, true),
 			"하라우: 우리가 그쪽을 보는 평판에 좋은 평판 10개를 붙였고 그 뒤로는 더 붙지 않았습니다 (같은 평판의 겹침 한도 50개로 보입니다. 관계는 중립 -> 우호)");
 		CHECK_STR(OpinionReport("하라우", 't', 4, 3, -2, true),
@@ -2162,7 +2163,7 @@ int main(int argc, char** argv)
 		// 협정의 칸에 아는 비트로 설명되지 않는 것이 있는가(창이 "?"를 덧붙인다)
 		CHECK(!PactUnknown(0) && !PactUnknown(-1) && !PactUnknown(4) && !PactUnknown(204));
 		CHECK(PactUnknown(64) && PactUnknown(68) && PactUnknown(1) && PactUnknown(4.5) && PactUnknown(1e300));
-		DiplomacyTally stuck;
+		JobTally stuck;
 		stuck.Expect(2);
 		stuck.Add('d', "A 됨");
 		stuck.Add('s', "B 한도");
@@ -2709,7 +2710,7 @@ int main(int argc, char** argv)
 		bad_on.BadOn = 2;
 		CHECK_STR(CourtReport("A", "B", down, 40, 30, bad_on, 'd', ""), "A -> B: 평판 40 -> 30 (나쁜 평판 2개 붙임)");
 		// 실패로 세는 것
-		CHECK(DiplomacyFailed('l') && DiplomacyFailed('s') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a'));
+		CHECK(JobFailed('l') && JobFailed('s') && JobFailed('f') && !JobFailed('d') && !JobFailed('a'));
 
 		// 충성 대상 지우기
 		CHECK(ReleaseOutcome(0, 0) == 'a' && ReleaseOutcome(2, 2) == 'd' && ReleaseOutcome(2, 1) == 'f' && ReleaseOutcome(2, 0) == 'f');

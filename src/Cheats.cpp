@@ -427,7 +427,7 @@ void NlCheats::DrawArea(Area Where)
 				TurnOff(item);
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	ImGui::TextDisabled("(?) 는 효과를 아직 확인하지 않은 항목입니다. 수는 Enter 로 써 넣습니다.");
+	ImGui::TextDisabled("(?) 는 효과를 아직 확인하지 않은 항목입니다. 수는 칸을 떠날 때(Enter, Tab, 다른 곳 누름) 들어갑니다.");
 }
 
 namespace

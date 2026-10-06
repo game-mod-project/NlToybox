@@ -106,9 +106,6 @@ namespace NlCore
 	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다,
 	// 's' 같은 평판의 겹침 한도에 닿아 더 붙지 않았다(붙은 수는 Steps 에. AttachCheck 가 가린다).
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why);
-	// 그 결과가 실패인가('l', 'f', 's').
-	bool DiplomacyFailed(char Outcome);
-
 	// 평판 하나가 붙었는가: 붙이기 바로 앞뒤로(같은 걸음 안에서) 그 평판을 갖는 왕의 평판 목록(__opinion_minds)의 원소 수를 견준다.
 	// 우리 왕에게서는 붙을 때마다 원소가 하나 늘었고, 같은 평판이 50개에 닿자 함수가 구조체를 돌려줘도 늘지 않았다(research/19).
 	// 돌려주는 값: 'y' 하나 늘었다(붙었다), 'n' 그대로다(붙지 않았다), 'u' 모른다(세지 못했다, 줄었다, 둘 이상 늘었다).
@@ -123,30 +120,4 @@ namespace NlCore
 	// Stopped: 정한 만큼 붙이기 전에 겹침의 한도에 닿아 멈췄다('s'). Steps 는 실제로 붙은 수다(0 일 수 있다).
 	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps, bool Stopped = false);
 
-	// 명령 하나(또는 쌓인 일들)의 결과를 세고 줄을 모은다. 실패한 줄을 앞에 둔다(창은 앞의 몇 줄만 보인다).
-	// "이미 그 관계였다"와 "건드리지 않았다"는 한 것에 넣지 않는다(그대로 둔 것).
-	class DiplomacyTally
-	{
-	public:
-		void Reset() { *this = DiplomacyTally(); }
-		// 일이 그만큼 쌓였다.
-		void Expect(int Jobs) { m_Asked += Jobs > 0 ? Jobs : 0; }
-		// 일 하나가 끝났다.
-		void Add(char Outcome, const std::string& Line);
-		// 하지 못하고 버린 일들(게임 화면을 떠났다, 다시 읽지 못했다). 실패로 센다.
-		void Drop(int Jobs, const std::string& Why);
-		bool Empty() const { return m_Asked == 0 && m_Lines.empty(); }
-		int Asked() const { return m_Asked; }
-		int Changed() const { return m_Changed; }
-		int Same() const { return m_Same; }
-		int Failed() const { return m_Failed; }
-		int Pending() const { return m_Asked - m_Changed - m_Same - m_Failed; }
-		const std::vector<std::string>& Lines() const { return m_Lines; }
-		std::string Summary() const;
-
-	private:
-		int m_Asked = 0, m_Changed = 0, m_Same = 0, m_Failed = 0;
-		size_t m_FailedLines = 0;			// 줄들의 앞쪽에 있는 실패한 줄의 수
-		std::vector<std::string> m_Lines;
-	};
 }

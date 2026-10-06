@@ -20,6 +20,7 @@ add_library(nlcore STATIC
   src/core/CrimePlan.cpp
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
+  src/core/JobTally.cpp
   src/core/Knobs.cpp
   src/core/NumberEdit.cpp
   src/core/Localization.cpp
