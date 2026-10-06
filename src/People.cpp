@@ -1278,7 +1278,7 @@ namespace
 
 	// ---- 표의 항목: 플레이어의 사람을 조금씩 돌며 쓴다 ----
 
-	constexpr const char* k_HoldIds[] = { "no_hunger", "no_tiredness", "needs_full", "always_happy", "no_old_age_death" };
+	constexpr const char* k_HoldIds[] = { "no_hunger", "no_tiredness", "needs_full", "piety_full", "always_happy", "no_old_age_death" };
 
 	void HoldNotes(const std::string& Note)
 	{
@@ -1305,7 +1305,7 @@ namespace
 
 		const bool hunger = NlCheats::IsOn("no_hunger"), tired = NlCheats::IsOn("no_tiredness"), all = NlCheats::IsOn("needs_full");
 		const bool happy = NlCheats::IsOn("always_happy"), ageless = NlCheats::IsOn("no_old_age_death");
-		const std::vector<int> needs = NlCore::NeedsToHold(hunger, tired, all);
+		const std::vector<int> needs = NlCore::NeedsToHold(hunger, tired, all, NlCheats::IsOn("piety_full"));
 		if (needs.empty() && !happy && !ageless && !g_Hold.AgeWritten)
 		{
 			g_Hold.Cursor = 0;

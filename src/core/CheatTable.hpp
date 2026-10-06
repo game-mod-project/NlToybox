@@ -48,7 +48,8 @@ namespace NlCore
 	// HookScale: Path 의 함수가 돌려주는 수에 창에서 정한 배율을 곱한다(게임의 자료는 건드리지 않는다. 세이브에 남는 것이 없다).
 	//            Path 는 메서드의 주소이거나 이름 있는 스크립트("gml_Script_…")다.
 	// CustomScale: 모듈의 코드가 창에서 정한 배율로 한다(NlCheats::Factor).
-	enum class CheatKind { Toggle, Number, Hook, Custom, HookScale, CustomScale };
+	// HookNumber: Path 의 함수가 돌려주는 값을 수 On 으로 바꾼다(불리언이 아니라 수를 돌려주는 판정 함수. is_under_holy_defence 가 1 을 돌려줬다).
+	enum class CheatKind { Toggle, Number, Hook, Custom, HookScale, CustomScale, HookNumber };
 
 	// 창에서 수를 정하는 종류인가(상태 파일의 num 줄에 든다).
 	constexpr bool HasNumber(CheatKind Kind)
@@ -56,10 +57,16 @@ namespace NlCore
 		return Kind == CheatKind::Number || Kind == CheatKind::HookScale || Kind == CheatKind::CustomScale;
 	}
 
+	// 훅이 바꿔 돌려줄 값의 형(NlRecorder::Forced 의 Kind): 불리언 판정은 'b', 수를 돌려주는 판정은 'n', 배율은 'x'. 게임이 돌려주던 형 그대로 바꾼다.
+	constexpr char HookForcedKind(CheatKind Kind)
+	{
+		return Kind == CheatKind::HookScale ? 'x' : Kind == CheatKind::HookNumber ? 'n' : 'b';
+	}
+
 	// 함수가 돌려주는 값을 바꾸는 종류인가.
 	constexpr bool IsHook(CheatKind Kind)
 	{
-		return Kind == CheatKind::Hook || Kind == CheatKind::HookScale;
+		return Kind == CheatKind::Hook || Kind == CheatKind::HookScale || Kind == CheatKind::HookNumber;
 	}
 
 	struct Cheat
@@ -69,7 +76,7 @@ namespace NlCore
 		const char* Label;		// 창에 보이는 이름
 		const char* Path;		// AskPath 의 주소
 		CheatKind Kind;
-		double On, Off;			// Toggle: 켤 때와 끌 때 써 넣는 값. Hook: 바꿔 돌려줄 불리언(On).
+		double On, Off;			// Toggle: 켤 때와 끌 때 써 넣는 값. Hook: 바꿔 돌려줄 불리언(On). HookNumber: 바꿔 돌려줄 수(On).
 								// HookScale·CustomScale: On 은 창이 처음 내놓는 배율, Off 는(HookScale) 정수를 정수로 남길지(1) 그대로 곱할지(0)
 		double Min, Max;		// 수가 있는 종류의 범위(Number 는 값, 배율은 배율)
 		bool Verified;			// 플레이에서 효과를 봤는가
@@ -80,6 +87,6 @@ namespace NlCore
 	const Cheat* FindCheat(const std::string& Id);
 
 	// 상태 파일에서 읽은 것을 표에 맞춘다: 표에 없는 Id 와 종류가 다른 Id 를 버리고, 수를 범위 안으로 당긴다. 즐겨찾기와 잠금은 그대로 둔다.
-	// Hook 과 Custom 은 Verified 인 것만 켠 채로 남긴다(확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다).
+	// 훅(Hook, HookNumber)과 Custom 은 Verified 인 것만 켠 채로 남긴다(확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다).
 	CheatState KeepKnown(CheatState State);
 }

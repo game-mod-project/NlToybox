@@ -25,7 +25,7 @@ namespace NlCore
 
 	struct CourtCommand
 	{
-		std::string Who;					// "lords"(플레이어의 영주 모두) 또는 영주의 uuid. 평판을 갖는 쪽이다(Release 에서는 주군)
+		std::string Who;					// "lords"(플레이어의 영주 모두), "bishop"(주교) 또는 영주의 uuid. 평판을 갖는 쪽이다(Release 에서는 주군)
 		CourtGoal Goal = CourtGoal::Raise;
 		std::string About;					// 누구를 보는 평판인가: "king", "lords", 영주의 uuid. Release 에서는 빈 글
 		double Amount = 0;					// Opinion: 개수(부호가 방향, 절댓값 1 ~ 40). Raise: 목표(0 이면 k_CourtRaiseTo, 아니면 1 ~ 200 의 정수)
@@ -41,6 +41,7 @@ namespace NlCore
 		std::string Uuid;
 		bool King = false;		// 플레이어 세력의 왕이다
 		bool HasLoyalty = false;	// 게임이 이 사람에게 충성을 따진다(is_has_loyalty() 가 참이었다. 읽지 못한 것은 거짓으로 둔다)
+		bool Bishop = false;		// 주교다(플레이어의 영주가 아니다. "bishop"으로 가리키고 "lords"에는 들지 않는다. research/21)
 	};
 	struct CourtJob
 	{

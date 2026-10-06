@@ -367,11 +367,11 @@ namespace NlCore
 		return Read ? MindSum < 100 : !Bulk;
 	}
 
-	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All)
+	std::vector<int> NeedsToHold(bool NoHunger, bool NoTiredness, bool All, bool Piety)
 	{
 		std::vector<int> needs;
 		for (int i = 0; i < static_cast<int>(NeedNames().size()); i++)
-			if (All || (NoHunger && i == 1) || (NoTiredness && (i == 0 || i == 2)))
+			if (All || (NoHunger && i == 1) || (NoTiredness && (i == 0 || i == 2)) || (Piety && i == 3))
 				needs.push_back(i);
 		return needs;
 	}

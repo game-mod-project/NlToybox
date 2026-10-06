@@ -74,4 +74,29 @@ namespace NlCore
 			return BishopStep::Unknown;
 		return Has ? BishopStep::AlreadyHere : BishopStep::Call;
 	}
+
+	const std::vector<const char*>& ReligionCostVars()
+	{
+		// 이름은 게임의 gameplay_variables 의 것이다(실행 중인 게임의 global.__gameplay_vars 에서 읽었다: 3, 5, 250, 300, 200, 50).
+		static const std::vector<const char*> vars = {
+			"religiosity_confession_cost", "religiosity_divorce_cost", "religiosity_begging_cost",
+			"religiosity_canonization_cost_gold", "religiosity_canonization_cost_per_province", "religiosity_sacrificer_cost_gold",
+		};
+		return vars;
+	}
+
+	const std::vector<const char*>& PreachFactorVars()
+	{
+		static const std::vector<const char*> vars = { "church_preach_conversion_factor" };
+		return vars;
+	}
+
+	const std::vector<const char*>& PietyRestoreVars()
+	{
+		// 15, 15, 30, 20 이었다.
+		static const std::vector<const char*> vars = {
+			"church_pray_piety_restore", "altar_pray_piety_restore", "church_pray_morning_service_restore", "trait_saint_piety_talk_restore",
+		};
+		return vars;
+	}
 }

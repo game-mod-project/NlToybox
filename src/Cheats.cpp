@@ -105,7 +105,7 @@ namespace
 		{
 			const bool again = current;		// 걸어 둔 그대로인데 꺼져 있었다
 			NlRecorder::Forced value;
-			value.Kind = scale ? 'x' : 'b';
+			value.Kind = NlCore::HookForcedKind(It.Def->Kind);		// 게임이 돌려주던 형 그대로 바꾼다(불리언, 수, 배율)
 			value.Number = scale ? It.Number : It.Def->On;
 			value.Whole = scale && It.Def->Off != 0;
 			std::string name, why;

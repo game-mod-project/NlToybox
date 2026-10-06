@@ -91,7 +91,7 @@ namespace NlCore
 
 	bool GoodCourtWho(const std::string& Who)
 	{
-		return Who == "lords" || IsUuid(Who);
+		return Who == "lords" || Who == "bishop" || IsUuid(Who);
 	}
 
 	bool GoodCourtAbout(const std::string& About)
@@ -104,7 +104,13 @@ namespace NlCore
 		Why.clear();
 		if (!GoodCourtWho(Command.Who))
 		{
-			Why = "누구의 평판인지 모르겠습니다 (lords 또는 영주의 uuid)";
+			Why = "누구의 평판인지 모르겠습니다 (lords, bishop 또는 영주의 uuid)";
+			return false;
+		}
+		// 주교에게는 충성 올리기도 충성 대상 지우기도 없다(게임이 주교에게 충성을 따지지 않고, 주교를 따르는 주민을 본 적이 없다).
+		if (Command.Who == "bishop" && (Command.Goal == CourtGoal::Release || Command.OnlyLoyal))
+		{
+			Why = "주교에게는 평판을 올리고 내리고 떼는 일만 합니다 (like, opinion, clear)";
 			return false;
 		}
 		if (Command.Goal == CourtGoal::Release)
@@ -163,9 +169,12 @@ namespace NlCore
 		for (const CourtLord& lord : Lords)
 		{
 			// 충성 올리기는 게임이 충성을 따지는 영주에게만 한다(아이와 왕은 뺀다).
-			if ((Command.Who == "lords" || Command.Who == lord.Uuid) && (!Command.OnlyLoyal || lord.HasLoyalty))
+			// 주교는 "lords"에 들지 않는다(플레이어의 영주가 아니다): "bishop"이나 그 uuid 로만 가리킨다.
+			const bool holds = Command.Who == lord.Uuid || (Command.Who == "lords" && !lord.Bishop) || (Command.Who == "bishop" && lord.Bishop);
+			if (holds && (!Command.OnlyLoyal || lord.HasLoyalty))
 				holders.push_back(lord.Uuid);
-			if (Command.About == "lords" || Command.About == lord.Uuid || (Command.About == "king" && lord.King))
+			// 주교를 대상으로 삼지 않는다(uuid 로 가리켜도): 주교를 보는 평판을 떼는 단추가 창에 없다.
+			if (!lord.Bishop && (Command.About == "lords" || Command.About == lord.Uuid || (Command.About == "king" && lord.King)))
 				abouts.push_back(lord.Uuid);
 		}
 

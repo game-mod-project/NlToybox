@@ -12,7 +12,7 @@
 
 namespace NlCore
 {
-	// 훅 항목(CheatKind::Hook)을 이번 틱에 어떻게 할지.
+	// 훅 항목(CheatKind::Hook, HookNumber, HookScale)을 이번 틱에 어떻게 할지.
 	// On: 체크가 켜져 있다. Applied: 이 항목이 바꾸기를 걸었다. Live: 그 함수의 바꾸기가 지금 켜져 있다.
 	enum class HookStep { None, Apply, Remove };
 

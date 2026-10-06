@@ -446,6 +446,7 @@ namespace NlCore
 			// court <uuid|lords> opinion about=<…> amount=<개수>            디버그 평판을 그 개수만큼 움직인다(-40 ~ 40)
 			// court <uuid|lords> clear about=<…>                            붙여 둔 디버그 평판을 모두 뗀다
 			// court <uuid|lords> release                                    그 영주를 따르는 사람들의 충성 대상을 지운다
+			// court bishop <like|opinion|clear> about=<uuid|lords|king> …   주교가 그 사람을 보는 평판을 같은 길로 움직인다(research/21)
 			if (count >= 2 && tokens[1] == "list")
 			{
 				if (count != 2)
@@ -456,7 +457,7 @@ namespace NlCore
 			CourtCommand court;
 			bool about_king = false;
 			if (count < 3 || !GoodCourtWho(tokens[1]) || !ParseCourtGoal(tokens[2], court.Goal, about_king))
-				return fail("court needs list, or who (lords or the uuid of a lord) and loyal, like, opinion, clear or release");
+				return fail("court needs list, or who (lords, bishop or the uuid of a lord) and loyal, like, opinion, clear or release");
 			command.Target = tokens[1];
 			if (!options(3))
 				return command;

@@ -2,6 +2,7 @@
 // 외교·종교·이벤트·월드에서 한 번 하는 일(src/World.cpp)의 판단 가운데 러너에 기대지 않는 것. 잰 것은 research/14.
 
 #include <string>
+#include <vector>
 
 namespace NlCore
 {
@@ -28,4 +29,11 @@ namespace NlCore
 	// 주교를 부를지. Read: 주교가 있는지(is_has_bishop)를 읽었다. 읽지 못했거나 이미 있으면 부르지 않는다.
 	enum class BishopStep { Call, AlreadyHere, Unknown };
 	BishopStep ChooseBishopStep(bool Read, bool Has);
+
+	// 종교 행동의 비용이 든 게임 변수(global.__gameplay_vars 의 열쇠. research/21): 고해, 이혼, 구걸, 시성(금화, 영지마다), 제물 설교.
+	const std::vector<const char*>& ReligionCostVars();
+	// 기도와 예배가 신앙심을 되돌리는 양이 든 게임 변수: 교회의 기도, 제단의 기도, 아침 예배, 성인과의 대화.
+	const std::vector<const char*>& PietyRestoreVars();
+	// 설교 전환 계수가 든 게임 변수(하나. 이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 수다. 원래 1).
+	const std::vector<const char*>& PreachFactorVars();
 }
