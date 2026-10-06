@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Cheats.hpp"
+#include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
 #include "World.hpp"
@@ -420,6 +421,42 @@ namespace
 		Say("  " + NlWorld::Do(act));
 	}
 
+	// 외교 패널과 같은 일을 한다: 지금 끝까지(NlDiplomacy::Do), 또는 queue=1 이면 단추처럼 쌓기만(NlDiplomacy::Queue). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoDiplomacy(const RemoteCommand& C)
+	{
+		if (C.Target == "list")
+		{
+			for (const std::string& line : NlDiplomacy::List())
+				Say("  " + line);
+			return;
+		}
+		NlCore::DiplomacyCommand command;
+		command.Who = C.Target;
+		const auto goal = C.Options.find("goal");
+		const auto side = C.Options.find("side");
+		if (goal == C.Options.end() || !NlCore::ParseDiplomacyGoal(goal->second, command.Goal)
+			|| (side != C.Options.end() && !NlCore::ParseDiplomacySide(side->second, command.Side)))
+		{
+			Say("  : diplomacy needs who and friends, neutral, hostile, opinion or pact");
+			return;
+		}
+		command.Amount = C.Number;
+		const auto pact = C.Options.find("name");
+		if (command.Goal == NlCore::DiplomacyGoal::Pact && (pact == C.Options.end() || !NlCore::ParseDiplomacyPact(pact->second, command.Pact)))
+		{
+			Say("  : diplomacy pact needs name=<peace|trade|defence>");
+			return;
+		}
+		Say("  running diplomacy " + C.Target + " " + goal->second);		// 죽으면 여기까지 남는다
+		if (C.Options.count("queue") > 0)		// 창의 단추와 같은 길: 쌓기만 하고 틱이 조금씩 한다
+		{
+			Say("  " + NlDiplomacy::Queue(command));
+			return;
+		}
+		for (const std::string& line : NlDiplomacy::Do(command))
+			Say("  " + line);
+	}
+
 	// 인물 패널과 같은 길로 사람을 고친다(NlPeople::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoPerson(const RemoteCommand& C)
 	{
@@ -493,6 +530,8 @@ namespace
 			DoPerson(C);
 		else if (C.Verb == "world")
 			DoWorld(C);
+		else if (C.Verb == "diplomacy")
+			DoDiplomacy(C);
 		else if (C.Verb == "preset")
 		{
 			std::string text;

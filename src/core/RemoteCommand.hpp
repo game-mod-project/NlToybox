@@ -31,6 +31,11 @@
 //   preset <normal|easy|sandbox|god>                치트 표의 확인된 항목의 묶음을 건다(모드창의 프리셋과 같다)
 //   time <pause|resume>                             게임의 시간을 멈춘다, 다시 흐르게 한다
 //   world <cooldowns_clear|bishop>                  이벤트 쿨다운을 0 으로 쓴다, 주교를 부른다(research/14)
+//   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
+//   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 게임의 디버그 평판을 하나씩 붙인다(research/19)
+//   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)
+//   diplomacy <uuid> pact name=<peace|trade|defence>  그 왕국과 협정을 맺는다(게임의 협정 함수. 양쪽에 쓰인다)
+//                                                   queue=1 을 붙이면 창의 단추처럼 쌓기만 한다(틱이 조금씩 한다. 결과와 실패는 diplomacy list 의 끝에 나온다)
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close

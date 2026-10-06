@@ -6,6 +6,7 @@
 #include "Build.hpp"
 #include "Production.hpp"
 #include "Dump.hpp"
+#include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
 #include "World.hpp"
@@ -25,7 +26,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.18.1";
+	constexpr const char* k_Version = "0.20.2";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -147,6 +148,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); });
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
+	NlDiplomacy::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
 	NlProduction::Init([](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });

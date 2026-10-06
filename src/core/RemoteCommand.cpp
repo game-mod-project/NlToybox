@@ -2,6 +2,7 @@
 
 #include "AskPath.hpp"
 #include "CheatTable.hpp"
+#include "DiplomacyPlan.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
 #include "Presets.hpp"
@@ -380,6 +381,61 @@ namespace NlCore
 			if (count != 2 || !ParseWorldAct(tokens[1], act))
 				return fail("world needs cooldowns_clear or bishop");
 			command.Target = tokens[1];
+		}
+		else if (verb == "diplomacy")
+		{
+			// diplomacy list                                                  왕국들과 지금의 관계
+			// diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]  바라는 관계가 될 때까지 평판을 붙인다(core/DiplomacyPlan)
+			// diplomacy <uuid> opinion amount=<개수> [side=them|us|both]       디버그 평판을 그 개수만큼 붙인다(-40 ~ 40)
+			// diplomacy <uuid> pact name=<peace|trade|defence>                 그 왕국과 협정을 맺는다
+			if (count >= 2 && tokens[1] == "list")
+			{
+				if (count != 2)
+					return fail("diplomacy list takes nothing");
+				command.Target = "list";
+				return command;
+			}
+			DiplomacyCommand diplomacy;
+			if (count < 3 || !GoodFactionWho(tokens[1]) || !ParseDiplomacyGoal(tokens[2], diplomacy.Goal))
+				return fail("diplomacy needs list, or who (a faction uuid or all) and friends, neutral, hostile, opinion or pact");
+			command.Target = tokens[1];
+			if (!options(3))
+				return command;
+			// 모르는 열쇠는 받지 않는다(sdie=them 이 조용히 양쪽을 움직이지 않게). queue 는 1 만(창의 단추처럼 쌓는다).
+			for (const auto& [key, value] : command.Options)
+				if (key != "side" && key != "amount" && key != "name" && key != "queue")
+					return fail("diplomacy takes only side=, amount=, name= and queue=1: " + key);
+			const auto queue = command.Options.find("queue");
+			if (queue != command.Options.end() && queue->second != "1")
+				return fail("diplomacy queue= takes only 1");
+			command.Options["goal"] = tokens[2];
+			diplomacy.Who = tokens[1];
+			const auto side = command.Options.find("side");
+			if (side != command.Options.end() && !ParseDiplomacySide(side->second, diplomacy.Side))
+				return fail("diplomacy side= needs them, us or both");
+			const auto amount = command.Options.find("amount");
+			if (diplomacy.Goal == DiplomacyGoal::Pact)
+			{
+				// diplomacy <uuid> pact name=<peace|trade|defence>      협정을 맺는다(양쪽에 쓰인다. side 를 받지 않는다)
+				const auto name = command.Options.find("name");
+				if (name == command.Options.end() || !ParseDiplomacyPact(name->second, diplomacy.Pact))
+					return fail("diplomacy pact needs name=<peace|trade|defence>");
+				if (side != command.Options.end() || amount != command.Options.end())
+					return fail("diplomacy pact takes only name=");
+				if (diplomacy.Who == "all")
+					return fail("diplomacy pact needs one kingdom (a faction uuid)");
+			}
+			else if (diplomacy.Goal == DiplomacyGoal::Opinion)
+			{
+				if (amount == command.Options.end() || !ParseNumber(amount->second, command.Number) || OpinionSteps(command.Number) == 0)
+					return fail("diplomacy opinion needs amount=<how many opinions to attach: a whole number from -40 to 40, not 0>");
+				diplomacy.Amount = command.Number;
+			}
+			else if (amount != command.Options.end())
+				return fail(std::string("diplomacy ") + tokens[2] + " takes no amount");
+			std::string why;
+			if (!CheckDiplomacy(diplomacy, why))
+				return fail("diplomacy all takes only friends or neutral (name one kingdom for hostile and opinion)");
 		}
 		else if (verb == "cheat")
 		{
