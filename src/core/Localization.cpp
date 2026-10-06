@@ -281,7 +281,16 @@ namespace NlCore
 
 	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1)
 	{
-		return !Name.empty() && Property0 == Name && Property1 == TraitCaptionKey(Name);
+		// 1번이 "trait." 뒤에 무엇이든 있는 열쇠다.
+		return !Name.empty() && Property0 == Name && !TraitCaptionRow(Name, true, Property1).empty();
+	}
+
+	std::string TraitCaptionRow(const std::string& Name, bool Asked, const std::string& Property1)
+	{
+		if (!Asked)
+			return Name;
+		const std::string prefix = TraitCaptionKey("");
+		return Property1.size() > prefix.size() && Property1.compare(0, prefix.size(), prefix) == 0 ? Property1.substr(prefix.size()) : std::string();
 	}
 
 	bool TraitBefore(const std::string& NameA, const std::string& CaptionA, const std::string& NameB, const std::string& CaptionB)

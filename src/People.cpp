@@ -282,7 +282,7 @@ namespace
 		else
 		{
 			Log("people call trait_property_get(name, 0 | 1) on " + std::to_string(probes.size()) + " traits (first: " + probes.front()
-				+ "), then (name, 21) on all " + std::to_string(Names.size()));		// 부르기 전에 남긴다
+				+ "), then (name, 1) and (name, 21) on all " + std::to_string(Names.size()));		// 부르기 전에 남긴다
 			for (const std::string& probe : probes)
 			{
 				std::string name, key;
@@ -295,9 +295,20 @@ namespace
 			}
 		}
 
-		size_t keys = 0, found = 0, texts = 0, titles = 0;
+		size_t keys = 0, found = 0, texts = 0, titles = 0, renamed = 0;
 		if (why.empty())
 		{
+			// 화면 이름: 게임이 1번으로 알려 준 열쇠의 줄을 쓴다(대개 "trait.<이름>"이지만 aging 은 "trait.oldman"이었다. 안쪽 특성은 빈 글이다).
+			// 묻지 못한 특성은 위에서 채운 것(그 이름의 줄)을 그대로 둔다. 무엇을 찾을지는 core 의 TraitCaptionRow 가 정한다.
+			for (const std::string& name : Names)
+			{
+				std::string key;
+				const bool asked = TraitProperty(name, NlCore::k_TraitCaptionKeyProperty, key);
+				const std::string row = NlCore::TraitCaptionRow(name, asked, key);
+				const auto caption = row.empty() ? g_TraitCaptions.end() : g_TraitCaptions.find(row);
+				g_TraitTexts[name].Caption = caption != g_TraitCaptions.end() ? caption->second : std::string();
+				renamed += asked && row != name && caption != g_TraitCaptions.end() ? 1 : 0;
+			}
 			// 먼저 열쇠를 모두 모은다: 그 대부분이 힌트 파일에 있어야 21번이 힌트의 열쇠다(양성 대조. core 의 HintKeysPlausible).
 			std::vector<std::string> key_of(Names.size());
 			for (size_t i = 0; i < Names.size(); i++)
@@ -332,8 +343,9 @@ namespace
 		g_TraitHintNote = !why.empty() ? why
 			: "설명 " + std::to_string(texts) + "개 (게임이 알려 준 열쇠 " + std::to_string(keys) + "개 가운데 힌트 파일에 있는 것 " + std::to_string(found)
 				+ "개. 설명의 제목을 명칭으로 쓴 것 " + std::to_string(titles) + "개)";
-		Log("people: trait texts: " + std::to_string(Names.size()) + " traits, " + std::to_string(keys) + " hint keys from the game, " + std::to_string(found)
-			+ " found in the hint files, " + std::to_string(texts) + " descriptions, " + std::to_string(titles) + " captions from hint titles"
+		Log("people: trait texts: " + std::to_string(Names.size()) + " traits, " + std::to_string(renamed) + " captions under another key, " + std::to_string(keys)
+			+ " hint keys from the game, " + std::to_string(found) + " found in the hint files, " + std::to_string(texts) + " descriptions, " + std::to_string(titles)
+			+ " captions from hint titles"
 			+ (why.empty() ? "" : "; no descriptions: " + why));
 	}
 
@@ -1599,55 +1611,44 @@ namespace
 			int shown = 0;
 			if (ImGui::BeginChild("trait_list", ImVec2(0, 280), ImGuiChildFlags_Borders))
 			{
-				if (ImGui::BeginTable("traits", 4, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+				// 한 특성에 두 줄: 단추와 명칭(게임의 이름), 그 아래에 설명. 설명을 표의 칸에 두면 좁은 창에서 한 글자 너비가 된다(0.22.1 의 화면에서 봤다).
+				for (const std::string& name : g_Now.TraitShown)
 				{
-					ImGui::TableSetupColumn("");
-					ImGui::TableSetupColumn("명칭");
-					ImGui::TableSetupColumn("게임의 이름");
-					ImGui::TableSetupColumn("설명", ImGuiTableColumnFlags_WidthStretch);
-					ImGui::TableHeadersRow();
-					for (const std::string& name : g_Now.TraitShown)
+					const std::string& caption = TraitCaption(name);
+					const std::string& about = TraitHint(name);
+					// 이름, 명칭, 설명 어디에든 들어 있으면 맞는다.
+					if (!NlCore::TraitMatches(g_TraitFilter, name, caption) && !NlCore::TraitMatches(g_TraitFilter, "", about))
+						continue;
+					shown++;
+					if (Has(one.Traits, name))
+						ImGui::TextDisabled("있음");
+					else
 					{
-						const std::string& caption = TraitCaption(name);
-						const std::string& about = TraitHint(name);
-						// 이름, 명칭, 설명 어디에든 들어 있으면 맞는다.
-						if (!NlCore::TraitMatches(g_TraitFilter, name, caption) && !NlCore::TraitMatches(g_TraitFilter, "", about))
-							continue;
-						shown++;
-						ImGui::TableNextRow();
-						ImGui::TableNextColumn();
-						if (Has(one.Traits, name))
-							ImGui::TextDisabled("있음");
-						else
-						{
-							ImGui::PushID(name.c_str());
-							ImGui::BeginDisabled(NlCore::IsProtectedTrait(name));		// 종과 죽음의 특성은 붙이지 않는다
-							if (ImGui::SmallButton("붙이기"))
-								Push(PersonAct::TraitAdd, who, -1, 0, name);
-							ImGui::EndDisabled();
-							ImGui::PopID();
-						}
-						ImGui::TableNextColumn();
-						if (TraitTitled(name))
-						{
-							// 이름의 줄이 없는 특성: 설명의 제목을 흐리게 보인다(게임이 화면에 쓰는 이름과 다를 수 있다).
-							ImGui::TextDisabled("%s", caption.c_str());
-							if (ImGui::IsItemHovered())
-								ImGui::SetTooltip("설명의 제목입니다 (게임 파일에 이 특성의 이름 줄이 없습니다)");
-						}
-						else
-							ImGui::TextUnformatted(caption.empty() ? "-" : caption.c_str());
-						ImGui::TableNextColumn();
-						ImGui::TextDisabled("%s", name.c_str());
-						ImGui::TableNextColumn();
-						if (!about.empty())
-						{
-							ImGui::PushTextWrapPos(0.0f);		// 칸의 너비에서 줄을 바꾼다
-							ImGui::TextUnformatted(about.c_str());
-							ImGui::PopTextWrapPos();
-						}
+						ImGui::PushID(name.c_str());
+						ImGui::BeginDisabled(NlCore::IsProtectedTrait(name));		// 종과 죽음의 특성은 붙이지 않는다
+						if (ImGui::SmallButton("붙이기"))
+							Push(PersonAct::TraitAdd, who, -1, 0, name);
+						ImGui::EndDisabled();
+						ImGui::PopID();
 					}
-					ImGui::EndTable();
+					ImGui::SameLine();
+					if (TraitTitled(name))
+					{
+						// 이름의 줄이 없는 특성: 설명의 제목을 흐리게 보인다(게임이 화면에 쓰는 이름과 다를 수 있다).
+						ImGui::TextDisabled("%s", caption.c_str());
+						if (ImGui::IsItemHovered())
+							ImGui::SetTooltip("설명의 제목입니다 (게임 파일에 이 특성의 이름 줄이 없습니다)");
+					}
+					else
+						ImGui::TextUnformatted(caption.empty() ? "-" : caption.c_str());
+					ImGui::SameLine();
+					ImGui::TextDisabled("(%s)", name.c_str());
+					if (!about.empty())
+					{
+						ImGui::Indent();
+						Hint(about);		// 칸의 너비에서 줄을 바꾼다
+						ImGui::Unindent();
+					}
 				}
 				if (!shown)
 					ImGui::TextDisabled("명칭, 게임의 이름, 설명 어디에도 그 글이 든 특성이 없습니다.");

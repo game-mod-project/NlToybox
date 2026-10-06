@@ -35,10 +35,14 @@ namespace NlCore
 	HintText SplitHint(std::string_view Raw);
 
 	// 게임의 속성 함수 gml_Script_trait_property_get(특성의 이름, 번호)가 돌려주는 것(0.5588.9777.0 에서 281개에 불러 봤다. research/20):
-	// 0번은 이름, 1번은 화면 이름의 열쇠("trait.<이름>"), 21번은 힌트(설명)의 열쇠("hint_trait_…", "hint_talent_…", "hint_…". 없으면 빈 글).
+	// 0번은 이름, 1번은 화면 이름의 열쇠("trait.<이름>". 다른 이름인 것도 있고 안쪽 특성은 빈 글이다), 21번은 힌트(설명)의 열쇠("hint_trait_…", "hint_talent_…", "hint_…". 없으면 빈 글).
 	constexpr int k_TraitNameProperty = 0, k_TraitCaptionKeyProperty = 1, k_TraitHintProperty = 21;
-	// 번호의 배치가 잰 것과 같은가: 0번이 그 이름이고 1번이 "trait.<이름>"이다. 아니면 21번을 설명의 열쇠로 믿지 않는다(게임이 갱신되면 번호가 밀릴 수 있다).
+	// 번호의 배치가 잰 것과 같은가: 0번이 그 이름이고 1번이 "trait."로 시작하는 열쇠다(대개 "trait.<이름>"이지만 aging 은 "trait.oldman"이었다).
+	// 아니면 21번을 설명의 열쇠로 믿지 않는다(게임이 갱신되면 번호가 밀릴 수 있다).
 	bool TraitLayoutOk(const std::string& Name, const std::string& Property0, const std::string& Property1);
+	// 화면 이름의 줄을 찾을 열쇠(main.csv 의 "trait." 뒤의 글). Asked: 게임에 1번을 물어 글을 받았다. Property1: 그 답.
+	// 받았으면 그 열쇠의 "trait." 뒤(그렇게 시작하지 않거나 뒤가 비면 빈 글: 이름의 줄이 없다), 못 받았으면 그 이름.
+	std::string TraitCaptionRow(const std::string& Name, bool Asked, const std::string& Property1);
 	// 배치를 확인할 특성들: Names(이름순)에서 화면 이름의 줄이 있는 것(Captions 에 빈 글이 아닌 이름이 있다)을 앞에서부터 Max 개.
 	// 줄이 없는 특성("__…__" 꼴의 안쪽 특성, human …)에는 1번을 재지 않았다(게임의 이름 함수가 그런 이름에 빈 글이나 열쇠 그대로를 돌려줬다). 그런 것으로 확인하지 않는다.
 	std::vector<std::string> TraitLayoutProbes(const std::vector<std::string>& Names, const std::unordered_map<std::string, std::string>& Captions, size_t Max);

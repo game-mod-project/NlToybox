@@ -2573,6 +2573,17 @@ int main(int argc, char** argv)
 		// 게임의 속성 함수(trait_property_get(이름, 번호))의 배치가 잰 것과 같은가: 0번이 이름, 1번이 화면 이름의 열쇠("trait.<이름>").
 		// 아니면(게임이 갱신돼 번호가 밀렸다) 설명의 열쇠(21번)를 믿지 않는다.
 		CHECK(TraitLayoutOk("brave", "brave", "trait.brave"));
+		// 1번(화면 이름의 열쇠)은 "trait.<이름>"이 아닐 수 있다: aging 의 1번은 "trait.oldman"이었다(research/20 의 실행 3). "trait."로 시작하면 배치가 맞는 것으로 본다.
+		CHECK(TraitLayoutOk("aging", "aging", "trait.oldman") && !TraitLayoutOk("aging", "aging", "hint_oldman") && !TraitLayoutOk("aging", "aging", "trait."));
+		// 화면 이름의 줄을 찾을 열쇠(main.csv 의 "trait." 뒤의 글): 게임이 1번으로 알려 준 열쇠를 쓴다. 묻지 못했으면 그 이름으로 찾는다.
+		// 게임이 빈 글을 줬으면(안쪽 특성 "__…__") 이름의 줄이 없는 것이다.
+		CHECK_STR(TraitCaptionRow("aging", true, "trait.oldman"), "oldman");
+		CHECK_STR(TraitCaptionRow("brave", true, "trait.brave"), "brave");
+		CHECK_STR(TraitCaptionRow("__criminal_surrender__", true, ""), "");
+		CHECK_STR(TraitCaptionRow("brave", false, ""), "brave");
+		CHECK_STR(TraitCaptionRow("brave", false, "trait.other"), "brave");
+		CHECK_STR(TraitCaptionRow("brave", true, "something_else"), "");		// "trait."로 시작하지 않는 답은 화면 이름의 열쇠가 아니다
+		CHECK_STR(TraitCaptionRow("brave", true, "trait."), "");
 		CHECK(!TraitLayoutOk("brave", "trait.brave", "brave") && !TraitLayoutOk("brave", "brave", "") && !TraitLayoutOk("brave", "", "trait.brave")
 			&& !TraitLayoutOk("brave", "calm", "trait.calm") && !TraitLayoutOk("", "", "trait."));
 		// 배치를 확인할 특성: 화면 이름의 줄(trait.<이름>)이 있는 이름 가운데서 고른다. 이름순의 앞쪽은 "__…__" 꼴의 안쪽 특성이고

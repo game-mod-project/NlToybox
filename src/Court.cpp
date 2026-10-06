@@ -30,7 +30,7 @@ namespace
 	constexpr double k_StepEvery = 0.02;		// 쌓인 일을 한 묶음씩 하는 간격(초)
 	constexpr int k_StepsPerTick = 6;			// 한 묶음의 걸음 수(한 틱이 길어지지 않게)
 	constexpr size_t k_ShownLines = 8;			// 원격의 답에 적는 결과 줄의 수(실패한 줄이 앞에 온다)
-	constexpr size_t k_PanelLines = 2;			// 창에 바로 보이는 결과 줄의 수(더 두면 영주의 표가 창 아래로 밀린다. 나머지는 접어 둔다)
+	constexpr size_t k_PanelLines = 0;			// 창에 바로 보이는 결과 줄의 수(요약 한 줄만 보인다. 줄을 두면 영주의 표가 창 아래로 밀린다. 줄들은 접어 둔다)
 	constexpr size_t k_PanelMore = 40;			// 펼쳤을 때 더 보이는 줄의 한도
 	const double k_Unread = std::numeric_limits<double>::quiet_NaN();
 
@@ -649,7 +649,7 @@ void NlCourt::Draw()
 		const std::vector<std::string>& lines = g_Tally.Lines();
 		for (size_t i = 0; i < lines.size() && i < k_PanelLines; i++)
 			Hint(lines[i].c_str());
-		if (lines.size() > k_PanelLines && ImGui::CollapsingHeader(("결과 " + std::to_string(lines.size() - k_PanelLines) + "줄 더 (안 된 것이 먼저)###court_more").c_str()))
+		if (lines.size() > k_PanelLines && ImGui::CollapsingHeader(("결과 " + std::to_string(lines.size() - k_PanelLines) + "줄 (안 된 것이 먼저)###court_more").c_str()))
 		{
 			for (size_t i = k_PanelLines; i < lines.size() && i < k_PanelLines + k_PanelMore; i++)
 				Hint(lines[i].c_str());
