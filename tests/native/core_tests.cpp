@@ -26,6 +26,7 @@
 #include "core/Retry.hpp"
 #include "core/RolePlan.hpp"
 #include "core/Schedule.hpp"
+#include "core/SeasonPlan.hpp"
 #include "core/Text.hpp"
 
 #include <algorithm>
@@ -3157,6 +3158,61 @@ int main(int argc, char** argv)
 		}
 		CHECK(titled >= 3000 && bodies >= 2500 && tagged == 0);
 		std::printf("  real files: %zu trait captions, %zu hints (%zu titled, %zu with a body, longest body %zu bytes)\n", captions.size(), hints.size(), titled, bodies, longest);
+	});
+
+	Test("계절: 남은 시간의 글, 미루기와 끝내기에 쓸 시작 시각, 붙들기", [] {
+		// 게임은 지금 단계의 남은 시간을 시작 시각에서 셈한다(research/25: 시작을 86400 뒤로 쓰자 남은 시간이 86400 늘었다).
+		// 잰 값: 지금 537321.83, 시작 374400, 단계의 길이 345600 일 때 게임의 함수가 182678.17 을 돌려줬다.
+		CHECK(std::fabs(PhaseRemain(537321.83, 374400, 345600) - 182678.17) < 0.01);
+
+		// 남은 시간의 글: 날과 시간. 한 시간이 안 되면 그렇게 말하고, 셈할 수 없는 수는 물음표다.
+		CHECK(SpanText(528278.17) == "6일 2시간");
+		CHECK(SpanText(86400) == "1일" && SpanText(90000) == "1일 1시간" && SpanText(7200) == "2시간" && SpanText(3599) == "1시간 미만" && SpanText(0) == "1시간 미만");
+		CHECK(SpanText(-5) == "0" && SpanText(std::numeric_limits<double>::infinity()) == "?" && SpanText(std::nan("")) == "?");
+
+		// 미루기: 시작 시각을 뒤로 민다. 지금보다 뒤의 시각은 쓰지 않는다(지나간 시간이 음수가 되지 않게). 밀 것이 없으면 쓰지 않는다.
+		double out = 0;
+		CHECK(DelaySeasonStart(537321.83, 374400, 86400, out) && out == 460800);
+		CHECK(DelaySeasonStart(537321.83, 500000, 86400, out) && out == 537321.83);		// 지금까지만
+		CHECK(!DelaySeasonStart(537321.83, 537321.83, 86400, out));						// 이미 지금이다
+		CHECK(!DelaySeasonStart(537321.83, 600000, 86400, out));						// 시작이 지금보다 뒤다: 건드리지 않는다
+		CHECK(!DelaySeasonStart(537321.83, 374400, 0, out) && !DelaySeasonStart(537321.83, 374400, -5, out));
+		CHECK(!DelaySeasonStart(std::nan(""), 374400, 86400, out) && !DelaySeasonStart(537321.83, std::nan(""), 86400, out)
+			&& !DelaySeasonStart(537321.83, 374400, std::numeric_limits<double>::infinity(), out));
+
+		// 끝내기: 남은 시간이 Lead 초가 되게 시작 시각을 당긴다. 이미 그만큼밖에 남지 않았으면 쓰지 않는다.
+		CHECK(EndPhaseStart(537321.83, 374400, 345600, 60, out) && std::fabs(PhaseRemain(537321.83, out, 345600) - 60) < 1e-6 && out < 374400);
+		CHECK(!EndPhaseStart(537321.83, 191781.83, 345600, 60, out));					// 남은 시간이 딱 60초
+		CHECK(!EndPhaseStart(537321.83, 100000, 345600, 60, out));						// 이미 지났다
+		CHECK(!EndPhaseStart(537321.83, 374400, 0, 60, out) && !EndPhaseStart(537321.83, 374400, -1, 60, out));		// 길이를 읽지 못했다
+		CHECK(!EndPhaseStart(537321.83, 374400, 345600, -1, out) && !EndPhaseStart(std::nan(""), 374400, 345600, 60, out));
+
+		// 붙들기: 켠 뒤 처음 본 "지나간 시간"을 기억하고, 그 시간이 그대로이게 시작 시각을 따라 민다.
+		SeasonHold hold;
+		CHECK(!StepSeasonHold(hold, true, 1000, 400, 0, out) && hold.Has && hold.Elapsed == 600);		// 처음 본 틱에는 쓰지 않는다
+		CHECK(!StepSeasonHold(hold, true, 1000.4, 400, 0, out));										// 1초가 안 되는 차이는 쓰지 않는다
+		CHECK(StepSeasonHold(hold, true, 1060, 400, 0, out) && out == 460);							// 60초가 흘렀다: 시작을 60 뒤로
+		CHECK(!StepSeasonHold(hold, true, 1060, 460, 0, out));											// 쓴 뒤에는 쓸 것이 없다
+		// 단계가 바뀌었거나(게임이 넘겼다, 또는 '끝내기'를 눌렀다) 시각이 거꾸로 갔으면(다른 세이브) 다시 기억한다.
+		CHECK(!StepSeasonHold(hold, true, 1100, 1090, 1, out) && hold.Elapsed == 10 && hold.Phase == 1);
+		CHECK(!StepSeasonHold(hold, true, 500, 100, 1, out) && hold.Elapsed == 400);
+		// 시작 시각이 지금보다 뒤로 읽히면 지나간 시간을 0 으로 본다.
+		SeasonHold odd;
+		CHECK(!StepSeasonHold(odd, true, 100, 300, 0, out) && odd.Elapsed == 0);
+		CHECK(StepSeasonHold(odd, true, 100, 300, 0, out) && out == 100);
+		// 끄면 잊는다. 꺼진 동안에는 쓰지 않는다. 읽지 못한 수로는 아무것도 하지 않는다.
+		CHECK(!StepSeasonHold(hold, false, 2000, 100, 1, out) && !hold.Has);
+		CHECK(!StepSeasonHold(hold, true, std::nan(""), 100, 1, out) && !hold.Has);
+		// 밖에서 시작 시각을 바꿨으면(미루기) 잊게 한다: 다음 틱에 새 값을 기억한다.
+		SeasonHold moved;
+		StepSeasonHold(moved, true, 1000, 400, 0, out);
+		ForgetSeasonHold(moved);
+		CHECK(!StepSeasonHold(moved, true, 1000, 900, 0, out) && moved.Elapsed == 100);
+
+		// 상태의 글: 가혹한 계절이 아닐 때는 올 때까지, 가혹한 계절일 때는 끝날 때까지. 이름이 없으면 이름 없이.
+		CHECK(SeasonLine(false, "가뭄", 528278.17, 873878.17) == "가혹한 계절(가뭄)까지 6일 2시간");
+		CHECK(SeasonLine(true, "가뭄", 0, 100000) == "가혹한 계절(가뭄) 중입니다. 끝나기까지 1일 3시간");
+		CHECK(SeasonLine(false, "", 7200, 0) == "가혹한 계절까지 2시간");
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {
