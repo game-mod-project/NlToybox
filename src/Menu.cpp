@@ -4,6 +4,7 @@
 #include "Build.hpp"
 #include "Production.hpp"
 #include "Cheats.hpp"
+#include "Court.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -165,6 +166,7 @@ void NlMenu::GameTick()
 	NlProduction::GameTick(now);
 	NlWorld::GameTick();
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
+	NlCourt::GameTick(now, visible && page == Area::Lord);
 	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
 	if (visible && now >= g_NextState)
 	{
@@ -243,6 +245,7 @@ void NlMenu::Draw()
 	case Area::Lord:
 		NlPeople::DrawLords();
 		NlTweaks::DrawArea(page);
+		NlCourt::Draw();		// 영주끼리의 평판과 왕에 대한 충성(src/Court.cpp)
 		break;
 	case Area::Knowledge:
 		// 표의 항목(연구 시간)과 배율(교본 경험)을 먼저, 그 아래에 지식을 주는 패널.

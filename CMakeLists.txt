@@ -51,6 +51,7 @@ add_library(nltoybox SHARED
   src/Build.cpp
   src/Production.cpp
   src/Cheats.cpp
+  src/Court.cpp
   src/Dump.cpp
   src/Economy.cpp
   src/Explorer.cpp

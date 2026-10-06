@@ -7,6 +7,7 @@
 #include "core/AskPath.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/Localization.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -14,8 +15,11 @@
 #include <algorithm>
 #include <cmath>
 #include <deque>
+#include <fstream>
+#include <iterator>
 #include <map>
 #include <mutex>
+#include <unordered_map>
 
 using namespace YYTK;
 using NlAccess::Holder;
@@ -89,6 +93,10 @@ namespace
 	int g_AgeInput = 0;
 	std::string g_AgeInputFor;			// 입력 칸을 누구의 나이로 채웠는가
 	char g_TraitFilter[48] = "";
+	bool g_TraitListOpen = false;		// 창의 선택: 전체 특성 목록을 펼쳐 둔다
+	// 특성의 화면 이름(게임의 이름 -> 한국어 이름). 시작할 때 게임의 localization\main.csv 에서 읽는다(열쇠 "trait.<이름>", Korean 칸. 비면 English 칸).
+	std::unordered_map<std::string, std::string> g_TraitCaptions;
+	std::string g_TraitTextNote = "특성의 이름을 아직 읽지 않았습니다";		// 어디서 몇 개를 읽었는가, 또는 못 읽은 까닭
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
@@ -136,6 +144,46 @@ namespace
 	{
 		if (g_Log)
 			g_Log(Line);
+	}
+
+	// 특성의 화면 이름. 없으면 빈 글.
+	const std::string& TraitCaption(const std::string& Name)
+	{
+		static const std::string none;
+		const auto found = g_TraitCaptions.find(Name);
+		return found != g_TraitCaptions.end() ? found->second : none;
+	}
+
+	// 창과 답에 적을 글: "화면 이름 (게임의 이름)". 화면 이름이 없으면 게임의 이름만.
+	std::string TraitLabel(const std::string& Name)
+	{
+		const std::string& caption = TraitCaption(Name);
+		return caption.empty() ? Name : caption + " (" + Name + ")";
+	}
+
+	// 게임의 현지화 파일에서 특성의 화면 이름을 읽는다. 러너를 부르지 않는다(파일만 읽는다).
+	void LoadTraitTexts(const std::filesystem::path& GameDir)
+	{
+		const std::filesystem::path file = GameDir / "localization" / "main.csv";
+		std::ifstream in(file, std::ios::binary);
+		if (!in)
+		{
+			g_TraitTextNote = "게임의 localization\\main.csv 를 열지 못했습니다";
+			return;
+		}
+		const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		std::unordered_map<std::string, std::string> rows;
+		std::string why;
+		const std::string prefix = NlCore::TraitCaptionKey("");
+		if (!NlCore::ReadLocalization(text, prefix, { "Korean", "English" }, rows, why))
+		{
+			g_TraitTextNote = "게임의 localization\\main.csv 를 읽지 못했습니다 (" + why + ")";
+			return;
+		}
+		g_TraitCaptions.clear();
+		for (auto& [key, value] : rows)
+			g_TraitCaptions.emplace(key.substr(prefix.size()), std::move(value));
+		g_TraitTextNote = "게임의 localization\\main.csv 에서 특성의 이름 " + std::to_string(g_TraitCaptions.size()) + "개를 읽었습니다";
 	}
 
 	// ---- 게임 스레드 ----
@@ -1369,33 +1417,58 @@ namespace
 			ImGui::EndDisabled();
 			ImGui::PopID();
 			ImGui::SameLine();
-			ImGui::TextUnformatted(one.Traits[i].c_str());
+			ImGui::TextUnformatted(TraitLabel(one.Traits[i]).c_str());
 		}
-		ImGui::SetNextItemWidth(160);
-		ImGui::InputText("이름의 일부로 찾아 붙이기", g_TraitFilter, sizeof(g_TraitFilter));
-		if (g_TraitFilter[0])
+		ImGui::SetNextItemWidth(180);
+		ImGui::InputText("찾기 (한글 이름이나 게임의 이름)", g_TraitFilter, sizeof(g_TraitFilter));
+		ImGui::SameLine();
+		ImGui::Checkbox("전체 특성 목록", &g_TraitListOpen);
+		if (g_TraitFilter[0] || g_TraitListOpen)
 		{
+			// 게임의 특성 전부(찾는 글이 있으면 맞는 것만). 표가 길어 스크롤되는 칸 안에 둔다.
 			int shown = 0;
-			for (const std::string& name : g_Now.TraitNames)
+			if (ImGui::BeginChild("trait_list", ImVec2(0, 280), ImGuiChildFlags_Borders))
 			{
-				if (name.find(g_TraitFilter) == std::string::npos || Has(one.Traits, name) || NlCore::IsProtectedTrait(name))
-					continue;
-				if (shown++ >= 12)
+				if (ImGui::BeginTable("traits", 3, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
 				{
-					ImGui::TextDisabled("더 있습니다. 이름을 더 적어 주세요.");
-					break;
+					ImGui::TableSetupColumn("");
+					ImGui::TableSetupColumn("명칭");
+					ImGui::TableSetupColumn("게임의 이름");
+					ImGui::TableHeadersRow();
+					for (const std::string& name : g_Now.TraitNames)
+					{
+						const std::string& caption = TraitCaption(name);
+						if (!NlCore::TraitMatches(g_TraitFilter, name, caption))
+							continue;
+						shown++;
+						ImGui::TableNextRow();
+						ImGui::TableNextColumn();
+						if (Has(one.Traits, name))
+							ImGui::TextDisabled("있음");
+						else
+						{
+							ImGui::PushID(name.c_str());
+							ImGui::BeginDisabled(NlCore::IsProtectedTrait(name));		// 종과 죽음의 특성은 붙이지 않는다
+							if (ImGui::SmallButton("붙이기"))
+								Push(PersonAct::TraitAdd, who, -1, 0, name);
+							ImGui::EndDisabled();
+							ImGui::PopID();
+						}
+						ImGui::TableNextColumn();
+						ImGui::TextUnformatted(caption.empty() ? "-" : caption.c_str());
+						ImGui::TableNextColumn();
+						ImGui::TextDisabled("%s", name.c_str());
+					}
+					ImGui::EndTable();
 				}
-				ImGui::PushID(name.c_str());
-				if (ImGui::SmallButton("붙이기"))
-					Push(PersonAct::TraitAdd, who, -1, 0, name);
-				ImGui::PopID();
-				ImGui::SameLine();
-				ImGui::TextUnformatted(name.c_str());
+				if (!shown)
+					ImGui::TextDisabled("그런 이름의 특성이 없습니다.");
 			}
-			if (!shown)
-				ImGui::TextDisabled("그런 이름의 특성이 없습니다(게임의 영문 이름입니다. 예: brave, gifted).");
+			ImGui::EndChild();
+			ImGui::TextDisabled("%d개 (게임의 특성 %d개)", shown, static_cast<int>(g_Now.TraitNames.size()));
 		}
-		Hint("특성은 게임의 이름 그대로입니다. 종과 죽음의 특성(human, dead 같은 것)은 붙이거나 뗄 수 없습니다.");
+		Hint(("명칭은 게임의 한국어 이름입니다(" + g_TraitTextNote + "). 명칭이 없는 특성은 게임의 이름만 보입니다. "
+			"종과 죽음의 특성(human, dead 같은 것)은 붙이거나 뗄 수 없습니다.").c_str());
 	}
 
 	size_t CountPlayers(bool Characters)
@@ -1407,10 +1480,12 @@ namespace
 	}
 }
 
-void NlPeople::Init(LogFn Log_)
+void NlPeople::Init(LogFn Log_, const std::filesystem::path& GameDir)
 {
 	std::lock_guard lock(g_Mutex);
 	g_Log = std::move(Log_);
+	LoadTraitTexts(GameDir);
+	Log("people: " + g_TraitTextNote);
 }
 
 void NlPeople::GameTick(double Now, bool Active)
@@ -1792,9 +1867,52 @@ std::vector<std::string> NlPeople::Show(const std::string& Uuid)
 	for (size_t i = 0; i < one.Needs.size(); i++)
 		needs += " " + std::to_string(i) + "=" + NumberText(one.Needs[i], 1);
 	for (const std::string& trait : one.Traits)
-		traits += " " + trait;
+		traits += " " + trait + (TraitCaption(trait).empty() ? "" : "(" + TraitCaption(trait) + ")");
 	lines.push_back(skills);
 	lines.push_back(needs);
 	lines.push_back(traits);
 	return lines;
+}
+
+std::vector<std::string> NlPeople::Traits(const std::string& Find, size_t Max)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const Busy busy;
+	if (!Scan())
+		return { g_Now.Why };
+	std::vector<std::string> lines;
+	size_t matched = 0, captioned = 0;
+	for (const std::string& name : g_Now.TraitNames)
+	{
+		const std::string& caption = TraitCaption(name);
+		if (!caption.empty())
+			captioned++;
+		if (!NlCore::TraitMatches(Find, name, caption))
+			continue;
+		if (matched++ < Max)
+			lines.push_back(name + "  " + (caption.empty() ? "-" : caption));
+	}
+	lines.push_back("(" + std::to_string(lines.size()) + " of " + std::to_string(matched) + " matching; the game has " + std::to_string(g_Now.TraitNames.size())
+		+ " traits, " + std::to_string(captioned) + " with a caption; " + g_TraitTextNote + ")");
+	return lines;
+}
+
+bool NlPeople::Rows(std::vector<NlCore::PersonRow>& Out, std::string& Why)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+	{
+		Why = "busy";
+		return false;
+	}
+	const Busy busy;
+	if (!Scan())
+	{
+		Why = g_Now.Why;
+		return false;
+	}
+	Out = g_Now.People;
+	return true;
 }

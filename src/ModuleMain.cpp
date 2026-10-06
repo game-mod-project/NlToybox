@@ -6,6 +6,7 @@
 #include "Build.hpp"
 #include "Production.hpp"
 #include "Dump.hpp"
+#include "Court.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
@@ -26,7 +27,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.20.4";
+	constexpr const char* k_Version = "0.21.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -146,7 +147,9 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlTweaks::Init(module_dir, [](const std::string& Line) { LogLine(Line); }, NlUi::TestSets());
 	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
-	NlPeople::Init([](const std::string& Line) { LogLine(Line); });
+	// 게임 폴더: 모듈은 <게임>\mods\Aurie 에 있다. 인물 패널이 게임의 현지화 파일(localization\main.csv)에서 특성의 이름을 읽는다.
+	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
+	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
 	NlDiplomacy::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
