@@ -434,6 +434,12 @@ int main(int argc, char** argv)
 		CHECK(!IsUuid("all"));
 	});
 
+	Test("QueueFullText 는 창의 명령 큐가 가득 찼을 때 결과 줄에 적을 글이다", [] {
+		// 범죄·월드의 큐가 넘치면 아무 말 없이 버렸다(2026-10-07 리뷰 R3). 넘친 것을 사용자가 알게 한다.
+		CHECK_STR(QueueFullText(8), "쌓인 명령이 8개를 넘어 받지 않았습니다. 잠시 뒤에 다시 누르세요");
+		CHECK_STR(QueueFullText(4), "쌓인 명령이 4개를 넘어 받지 않았습니다. 잠시 뒤에 다시 누르세요");
+	});
+
 	Test("ScopedFlag 는 사는 동안 깃발을 세우고 죽으면 내린다", [] {
 		// 재진입 가드: 틱이 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다(패널 다섯이 같은 구조체를 따로 두고 있었다).
 		bool busy = false;

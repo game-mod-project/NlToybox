@@ -6,6 +6,7 @@
 #include "People.hpp"
 #include "core/AskPath.hpp"
 #include "core/Guard.hpp"
+#include "core/Text.hpp"
 #include "core/PeoplePlan.hpp"
 
 #include <imgui.h>
@@ -393,10 +394,16 @@ namespace
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
+	constexpr size_t k_MaxQueue = 8;		// 창이 쌓아 둘 명령의 수. 넘치면 받지 않고 결과 줄에 적는다(조용히 버리지 않는다. 2026-10-07 리뷰 R3)
+
 	void Push(CrimeAct Act, const std::string& Who)
 	{
-		if (g_Queue.size() < 8)
-			g_Queue.push_back(CrimeCommand{ Act, Who });
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			(IsLordAct(Act) ? g_LastLords : g_LastCrime) = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
+		g_Queue.push_back(CrimeCommand{ Act, Who });
 	}
 }
 

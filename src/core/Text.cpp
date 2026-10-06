@@ -41,6 +41,11 @@ namespace NlCore
 		return Text.size() == 16 && std::all_of(Text.begin(), Text.end(), [](unsigned char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 	}
 
+	std::string QueueFullText(size_t Max)
+	{
+		return "쌓인 명령이 " + std::to_string(Max) + "개를 넘어 받지 않았습니다. 잠시 뒤에 다시 누르세요";
+	}
+
 	std::string Trim(const std::string& Text)
 	{
 		const size_t begin = Text.find_first_not_of(" \t\r\n");

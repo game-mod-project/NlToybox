@@ -433,10 +433,16 @@ namespace
 			NlUi::Hint(g_Last.c_str());
 	}
 
+	constexpr size_t k_MaxQueue = 4;		// 창이 쌓아 둘 청의 수. 넘치면 받지 않고 결과 줄에 적는다(조용히 버리지 않는다. 2026-10-07 리뷰 R3)
+
 	void Push(WorldAct Act)
 	{
-		if (g_Queue.size() < 4)
-			g_Queue.push_back(Act);
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			(IsSeasonAct(Act) ? g_SeasonLast : g_Last) = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
+		g_Queue.push_back(Act);
 	}
 }
 

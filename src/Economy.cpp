@@ -396,8 +396,15 @@ namespace
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
 
+	constexpr size_t k_MaxQueue = 16;		// 창이 쌓아 둘 명령의 수(한도가 없었다. 2026-10-07 리뷰 R3). 넘치면 받지 않고 결과 줄에 적는다
+
 	void Push(EconomyAct Act, int Resource, double Amount)
 	{
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			g_Now.Last = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
 		g_Queue.push_back({ Act, Resource, Amount });
 	}
 
