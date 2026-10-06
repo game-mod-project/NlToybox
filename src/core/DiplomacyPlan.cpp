@@ -279,14 +279,42 @@ namespace NlCore
 		const std::string count = std::string(Steps > 0 ? "좋은" : "나쁜") + " 평판 " + std::to_string(Steps > 0 ? Steps : -Steps) + "개를 ";
 		if (!Stopped)
 			return who + count + "붙였습니다 (" + relation + ")";
-		return who + (Steps == 0 ? std::string("더 붙지 않았습니다") : count + "붙였고 그 뒤로는 더 붙지 않았습니다") + " (같은 평판은 50개까지만 겹칩니다. " + relation + ")";
+		// 본 것(더 붙지 않았다)을 적고, 한도는 그 까닭으로 적는다.
+		return who + (Steps == 0 ? std::string("더 붙지 않았습니다") : count + "붙였고 그 뒤로는 더 붙지 않았습니다") + " (같은 평판의 겹침 한도 "
+			+ std::to_string(k_OpinionStackLimit) + "개로 보입니다. " + relation + ")";
 	}
 
 	char AttachCheck(double Before, double After)
 	{
 		if (!std::isfinite(Before) || !std::isfinite(After) || Before < 0 || After < 0)
 			return 'u';
-		return After > Before ? 'y' : 'n';
+		return After == Before + 1 ? 'y' : After == Before ? 'n' : 'u';
+	}
+
+	char AfterAttach(char Check, bool Seen)
+	{
+		if (Check == 'y')
+			return 'c';
+		return Check == 'n' && Seen ? 's' : 't';
+	}
+
+	std::string UnsureNote()
+	{
+		return " (붙었는지는 게임의 함수가 돌려준 값으로만 봤습니다)";
+	}
+
+	bool PactUnknown(double Cell)
+	{
+		if (Cell < 0)
+			return false;			// 칸이 없다
+		const int cell = WholeCell(Cell);
+		if (cell < 0)
+			return true;			// 정수로 읽히지 않는다
+		int known = 0;
+		for (const auto& pact : k_Pacts)
+			if ((cell & pact.Bits) == pact.Bits)
+				known |= pact.Bits;
+		return (cell & ~known) != 0;
 	}
 
 	bool GoodFactionWho(const std::string& Who)
@@ -399,7 +427,8 @@ namespace NlCore
 		case 'l':
 			return who + change + ". 한도까지 붙였지만 바라는 관계가 되지 않았습니다";
 		case 's':
-			return who + change + ". 같은 평판은 50개까지만 겹쳐 더 붙지 않습니다. 바라는 관계가 되지 않았습니다";
+			return who + change + ". 그 뒤로는 더 붙지 않았습니다 (같은 평판의 겹침 한도 " + std::to_string(k_OpinionStackLimit)
+				+ "개로 보입니다). 바라는 관계가 되지 않았습니다";
 		default:
 			return who + change + ". 실패: " + (Why.empty() ? "모릅니다" : Why);
 		}
