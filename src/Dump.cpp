@@ -356,8 +356,11 @@ namespace
 			}
 
 			RValue result;
-			const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, call.Name, global, global, args);
+			std::string why;
+			const AurieStatus status = NlGame::CallScriptStatus(call.Name, args, result, why);		// 정식 이름으로만, 스크립트의 번호 범위만(Game.cpp)
 			out << ",\"status\":" << Quote(AurieStatusToString(status));
+			if (!AurieSuccess(status))
+				out << ",\"why\":" << Quote(why);
 			if (AurieSuccess(status))
 				out << ",\"result\":{" << NlGame::Describe(result) << "}";
 			out << "}";

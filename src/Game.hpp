@@ -32,6 +32,17 @@ namespace NlGame
 	// 인자의 수와 형은 부르는 쪽이 책임진다: 틀리면 게임이 GML 오류로 끝난다. 없는 스크립트면 거짓.
 	bool CallScript(const std::string& Name, const std::vector<YYTK::RValue>& Args, YYTK::RValue& Result);
 
+	// 스크립트의 번호 범위: 100000 미만은 빌트인, 500000 이상은 확장 함수다(YYToolkit MI_Public.cpp 55~66행). 그 사이만 게임 스크립트다.
+	constexpr int k_ScriptIndexMin = 100000, k_ScriptIndexMax = 500000;
+
+	// 게임 스크립트를 찾는다: 이름을 정식 이름으로 고치고(core 의 ScriptRoutineName) 번호가 스크립트의 범위인지 본다. 아니면 거짓이고 Why 에 까닭.
+	// 접두 없는 이름에도 러너가 스크립트 범위의 번호를 주지만 그것은 다른 루틴이다(research/07). 그래서 정식 이름으로만 찾는다.
+	// 원격 call·덤프·기록기가 같은 것을 따로 두고 있었다(2026-10-07 리뷰 R2).
+	bool FindScript(const std::string& Given, std::string& Name, int& Index, std::string& Why);
+
+	// CallScript 와 같되 러너의 상태를 돌려준다(오류의 이름을 적는 쪽: 원격 call, 덤프). 실패하면 Why 에 까닭. 없는 스크립트면 AURIE_OBJECT_NOT_FOUND.
+	Aurie::AurieStatus CallScriptStatus(const std::string& Name, const std::vector<YYTK::RValue>& Args, YYTK::RValue& Result, std::string& Why);
+
 	// 수(불리언 포함)인가. 문자열·구조체·배열·undefined 는 아니다.
 	bool IsNumber(const YYTK::RValue& Value);
 

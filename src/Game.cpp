@@ -37,15 +37,40 @@ bool NlGame::Call(const char* Name, const std::vector<RValue>& Args, RValue& Res
 	return global && AurieSuccess(g_Yytk->CallBuiltinEx(Result, Name, global, global, Args));
 }
 
+bool NlGame::FindScript(const std::string& Given, std::string& Name, int& Index, std::string& Why)
+{
+	Name = NlCore::ScriptRoutineName(Given);
+	Index = -1;
+	if (Name.empty() || !AurieSuccess(g_Yytk->GetNamedRoutineIndex(Name.c_str(), &Index)) || Index < k_ScriptIndexMin || Index >= k_ScriptIndexMax)
+	{
+		Why = "no such script: " + Given;
+		return false;
+	}
+	return true;
+}
+
+AurieStatus NlGame::CallScriptStatus(const std::string& Given, const std::vector<RValue>& Args, RValue& Result, std::string& Why)
+{
+	std::string name;
+	int index = -1;
+	if (!FindScript(Given, name, index, Why))
+		return AURIE_OBJECT_NOT_FOUND;
+	CInstance* global = Global();
+	if (!global)
+	{
+		Why = "no global instance";
+		return AURIE_OBJECT_NOT_FOUND;
+	}
+	const AurieStatus status = g_Yytk->CallGameScriptEx(Result, name, global, global, Args);
+	if (!AurieSuccess(status))
+		Why = AurieStatusToString(status);
+	return status;
+}
+
 bool NlGame::CallScript(const std::string& Name, const std::vector<RValue>& Args, RValue& Result)
 {
-	// 번호가 100000 미만이면 빌트인, 500000 이상이면 확장 함수다(YYToolkit MI_Public.cpp 55~66행).
-	const std::string name = NlCore::ScriptRoutineName(Name);
-	CInstance* global = Global();
-	int index = -1;
-	if (!global || name.empty() || !AurieSuccess(g_Yytk->GetNamedRoutineIndex(name.c_str(), &index)) || index < 100000 || index >= 500000)
-		return false;
-	return AurieSuccess(g_Yytk->CallGameScriptEx(Result, name, global, global, Args));
+	std::string why;
+	return AurieSuccess(CallScriptStatus(Name, Args, Result, why));
 }
 
 bool NlGame::IsNumber(const RValue& Value)

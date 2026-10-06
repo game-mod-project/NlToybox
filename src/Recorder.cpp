@@ -243,29 +243,21 @@ namespace
 
 	constexpr std::array<PFUNC_YYGMLScript, k_Slots> k_Detours = MakeDetours(std::make_integer_sequence<int, k_Slots>{});
 
-	// 스크립트의 함수를 이름으로 찾는다. "gml_Script_x" 이름으로만 찾는다: 접두 없는 이름에도 러너가 스크립트 범위의 번호를 주지만
-	// 그것은 다른 루틴이다(research/07. 그 이름으로 부른 호출이 이 함수에 걸린 훅에 오지 않았다).
-	// 번호가 100000 미만이면 빌트인, 500000 이상이면 확장 함수다(YYToolkit MI_Public.cpp 55~66행). 스크립트만 받는다.
+	// 스크립트의 함수를 이름으로 찾는다. "gml_Script_x" 이름으로만 찾는다(NlGame::FindScript. 그 이름으로 부른 호출이 이 함수에 걸린 훅에 오지 않았다. research/07).
+	// 스크립트의 자료는 번호에서 스크립트 범위의 시작을 뺀 자리에 있다.
 	bool FindScript(const std::string& Given, std::string& Name, PFUNC_YYGMLScript& Fn, std::string& Why)
 	{
-		const std::string name = NlCore::ScriptRoutineName(Given);
 		int index = -1;
-		if (!name.empty())
-			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-		if (index < 100000 || index >= 500000)
-		{
-			Why = "no such script: " + Given;
+		if (!NlGame::FindScript(Given, Name, index, Why))
 			return false;
-		}
 
 		CScript* script = nullptr;
-		if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - 100000, script)) || !script || !script->m_Functions
+		if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - NlGame::k_ScriptIndexMin, script)) || !script || !script->m_Functions
 			|| !script->m_Functions->m_ScriptFunction)
 		{
-			Why = "the script has no function: " + name;
+			Why = "the script has no function: " + Name;
 			return false;
 		}
-		Name = name;
 		Fn = script->m_Functions->m_ScriptFunction;
 		return true;
 	}
