@@ -63,6 +63,12 @@ namespace
 		return it->second == "map" ? Holder::Map : it->second == "list" ? Holder::List : Holder::None;
 	}
 
+	// 구조체면 그 주소를 적는다(" @1a2b"). 기록의 표본이 같은 꼴로 적는다: 인자로 온 구조체가 이 주소의 것인지 견준다.
+	std::string StructAddress(const RValue& Value)
+	{
+		return Value.IsStruct() ? " " + NlCore::PointerText(reinterpret_cast<std::uintptr_t>(Value.m_Object)) : std::string();
+	}
+
 	void DoAsk(const RemoteCommand& C)
 	{
 		RValue value;		// 이 함수 안에서만 든다
@@ -73,7 +79,7 @@ namespace
 			return;
 		}
 		const NlAccess::Row row = NlAccess::Describe({}, value);
-		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		Say("  = " + row.Type + (row.Text.empty() ? "" : " " + row.Text) + StructAddress(value));
 	}
 
 	void DoList(const RemoteCommand& C)
@@ -206,7 +212,7 @@ namespace
 	void SayResult(const RValue& Result)
 	{
 		const NlAccess::Row row = NlAccess::Describe({}, Result);
-		Say("  -> " + row.Type + (row.Text.empty() ? "" : " " + row.Text));
+		Say("  -> " + row.Type + (row.Text.empty() ? "" : " " + row.Text) + StructAddress(Result));
 	}
 
 	// 게임 스크립트를 부른다. 인자의 수와 형은 기록으로 확인한 것만 쓴다(부르는 쪽의 책임이다).

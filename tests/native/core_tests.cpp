@@ -351,6 +351,10 @@ int main(int argc, char** argv)
 	});
 
 	Test("Shortest 는 다시 읽으면 같은 수가 되는 가장 짧은 글을 쓴다", [] {
+		// 구조체의 주소를 적는 글: 기록의 표본과 ask 의 답에서 "어느 구조체인가"를 견주는 데 쓴다(research/20).
+		CHECK_STR(PointerText(0), "@0");
+		CHECK_STR(PointerText(0x1a2b3c), "@1a2b3c");
+		CHECK_STR(PointerText(0x7ff6ab00cdef), "@7ff6ab00cdef");
 		CHECK_STR(Shortest(0.83), "0.83");
 		CHECK_STR(Shortest(3), "3");
 		CHECK_STR(Shortest(-4), "-4");
