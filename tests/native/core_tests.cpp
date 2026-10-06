@@ -1092,6 +1092,20 @@ int main(int argc, char** argv)
 		CHECK(KnobArea("no_such_knob") == Area::Explorer);		// 모르는 이름: 어느 영역의 패널에도 그리지 않는다(탐색기에는 배율이 없다)
 	});
 
+	Test("배율 7개의 정의(KnobDefs)는 그리는 자리(KnobPlaces)와 같은 Id 집합이다", [] {
+		// Tweaks 가 쓰는 정의의 표와 CheatTable 의 자리의 표가 따로 있어, 한쪽에 빠뜨리면 창에 나오지 않거나 그려지지 않았다(2026-10-07 리뷰 R19).
+		std::set<std::string> defs, places;
+		for (const KnobDef& def : KnobDefs())
+		{
+			CHECK(def.Id && *def.Id && def.Label && *def.Label);
+			CHECK(defs.insert(def.Id).second);		// Id 가 겹치지 않는다
+			CHECK((def.What == KnobTarget::GameplayVar) == (def.Var != nullptr && *def.Var));		// 게임 변수의 배율만 멤버 이름을 가진다
+		}
+		for (const KnobPlace& place : KnobPlaces())
+			places.insert(place.Id);
+		CHECK(defs.size() == 7 && defs == places);
+	});
+
 	Test("치트 표: 모르는 Id 와 종류가 다른 Id 를 버리고 수를 범위 안으로 당긴다", [] {
 		CheatState state;
 		state.On = { "instant_build", "rest_decrease", "nope" };			// rest_decrease 는 Number 다
