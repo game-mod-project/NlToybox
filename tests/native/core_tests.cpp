@@ -769,6 +769,11 @@ int main(int argc, char** argv)
 		CHECK(Cheats().size() == 57);
 		// 최소값 유지(research/18): 경제 패널의 코드가 한다(Custom). 켜고 끄는 것만 표에 있고 바닥은 상태 파일의 floor 줄에 있다.
 		CHECK(FindCheat("resource_floor") && FindCheat("resource_floor")->Kind == CheatKind::Custom && FindCheat("resource_floor")->Where == Area::Economy);
+		// 플레이에서 확인했다(research/18): 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다.
+		CheatState floor_on;
+		floor_on.On = { "resource_floor" };
+		floor_on.Floors = { { "wood", 100 } };
+		CHECK(FindCheat("resource_floor")->Verified && KeepKnown(floor_on).On.count("resource_floor") == 1 && KeepKnown(floor_on).Floors.size() == 1);
 		// 전투(research/16): 영혼의 두 함수에 아군과 적의 배율을 따로 건다(모듈의 코드가 한다: CustomScale). 실제 싸움에서 확인하기 전이다.
 		for (const char* id : { "ally_power", "enemy_power", "ally_toughness", "enemy_toughness" })
 			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::CustomScale && FindCheat(id)->Where == Area::Army && !FindCheat(id)->Verified);

@@ -102,7 +102,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 표의 항목이 없어도 제 패널이 있는 영역은 `AreaInfo::Panel`을 참으로 둔다. 아니면 왼쪽 목록에서 꺼진다(경제가 그랬다. `research/08`).
 - 경제 패널(`src/Economy.cpp`)은 금화와 영지 창고의 자원을 게임의 함수로 바꾼다(`research/07`, `08`. 화면까지 확인했다).
   - 금화: `gml_Script_budget_money_change(변화량)`. 자원: `…__province.__warehouse.change(자원 번호, 변화량)`(정적 메서드. `NlAccess::CallMethod`가 창고에 묶어 부른다).
-  - 넘기는 변화량은 언제나 유한한 정수다(`NlCore::PlanEconomy`). 갈래에 없는 자원(0번)은 건드리지 않는다. 부르기 전에 호출마다 로그를 남긴다.
+  - 넘기는 변화량은 언제나 유한한 정수다(`NlCore::PlanEconomy`). 부르기 전에 호출마다 로그를 남긴다.
+  - **신성 반지는 자원 0번(`rune`)이고 영지 창고의 그 칸에 있다**(`research/18`. 창고의 `change(0, 변화량)`으로 화면의 반지 수가 따라온다). 어느 갈래에도 들지 않으므로
+    하나씩 하는 명령(더하기, 맞추기, 최소값)만 반지를 받고 "모든 자원 +N"은 받지 않는다(`NlCore::EconomyTargets`). 번호는 0 이라 적지 않고 열쇠 `rune`의 자리로 찾는다(`RingResource`).
+    영주의 반지는 소지품 0번 칸이다(`person <uuid> item_add index=0`. 게임의 `character_runes_get_count`가 그 수를 돌려준다).
+  - **최소값 유지**(치트 표의 `resource_floor`): 금화·신성 반지·자원마다의 바닥은 상태 파일의 `floor <열쇠>=<수>` 줄에 있다(열쇠는 자원의 열쇠나 `gold`).
+    틱이 1초마다 화면의 수를 보고 모자란 만큼 단추와 같은 함수로 채운다(`NlCore::PlanFloors`. 줄이지 않는다). 같은 것을 채우는 호출의 로그는 30초에 한 번만 적는다.
+    자원의 수는 정수가 아닐 수 있다(당근 192.5). 채울 양은 올림한다.
   - 게임의 화면이 보이는 자원의 수는 예약되지 않은 수(`__no_reserve__` = `__total__` − 예약)다. 패널도 그 수를 보이고 그 수를 기준으로 맞춘다.
     청한 만큼 바뀌었는지는 `__total__`의 앞뒤로 본다(함수의 반환값에 기대지 않는다). `change`는 용량을 보지 않는다.
   - 원격 명령 `economy`와 `page`가 같은 길을 창 없이 태운다. 패널을 고치면 실행 묶음에서 `economy …`와 화면으로 확인한다.
@@ -192,7 +198,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
-  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`, `cheat <Id> on|off|<수>`,
+  `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품).
   잰 것은 `research/07-remote.md`.
   - 게임 화면의 값을 찾는 일은 사용자에게 넘기지 않는다. 실행 묶음을 켜고 세이브를 불러와(`load-save.ps1`) `ask.ps1`로 찾는다.
