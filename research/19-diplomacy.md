@@ -114,3 +114,25 @@
   `__matrix.<pf>.<X>`와 `__matrix.<X>.<pf>`가 둘 다 4 가 됐고(**양쪽에 쓴다**), `pf.is_declared_peace_with(X)`와 `X.is_declared_peace_with(pf)`가 4(참)를 돌려줬다.
   방어 동맹의 판정은 거짓 그대로였다. 관계의 종류는 바뀌지 않았다(3 / 4).
 - 넷째 인자가 무엇인지(기한?), 이미 든 협정에 다른 협정을 쓰면 더해지는지 바뀌는지, 게임이 그 협정을 어떻게 따르는지는 재지 않았다. 푸는 함수 `reset_agreement`(인자 5)는 부르지 않았다.
+
+## 마지막 확인 실행 (모듈 0.20.1, 2026-10-06)
+
+실행 묶음 `dip-session2`(답: `refs/runtime/dip-session2.answer.txt`). 06:00 ~ 09:20, 저장하지 않고 껐다(새 세이브 파일 없음). 적재 판정 통과. 백그라운드.
+검토의 지적을 고친 빌드다: 결과는 개수로 적고("좋은 평판 7개"), 일의 처음에 그 왕국이 망했는지와 양쪽에 왕이 있는지를 묻는다.
+
+| 한 것 | 본 것 |
+|---|---|
+| `economy add resource=0 amount=5`, 바닥 둘, `cheat resource_floor on` | 반지 7 → 12, 금화 3000, 나무 6000 (경제 0.18.1 의 것이 그대로 된다) |
+| `diplomacy <크래스터> friends queue=1` | 쌓은 일 2개. `diplomacy list`의 끝: "2개 가운데 바꾼 것 2개 …", "그쪽이 우리를 대립 -> 우호 (좋은 평판 7개)", "우리가 그쪽을 중립 -> 우호 (좋은 평판 3개)" |
+| `diplomacy <라크리아> hostile side=them`, `neutral side=them` | "중립 -> 철천지원수 (나쁜 평판 9개)", "철천지원수 -> 중립 (좋은 평판 10개)" |
+| `opinion amount=-2 side=us`, `amount=2 side=us` | "중립 -> 중립 (나쁜 평판 2개)", "(좋은 평판 2개)" |
+| `all hostile`, `opinion amount=41`, `amount=2.5`, 없는 uuid | 모두 거부 |
+| `diplomacy <크래스터> pact name=peace` 두 번 | "평화 협정을 맺었습니다", "이미 평화 협정이 있습니다". 양쪽의 `is_declared_peace_with`가 4(참). 목록의 협정 칸 "평화 (4)" |
+| `pact name=peace queue=1`(소피아), `all pact`, `name=war`, `side=them` | 쌓은 일 1개 → "소피아: 평화 협정을 맺었습니다". 나머지 셋은 거부 |
+| 세 시간을 흘림 | 크래스터 양쪽 우호, 두 왕국의 평화 협정 **그대로** |
+| `pact name=trade`(8 을 처음 넘겼다) | "교역 협정을 맺었습니다". 칸 12, `is_declared_trade_agreement_with`가 8(참), 평화도 그대로 |
+| `pact name=defence`(192 를 처음 넘겼다) | "방어 동맹을 맺었습니다". 칸 204, `is_declared_defence_alliance_with`가 참, 교역·평화도 그대로 |
+| 그 뒤 `__update_relations`를 양쪽으로 | 관계의 종류는 우호(4) 그대로다. **방어 동맹을 맺어도 관계의 종류가 allies(0)가 되지는 않는다** |
+
+- `set_agreement`에 지금의 비트를 더한 수(12, 204)를 넘겨도 된다. 넘긴 수가 그대로 칸에 앉았다(더해지는지 바뀌는지는 여전히 가리지 않았다: 언제나 더한 수를 넘긴다).
+- 게임이 그 협정을 어떻게 따르는지(침공을 하지 않는가, 방어 동맹의 원군, 교역 협정의 상단, 기한)는 보지 못했다. 세계 지도의 표시로도 보지 못했다(게임 창을 누르지 않는 실행이었다).
