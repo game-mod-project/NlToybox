@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/Retry.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -79,6 +80,7 @@ namespace
 	double g_NextFloor = 0;
 	std::map<int, double> g_FloorLogged;	// 자원 번호(-1 금화) → 그것을 채우는 호출을 로그에 마지막으로 적은 때
 	std::string g_FloorNote;			// 치트 표의 항목 옆에 보일 글
+	NlCore::Retry g_FloorRetry(5, 300);	// 채우지 못했을 때 다시 해 보는 간격(5초부터 두 배씩, 5분까지)
 
 	void Log(const std::string& Line)
 	{
@@ -241,11 +243,21 @@ namespace
 		return -2;
 	}
 
+	void SetFloorNote(const std::string& Note)
+	{
+		if (Note == g_FloorNote)
+			return;
+		g_FloorNote = Note;
+		NlCheats::SetNote(k_FloorCheat, Note);
+	}
+
 	// 최소값 하나를 정한다(0 이하면 지운다). 러너를 부르지 않는다. 돌려주는 글: 한 일.
 	std::string SetFloor(const std::string& Key, const std::string& Label, double Asked)
 	{
 		if (!NlCore::GoodFloorKey(Key))
 			return "그 자원에는 최소값을 둘 수 없습니다";
+		if (!NlCore::GoodFloorAmount(Asked))		// 큰 수를 한도로 당겨 채우지 않는다(잘못 친 수다)
+			return "최소값으로 쓸 수 없는 수입니다 (10억까지): " + Label;
 		const double value = NlCore::FloorValue(Asked);
 		const auto it = g_Floors.find(Key);
 		if (value > 0)
@@ -262,6 +274,7 @@ namespace
 		}
 		g_FloorsChanged = true;
 		g_NextFloor = 0;		// 다음 틱에 바로 본다
+		g_FloorRetry.Succeeded();
 		Log("economy floor " + Key + " = " + Fixed(value, 0));
 		return value > 0 ? "최소값 " + Label + " " + Thousands(value) : "최소값을 지웠습니다: " + Label;
 	}
@@ -320,37 +333,64 @@ namespace
 	}
 
 	// 최소값 유지: 바닥에 못 미치는 것을 모자란 만큼 채운다. Refresh 가 참을 돌려준 바로 뒤에 부른다.
+	// 채운 뒤에는 앞뒤의 수를 견준다(단추의 길과 같다). 부르지 못했거나 수가 바뀌지 않았으면 그렇게 적고 간격을 늘려 다시 한다.
 	void HoldFloors(double Now)
 	{
+		const std::vector<int> targets = NlCore::EconomyTargets(EconomyAct::FloorSet, g_Now.Stocked, g_Now.Ring);
 		std::vector<NlCore::EconomyFloor> floors;
 		for (const auto& [key, min] : g_Floors)
 		{
 			const int resource = FloorResource(key);
-			if (resource >= -1)			// 이 게임에 없는 열쇠는 건너뛴다(파일에는 남긴다)
+			// 이 게임에 없는 열쇠와 건드리지 않는 자원은 건너뛴다(파일에는 남긴다). 지키는 수에도 세지 않는다.
+			if (resource == -1 || (resource >= 0 && std::find(targets.begin(), targets.end(), resource) != targets.end()))
 				floors.push_back({ resource, min });
 		}
-		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanFloors(floors, g_Now.Gold, g_Now.Free,
-			NlCore::EconomyTargets(EconomyAct::FloorSet, g_Now.Stocked, g_Now.Ring));
-		std::string note = "최소값 " + std::to_string(floors.size()) + "개를 지키는 중";
+		const std::vector<NlCore::EconomyChange> changes = NlCore::PlanFloors(floors, g_Now.Gold, g_Now.Free, targets);
+		int called = 0, shorts = 0;
+		std::string why;
 		if (!changes.empty())
 		{
-			std::string why;
-			const std::vector<NlCore::EconomyChange> done = Apply(changes, why, true, Now);
-			if (done.size() != changes.size())
+			const double gold = g_Now.Gold;
+			const std::vector<double> counts = g_Now.Counts;
+			// 금화와 창고를 따로 부른다: 한쪽의 실패가 다른 쪽을 굶기지 않게.
+			std::vector<NlCore::EconomyChange> done;
+			for (const bool money : { true, false })
 			{
-				Log("economy floor: called " + std::to_string(done.size()) + "/" + std::to_string(changes.size()) + ": " + why);
-				note = "채우지 못했습니다 (" + why + ")";
-				g_NextFloor = Now + 10;		// 안 되는 호출을 1초마다 되풀이하지 않는다
+				std::vector<NlCore::EconomyChange> part;
+				for (const NlCore::EconomyChange& change : changes)
+					if ((change.Resource < 0) == money)
+						part.push_back(change);
+				std::string part_why;
+				const std::vector<NlCore::EconomyChange> part_done = Apply(part, part_why, true, Now);
+				if (part_done.size() < part.size())
+				{
+					const NlCore::EconomyChange& failed = part[part_done.size()];
+					Log("economy floor: cannot call " + (failed.Resource < 0 ? std::string("budget_money_change(") : "warehouse.change(" + std::to_string(failed.Resource) + ", ")
+						+ Signed(failed.Delta) + "): " + part_why);
+					why = part_why;
+				}
+				done.insert(done.end(), part_done.begin(), part_done.end());
 			}
-			else
-				note += " (방금 " + std::to_string(done.size()) + "개를 채웠습니다)";
-			Refresh();
+			called = static_cast<int>(done.size());
+			if (!Refresh())
+			{
+				SetFloorNote("최소값: 채운 뒤 다시 읽지 못했습니다");
+				g_FloorRetry.Failed(Now);
+				return;
+			}
+			// 청한 만큼 바뀌었는지는 앞뒤의 수(__total__)로 본다. 함수의 반환값에 기대지 않는다.
+			const std::vector<NlCore::EconomyShort> missing = NlCore::EconomyShortfall(done, gold, counts, g_Now.Gold, g_Now.Counts);
+			for (const NlCore::EconomyShort& one : missing)
+				Log("economy floor: " + (one.Resource < 0 ? std::string("gold") : "resource " + std::to_string(one.Resource)) + " asked "
+					+ Signed(one.Asked) + ", changed " + Signed(one.Applied));
+			shorts = static_cast<int>(missing.size());
 		}
-		if (note != g_FloorNote)
-		{
-			g_FloorNote = note;
-			NlCheats::SetNote(k_FloorCheat, note);
-		}
+		const NlCore::FloorRound round = NlCore::FloorReport(static_cast<int>(floors.size()), static_cast<int>(changes.size()), called, shorts, why);
+		if (round.Ok)
+			g_FloorRetry.Succeeded();
+		else
+			g_FloorRetry.Failed(Now);		// 안 되는 호출을 1초마다 되풀이하지 않는다
+		SetFloorNote(round.Note);
 	}
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
@@ -411,11 +451,13 @@ void NlEconomy::GameTick(double Now, bool Active)
 	{
 		g_NextFloor = Now + k_FloorEvery;
 		floors = !g_Floors.empty() && NlCheats::IsOn(k_FloorCheat);
-		if (!floors && !g_FloorNote.empty())
+		if (!floors)
 		{
-			g_FloorNote.clear();
-			NlCheats::SetNote(k_FloorCheat, "");
+			SetFloorNote("");
+			g_FloorRetry.Succeeded();
 		}
+		else if (!g_FloorRetry.Due(Now))		// 채우지 못한 뒤다. 간격이 지날 때까지 쉰다(글은 그대로 둔다)
+			floors = false;
 	}
 	if (g_Queue.empty() && !floors && (!Active || Now < g_NextRead))
 		return;
@@ -429,6 +471,8 @@ void NlEconomy::GameTick(double Now, bool Active)
 			g_Queue.clear();
 			g_Now.Last = g_Now.Why;
 		}
+		if (floors)
+			SetFloorNote("최소값: " + g_Now.Why);		// 지키고 있지 않다(게임 화면이 아니다, 자리를 읽지 못했다)
 		return;
 	}
 

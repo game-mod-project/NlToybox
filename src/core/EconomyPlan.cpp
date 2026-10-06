@@ -108,17 +108,27 @@ namespace NlCore
 	std::vector<int> EconomyTargets(EconomyAct Act, const std::vector<int>& Stocked, int Ring)
 	{
 		std::vector<int> targets = Stocked;
-		if (Act != EconomyAct::AllAdd && Ring >= 0 && std::find(targets.begin(), targets.end(), Ring) == targets.end())
+		if (Ring < 0)
+			return targets;
+		const auto at = std::find(targets.begin(), targets.end(), Ring);
+		if (Act == EconomyAct::AllAdd)
+			targets.erase(std::remove(targets.begin(), targets.end(), Ring), targets.end());
+		else if (at == targets.end())
 			targets.push_back(Ring);
 		return targets;
 	}
 
 	double FloorValue(double Asked)
 	{
-		if (!std::isfinite(Asked))
-			return Asked > 0 ? k_MaxAmount : 0;		// +inf 는 한도, NaN 과 -inf 는 0
+		if (!GoodFloorAmount(Asked))
+			return 0;
 		const double whole = std::round(Asked);
-		return whole <= 0 ? 0 : std::min(whole, k_MaxAmount);
+		return whole <= 0 ? 0 : whole;
+	}
+
+	bool GoodFloorAmount(double Asked)
+	{
+		return std::isfinite(Asked) && Asked <= k_MaxAmount;
 	}
 
 	bool GoodFloorKey(const std::string& Key)
@@ -135,12 +145,14 @@ namespace NlCore
 		const std::vector<int>& Allowed)
 	{
 		std::vector<EconomyChange> changes;
+		std::vector<int> seen;			// 본 자원. 같은 자원의 둘째 바닥은 앞의 것이 변화를 내지 않았어도 보지 않는다
 		for (const EconomyFloor& floor : Floors)
 		{
-			// 수가 아닌 바닥과 터무니없는 바닥은 유지하지 않는다(FloorValue 는 저장할 때 한도로 당긴다. 여기서는 당기지 않고 버린다).
-			if (!std::isfinite(floor.Min) || floor.Min > k_MaxAmount)
+			if (std::find(seen.begin(), seen.end(), floor.Resource) != seen.end())
 				continue;
-			const double target = std::round(floor.Min);
+			seen.push_back(floor.Resource);
+			// 수가 아닌 바닥과 터무니없는 바닥은 유지하지 않는다(FloorValue 와 같다).
+			const double target = FloorValue(floor.Min);
 			if (target <= 0)
 				continue;
 			double now = 0;
@@ -156,11 +168,29 @@ namespace NlCore
 			const double delta = std::ceil(target - now);
 			if (delta <= 0 || delta > k_MaxAmount)
 				continue;
-			const bool twice = std::any_of(changes.begin(), changes.end(), [&](const EconomyChange& change) { return change.Resource == floor.Resource; });
-			if (!twice)
-				changes.push_back({ floor.Resource, delta });
+			changes.push_back({ floor.Resource, delta });
 		}
 		return changes;
+	}
+
+	FloorRound FloorReport(int Kept, int Asked, int Called, int Short, const std::string& Why)
+	{
+		FloorRound round;
+		const int missed = Asked - Called;
+		if (missed > 0 || Short > 0)
+		{
+			round.Ok = false;
+			round.Note = "최소값: 채우려던 " + std::to_string(Asked) + "개 가운데 ";
+			if (missed > 0)
+				round.Note += std::to_string(missed) + "개를 부르지 못했" + (Short > 0 ? "고" : "습니다") + (Why.empty() ? "" : " (" + Why + ")");
+			if (Short > 0)
+				round.Note += std::string(missed > 0 ? " " : "") + std::to_string(Short) + "개는 불러도 수가 청한 만큼 바뀌지 않았습니다";
+		}
+		else if (Kept <= 0)
+			round.Note = "지킬 최소값이 없습니다 (이 게임에 없는 자원뿐입니다)";
+		else
+			round.Note = "최소값 " + std::to_string(Kept) + "개를 지키는 중" + (Asked > 0 ? " (방금 " + std::to_string(Asked) + "개를 채웠습니다)" : "");
+		return round;
 	}
 
 	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,

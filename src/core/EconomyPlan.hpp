@@ -34,8 +34,8 @@ namespace NlCore
 	// 신성 반지의 자원 번호: 자원의 열쇠들(번호 순) 가운데 "rune"의 자리. 없으면 -1.
 	// 반지는 창고의 어느 갈래에도 들지 않지만 영지 창고의 그 칸에 있고 같은 함수로 바뀐다(화면의 반지 수가 따라왔다. research/18).
 	int RingResource(const std::vector<std::string>& Keys);
-	// 그 명령이 건드려도 되는 자원 번호들. 하나씩 하는 것(add, set, floor)은 갈래의 자원과 신성 반지, 모두에게 하는 것(all)은 갈래의 자원만.
-	// Ring 이 음수면(반지의 자리를 모른다) 넣지 않는다.
+	// 그 명령이 건드려도 되는 자원 번호들. 하나씩 하는 것(add, set, floor)은 갈래의 자원과 신성 반지, 모두에게 하는 것(all)은 갈래의 자원만
+	// (반지가 갈래에 들어 있어도 뺀다). Ring 이 음수면(반지의 자리를 모른다) 넣지도 빼지도 않는다.
 	std::vector<int> EconomyTargets(EconomyAct Act, const std::vector<int>& Stocked, int Ring);
 
 	struct EconomyChange
@@ -59,16 +59,28 @@ namespace NlCore
 		double Min = 0;			// 0 이하면 유지하지 않는다
 	};
 
-	// 저장하고 쓸 바닥: 정수로, 0 이하와 수가 아닌 것은 0(유지하지 않는다), 한도(10억)까지.
+	// 저장하고 쓸 바닥: 정수로. 0 이하, 수가 아닌 것, 한도(10억)를 넘는 것은 0(유지하지 않는다). 큰 수를 한도로 당기지 않는다(잘못 친 수로 10억이 채워지지 않게).
 	double FloorValue(double Asked);
+	// 바닥으로 받을 수 있는 수인가: 유한하고 한도(10억)를 넘지 않는다(0 이하는 "지운다"는 뜻이라 받는다). 아니면 창이 까닭을 말하고 아무것도 바꾸지 않는다.
+	bool GoodFloorAmount(double Asked);
 	// 상태 파일에 적을 수 있는 열쇠인가(자원의 열쇠나 "gold": 소문자·숫자·밑줄, 40자까지).
 	bool GoodFloorKey(const std::string& Key);
 
 	// 바닥에 못 미치는 것들의 변화량(언제나 양의 정수). 바닥과 같거나 많은 것은 건드리지 않는다(줄이지 않는다).
 	// Gold: 지금 금화. Free: 자원 번호 → 예약되지 않은 수(게임의 화면이 보이는 수). Allowed: 건드려도 되는 자원 번호들.
-	// 읽은 수가 수가 아니면 그것은 하지 않는다. 같은 자원이 두 번 있으면 앞의 것만.
+	// 읽은 수가 수가 아니면 그것은 하지 않는다. 같은 자원이 두 번 있으면 앞의 것만 본다. 채울 양이 한도(10억)를 넘으면 하지 않는다.
 	std::vector<EconomyChange> PlanFloors(const std::vector<EconomyFloor>& Floors, double Gold, const std::vector<double>& Free,
 		const std::vector<int>& Allowed);
+
+	// 최소값 유지 한 바퀴의 결과. Ok 가 거짓이면 부른 쪽이 간격을 늘려 다시 한다(core/Retry).
+	struct FloorRound
+	{
+		bool Ok = true;
+		std::string Note;		// 치트 표의 항목 옆에 보일 글
+	};
+	// Kept: 지키는 바닥의 수(이 게임에 있는 것). Asked: 채우려던 것의 수. Called: 부른 것의 수.
+	// Short: 불렀지만 앞뒤의 수가 청한 만큼 달라지지 않은 것의 수. Why: 호출이 안 된 까닭.
+	FloorRound FloorReport(int Kept, int Asked, int Called, int Short, const std::string& Why);
 
 	struct EconomyShort
 	{
