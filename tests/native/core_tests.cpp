@@ -2810,15 +2810,54 @@ int main(int argc, char** argv)
 		// "바로 출산": 임신 중이고 세 번을 넘기지 않았을 때만 더 부른다
 		CHECK(BirthNeedsCall(1, 0) && BirthNeedsCall(3, 2) && !BirthNeedsCall(0, 0) && !BirthNeedsCall(0, 3) && !BirthNeedsCall(1, 3) && !BirthNeedsCall(2, 5));
 
-		// 결과의 글
-		CHECK_STR(StageReport("Kira", 1, 2, 1, ""), "Kira: 임신 2/3기가 됐습니다");
-		CHECK_STR(StageReport("Kira", 2, 3, 1, ""), "Kira: 임신 3/3기가 됐습니다");
-		CHECK_STR(StageReport("Kira", 3, 0, 1, ""), "Kira: 출산했습니다 (다음 단계 함수를 1번 불렀습니다)");
-		CHECK_STR(StageReport("Kira", 1, 0, 3, ""), "Kira: 출산했습니다 (다음 단계 함수를 3번 불렀습니다)");
-		CHECK_STR(StageReport("Kira", 0, 0, 0, ""), "Kira: 임신 중이 아닙니다");
-		CHECK_STR(StageReport("Kira", 2, 2, 1, ""), "Kira: 단계가 바뀌지 않았습니다 (임신 2/3기 그대로)");
-		CHECK_STR(StageReport("Kira", 1, 2, 3, "no member"), "Kira: 임신 2/3기에서 멈췄습니다 (no member)");
-		CHECK_STR(StageReport("Kira", 1, 0, 1, "본 적 없는 바뀜"), "Kira: 임신이 끝났습니다 (본 적 없는 바뀜)");		// 출산이라고 말하지 않는다
+		// 결과의 글. 둘째 인자: "바로 출산"을 청했는가. 마지막 인자: 부르는 동안 새로 생긴 사람의 수.
+		CHECK_STR(StageReport("Kira", false, 1, 2, 1, "", 0), "Kira: 임신 2/3기가 됐습니다");
+		CHECK_STR(StageReport("Kira", false, 2, 3, 1, "", 0), "Kira: 임신 3/3기가 됐습니다");
+		CHECK_STR(StageReport("Kira", false, 3, 0, 1, "", 1), "Kira: 출산했습니다 (다음 단계 함수를 1번 불렀습니다)");
+		CHECK_STR(StageReport("Kira", true, 1, 0, 3, "", 1), "Kira: 출산했습니다 (다음 단계 함수를 3번 불렀습니다)");
+		// 임신이 끝났는데 아이가 생기지 않았다: 출산이라고 말하지 않는다. 다음 단계 함수는 게임의 유산 확률을 그대로 탄다
+		// (실행 2 에서 3/3기의 다음 호출 뒤 영주의 수가 그대로였고 어머니에게 생각 pregnancy_miscarriage 가 붙었다. research/24).
+		CHECK_STR(StageReport("Kira", true, 2, 0, 2, "", 0), "Kira: 임신이 끝났지만 아이가 생기지 않았습니다 (유산으로 보입니다. 다음 단계 함수를 2번 불렀습니다)");
+		CHECK_STR(StageReport("Kira", false, 0, 0, 0, "", 0), "Kira: 임신 중이 아닙니다");
+		CHECK_STR(StageReport("Kira", true, 0, 0, 0, "", 0), "Kira: 임신 중이 아닙니다");
+		CHECK_STR(StageReport("Kira", false, 2, 2, 1, "", 0), "Kira: 단계가 바뀌지 않았습니다 (임신 2/3기 그대로)");
+		CHECK_STR(StageReport("Kira", false, 1, 2, 3, "no member", 0), "Kira: 임신 2/3기에서 멈췄습니다 (no member)");
+		CHECK_STR(StageReport("Kira", false, 1, 0, 1, "본 적 없는 바뀜", 0), "Kira: 임신이 끝났습니다 (본 적 없는 바뀜)");
+		// 검토의 지적: 출산을 청했는데 중간에 멈췄으면 "N/3기가 됐습니다"(다음 단계의 성공과 같은 글)라고 하지 않는다
+		CHECK_STR(StageReport("Kira", true, 1, 2, 2, "", 0), "Kira: 출산까지 가지 못했습니다 (임신 2/3기에서 단계가 더 바뀌지 않았습니다)");
+		// 검토의 지적: 부른 뒤 그 사람을 다시 읽지 못했으면 뒤의 단계를 모른다(-1). "3/3기에서 멈췄다"고 단정하지 않는다
+		CHECK_STR(StageReport("Kira", true, 3, -1, 1, "그 자리의 사람이 바뀌었습니다", 0),
+			"Kira: 다음 단계 함수를 1번 불렀지만 그 뒤를 읽지 못했습니다 (그 자리의 사람이 바뀌었습니다)");
+		CHECK_STR(StageReport("Kira", false, 2, -1, 1, "", 0), "Kira: 다음 단계 함수를 1번 불렀지만 그 뒤를 읽지 못했습니다");
+		// 된 것인가(반환값). 다음 단계: 한 번 불렀고 본 대로 바뀌었다. 바로 출산: 임신이 끝났고 아이가 생겼다.
+		CHECK(NextDone(1, 2, 1, "") && NextDone(2, 3, 1, "") && NextDone(3, 0, 1, ""));
+		CHECK(!NextDone(0, 0, 0, "") && !NextDone(2, 2, 1, "") && !NextDone(1, 3, 1, "") && !NextDone(1, 2, 1, "x") && !NextDone(3, -1, 1, "") && !NextDone(1, 2, 0, ""));
+		CHECK(BirthDone(0, 1, "") && !BirthDone(0, 0, "") && !BirthDone(2, 1, "") && !BirthDone(0, 1, "x") && !BirthDone(-1, 1, ""));
+		// 단계의 특성 이름(임신을 시작할 때 1/3기의 것을 붙인다)
+		CHECK_STR(PregnancyTrait(1), "pregnant_st1");
+		CHECK_STR(PregnancyTrait(2), "pregnant_st2");
+		CHECK_STR(PregnancyTrait(3), "pregnant_st3");
+		CHECK_STR(PregnancyTrait(0), "");
+		CHECK_STR(PregnancyTrait(4), "");
+		CHECK(PregnancyStage({ PregnancyTrait(2) }) == 2);
+
+		// 검토의 지적: 임신·성장의 일은 플레이어의 영주에게만 한다(주민·손님·다른 진영에게는 불러 본 적이 없다). 아버지도 플레이어의 영주여야 한다.
+		PersonRow lord;
+		lord.Character = true;
+		lord.Faction = "player";
+		CHECK(IsPlayersLord(lord));
+		PersonRow guest = lord;
+		guest.Faction = "unique_guests";
+		PersonRow grown = lord;
+		grown.Faction = "player_untitled";
+		PersonRow peasant = lord;
+		peasant.Character = false;
+		CHECK(!IsPlayersLord(guest) && !IsPlayersLord(grown) && !IsPlayersLord(peasant));
+		// 임신을 시작할 수 없는 까닭의 글이 갈린다(성별을 읽지 못한 것과 남성)
+		std::string male, unknown;
+		CHECK(!CanConceive(0, { "human" }, male) && !CanConceive(-1e9, { "human" }, unknown) && male != unknown);
+		// 원격의 답: 아버지가 uuid 꼴이 아니면 그렇게 말한다
+		CHECK(ParseRemoteLine("person a34ba8b605c96ab7 conceive name=daven").Error.find("uuid") != std::string::npos);
 
 		// 임신을 시작할 수 있는가(누르기 전의 판정. 게임의 is_can_pregant 는 틱이 따로 묻는다): 여성(성별 1)이고 아이가 아니고 임신 중이 아니고 출산 뒤의 금지가 없다
 		std::string why;

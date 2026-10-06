@@ -302,6 +302,11 @@ namespace NlCore
 		return !Row.Dead && Row.Faction == "player";
 	}
 
+	bool IsPlayersLord(const PersonRow& Row)
+	{
+		return IsPlayers(Row) && Row.Character;
+	}
+
 	std::vector<size_t> PickTargets(const std::vector<PersonRow>& People, const std::string& Who)
 	{
 		std::vector<size_t> picked;

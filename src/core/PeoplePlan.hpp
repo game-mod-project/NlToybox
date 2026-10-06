@@ -133,6 +133,8 @@ namespace NlCore
 
 	// 플레이어의 산 사람인가.
 	bool IsPlayers(const PersonRow& Row);
+	// 플레이어의 살아 있는 영주인가(o_character 이고 진영이 player). 임신·성장의 일은 이들에게서만 쟀다(research/24).
+	bool IsPlayersLord(const PersonRow& Row);
 	// 명령의 대상들(People 안의 자리). "lords": 플레이어의 o_character, "people": 플레이어의 사람 모두(일괄 명령은 손님과 다른 진영에 가지 않는다).
 	// 그 밖: 그 uuid 하나(짚어 고른 것은 손님이어도 된다). 죽은 사람은 어느 쪽에서도 뺀다.
 	std::vector<size_t> PickTargets(const std::vector<PersonRow>& People, const std::string& Who);
