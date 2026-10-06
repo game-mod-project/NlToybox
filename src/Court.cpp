@@ -80,6 +80,8 @@ namespace
 	bool g_ReadLogged = false;			// 훑을 때 부르는 것을 로그에 한 번 남겼다
 	bool g_ScanSkipped = false;			// 마지막 훑기가 잠깐 못 한 것이다(인물 쪽이 하는 중). 실패가 아니다: 값과 쌓인 일을 그대로 둔다
 	std::string g_PickHolder, g_PickAbout;		// 창에서 고른 짝
+	bool g_BishopKnown = false;			// 게임에 주교의 uuid 가 있다(그 인물이 영지에 보이지 않아도)
+	std::string g_BishopRefused;		// 종교 패널의 단추가 거부된 까닭(영주 패널의 것과 섞지 않는다)
 
 	struct Busy
 	{
@@ -198,7 +200,8 @@ namespace
 		for (const NlCore::PersonRow& row : rows)
 		{
 			// 플레이어의 산 영주들과, 살아 있는 주교.
-			const bool bishop = row.Character && !row.Dead && !bishop_uuid.empty() && row.Uuid == bishop_uuid;
+			// 주교: 그 uuid 의 산 인물이고 플레이어의 사람이 아니다(잰 주교는 진영 holy_synod 였다. 플레이어의 영주가 그 uuid 라면 영주로 둔다).
+			const bool bishop = row.Character && !row.Dead && !bishop_uuid.empty() && row.Uuid == bishop_uuid && !NlCore::IsPlayers(row);
 			if (!bishop && (!row.Character || !NlCore::IsPlayers(row)))
 				continue;
 			Lord lord;
@@ -256,6 +259,7 @@ namespace
 				}
 		}
 
+		g_BishopKnown = !bishop_uuid.empty();
 		if (lords.size() != g_Lords.size())
 			Log("court: " + std::to_string(lords.size()) + " lords, king " + (has_king ? "found" : "not found") + ", " + std::to_string(followers.size()) + " followers");
 		g_Lords = std::move(lords);
@@ -311,9 +315,20 @@ namespace
 		const Lord* about = FindLord(It.Plan.About);
 		if (!holder || !about || !StillThere(*holder) || !StillThere(*about))
 		{
-			Why = "그 영주를 찾지 못했습니다 (자리가 바뀌었으면 다시 눌러 주세요)";
+			Why = "그 사람을 찾지 못했습니다 (자리가 바뀌었으면 다시 눌러 주세요)";
 			g_Ready = false;		// 다음 틱이 다시 모은다
 			return 'f';
+		}
+		// 주교의 일이면 그 사람이 아직 주교인지 다시 본다(주교가 바뀌어도 옛 인물이 그 자리에 남아 있을 수 있다).
+		if (holder->Bishop)
+		{
+			std::string now;
+			if (!ReadText(k_BishopUuid, now) || now != holder->Uuid)
+			{
+				Why = "그 사람은 이제 주교가 아닙니다";
+				g_Ready = false;
+				return 'f';
+			}
 		}
 		// 붙일 평판의 자료가 잰 것과 같은지 본다(±5, 겹침 한도). 아니면 부르지 않는다.
 		double good_modify = 0, bad_modify = 0, good_limit = 0, bad_limit = 0;
@@ -449,7 +464,11 @@ namespace
 		if (Command.OnlyLoyal)
 			return Command.Who == "lords" ? "게임이 충성을 따지는 영주가 없습니다" : "게임이 그 영주에게는 충성을 따지지 않습니다 (또는 그런 영주가 없습니다)";
 		if (Command.Who == "bishop")
-			return "주교가 없습니다 (종교 패널의 '주교 부르기')";
+		{
+			const bool bishop = std::any_of(g_Lords.begin(), g_Lords.end(), [](const Lord& lord) { return lord.Bishop; });
+			return bishop ? "그런 짝이 없습니다 (주교는 평판을 갖는 쪽으로만 다룹니다)"
+				: g_BishopKnown ? "주교가 영지에 보이지 않습니다" : "주교가 없습니다 (종교 패널의 '주교 부르기')";
+		}
 		return "그런 영주(또는 짝)가 없습니다";
 	}
 
@@ -479,14 +498,15 @@ namespace
 		return static_cast<int>(jobs.size());
 	}
 
-	// 창의 단추. Loyal: 충성 올리기(게임이 충성을 따지는 영주에게만).
+	// 창의 단추. Loyal: 충성 올리기(게임이 충성을 따지는 영주에게만). 주교의 단추가 거부된 까닭은 따로 둔다(종교 패널이 보인다).
 	void Push(const std::string& Who, CourtGoal Goal, const std::string& About, double Amount = 0, bool Loyal = false)
 	{
 		CourtCommand command{ Who, Goal, About, Amount };
 		command.OnlyLoyal = Loyal;
-		g_Refused.clear();
-		if (PushCommand(command, g_Refused) == 0)
-			g_Refused = NoJobs(command);
+		std::string& refused = Who == "bishop" ? g_BishopRefused : g_Refused;
+		refused.clear();
+		if (PushCommand(command, refused) == 0)
+			refused = NoJobs(command);
 	}
 
 	std::string NumberText(double Value)
@@ -806,7 +826,8 @@ void NlCourt::DrawBishop()
 	}
 	if (!bishop)
 	{
-		Hint("주교가 없습니다. 위의 '주교 부르기'로 부르거나 게임에서 주교가 오면 여기에 보입니다.");
+		Hint(g_BishopKnown ? "게임에 주교는 있지만 영지에 보이지 않습니다(떠나 있거나 죽었습니다)."
+			: "주교가 없습니다. 위의 '주교 부르기'로 부르거나 게임에서 주교가 오면 여기에 보입니다.");
 		return;
 	}
 	if (king >= g_Lords.size())
@@ -834,12 +855,16 @@ void NlCourt::DrawBishop()
 		Push("bishop", CourtGoal::Clear, "king");
 	Hint("주교가 우리 왕을 보는 평판입니다(게임의 주교 평판 함수가 같은 수를 돌려주는 것을 봤습니다). 영주의 호감과 같은 길로, 게임의 디버그용 평판(+5 / -5)을 "
 		"게임의 함수로 하나씩 붙이고 뗍니다. 이 평판이 게임에서 무엇을 바꾸는지(주교의 요구, 종교 반란)는 확인 전입니다.");
-	if (!g_Refused.empty())
-		Hint(g_Refused.c_str());
-	if (!g_Tally.Empty())
-	{
-		ImGui::TextDisabled("%s", g_Tally.Summary().c_str());
-		if (!g_Tally.Lines().empty())
-			Hint(g_Tally.Lines().front().c_str());
-	}
+	if (!g_BishopRefused.empty())
+		Hint(g_BishopRefused.c_str());
+	// 결과는 주교의 줄만 보인다(영주 패널에서 쌓은 일의 줄과 섞지 않는다). 줄은 "<갖는 쪽> -> <대상>: …" 꼴이다(core 의 CourtReport).
+	const std::string mine = bishop->Name + " -> ";
+	for (const std::string& line : g_Tally.Lines())
+		if (line.compare(0, mine.size(), mine) == 0)
+		{
+			Hint(line.c_str());
+			break;
+		}
+	if (!g_Jobs.empty())
+		ImGui::TextDisabled("하는 중입니다 (남은 일 %d개)", static_cast<int>(g_Jobs.size()));
 }

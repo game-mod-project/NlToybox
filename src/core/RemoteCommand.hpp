@@ -43,6 +43,7 @@
 //   court <uuid|lords> clear about=<…>              붙여 둔 디버그 평판을 모두 뗀다
 //   court <uuid|lords> release                      그 영주를 따르는 사람들의 충성 대상을 지운다(queue=1 은 diplomacy 와 같다)
 //   court <uuid> opinion … 은 한 짝씩만 받는다(여럿을 한꺼번에 내리지 않는다). loyal 은 게임이 충성을 따지는 영주에게만 간다
+//   court bishop <like|opinion|clear> about=<uuid|lords|king> …   주교가 그 사람을 보는 평판(주교는 lords 에 들지 않고, 대상으로는 삼지 않는다. research/21)
 //   traits [find=<글>] [max=<수>]                   게임의 특성들: 이름, 화면 이름, 설명의 앞부분(모듈이 게임의 현지화 파일에서 읽은 것). 인물 패널의 찾기 칸도 그 글이 된다
 //                                                   find 는 이름, 화면 이름, 설명의 글 어디에든 들어 있으면 맞는다
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)

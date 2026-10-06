@@ -105,8 +105,7 @@ namespace
 		{
 			const bool again = current;		// 걸어 둔 그대로인데 꺼져 있었다
 			NlRecorder::Forced value;
-			// 불리언을 돌려주는 판정은 'b', 수를 돌려주는 판정(HookNumber)은 'n': 게임이 돌려주던 형 그대로 바꾼다.
-			value.Kind = scale ? 'x' : It.Def->Kind == CheatKind::HookNumber ? 'n' : 'b';
+			value.Kind = NlCore::HookForcedKind(It.Def->Kind);		// 게임이 돌려주던 형 그대로 바꾼다(불리언, 수, 배율)
 			value.Number = scale ? It.Number : It.Def->On;
 			value.Whole = scale && It.Def->Off != 0;
 			std::string name, why;

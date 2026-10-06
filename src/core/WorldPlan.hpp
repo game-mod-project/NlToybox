@@ -34,4 +34,6 @@ namespace NlCore
 	const std::vector<const char*>& ReligionCostVars();
 	// 기도와 예배가 신앙심을 되돌리는 양이 든 게임 변수: 교회의 기도, 제단의 기도, 아침 예배, 성인과의 대화.
 	const std::vector<const char*>& PietyRestoreVars();
+	// 설교 전환 계수가 든 게임 변수(하나. 이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 수다. 원래 1).
+	const std::vector<const char*>& PreachFactorVars();
 }

@@ -85,6 +85,12 @@ namespace NlCore
 		return vars;
 	}
 
+	const std::vector<const char*>& PreachFactorVars()
+	{
+		static const std::vector<const char*> vars = { "church_preach_conversion_factor" };
+		return vars;
+	}
+
 	const std::vector<const char*>& PietyRestoreVars()
 	{
 		// 15, 15, 30, 20 이었다.
