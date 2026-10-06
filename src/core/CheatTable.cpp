@@ -18,7 +18,7 @@ namespace NlCore
 			{ Area::Knowledge, "knowledge", "지식", 5, true },
 			{ Area::Items, "items", "아이템", 5, true },
 			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/People.cpp)
-			{ Area::Diplomacy, "diplomacy", "외교", 6 },
+			{ Area::Diplomacy, "diplomacy", "외교", 6, true },		// 왕국과의 관계(src/Diplomacy.cpp)
 			{ Area::Religion, "religion", "종교", 6, true },		// 주교 부르기(src/World.cpp)
 			{ Area::Time, "time", "시간", 2, true },
 			{ Area::World, "world", "월드", 6 },

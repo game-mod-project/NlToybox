@@ -16,6 +16,7 @@ add_library(nlcore STATIC
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
   src/core/CostBook.cpp
+  src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
   src/core/PeoplePlan.cpp
@@ -60,6 +61,7 @@ add_library(nltoybox SHARED
   src/Search.cpp
   src/Tweaks.cpp
   src/Ui.cpp
+  src/Diplomacy.cpp
   src/World.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
   "${IMGUI_ROOT}/imgui.cpp"

@@ -4,6 +4,7 @@
 #include "Build.hpp"
 #include "Production.hpp"
 #include "Cheats.hpp"
+#include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
 #include "World.hpp"
@@ -163,6 +164,7 @@ void NlMenu::GameTick()
 	NlBuild::GameTick(now);
 	NlProduction::GameTick(now);
 	NlWorld::GameTick();
+	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
 	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
 	if (visible && now >= g_NextState)
 	{
@@ -266,6 +268,12 @@ void NlMenu::Draw()
 		NlTweaks::DrawArea(page);
 		ImGui::Separator();
 		NlWorld::DrawReligion();
+		break;
+	case Area::Diplomacy:
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlDiplomacy::Draw();
 		break;
 	case Area::Army:
 		NlCheats::DrawArea(page);

@@ -2,6 +2,7 @@
 
 #include "AskPath.hpp"
 #include "CheatTable.hpp"
+#include "DiplomacyPlan.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
 #include "Presets.hpp"
@@ -380,6 +381,42 @@ namespace NlCore
 			if (count != 2 || !ParseWorldAct(tokens[1], act))
 				return fail("world needs cooldowns_clear or bishop");
 			command.Target = tokens[1];
+		}
+		else if (verb == "diplomacy")
+		{
+			// diplomacy list                                                  왕국들과 지금의 관계
+			// diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]  바라는 관계가 될 때까지 평판을 붙인다(core/DiplomacyPlan)
+			// diplomacy <uuid> opinion amount=<수> [side=them|us|both]         평판을 그만큼 움직인다(5 의 배수로)
+			if (count >= 2 && tokens[1] == "list")
+			{
+				if (count != 2)
+					return fail("diplomacy list takes nothing");
+				command.Target = "list";
+				return command;
+			}
+			DiplomacyCommand diplomacy;
+			if (count < 3 || !GoodFactionWho(tokens[1]) || !ParseDiplomacyGoal(tokens[2], diplomacy.Goal))
+				return fail("diplomacy needs list, or who (a faction uuid or all) and friends, neutral, hostile or opinion");
+			command.Target = tokens[1];
+			if (!options(3))
+				return command;
+			command.Options["goal"] = tokens[2];
+			diplomacy.Who = tokens[1];
+			const auto side = command.Options.find("side");
+			if (side != command.Options.end() && !ParseDiplomacySide(side->second, diplomacy.Side))
+				return fail("diplomacy side= needs them, us or both");
+			const auto amount = command.Options.find("amount");
+			if (diplomacy.Goal == DiplomacyGoal::Opinion)
+			{
+				if (amount == command.Options.end() || !ParseNumber(amount->second, command.Number) || OpinionSteps(command.Number) == 0)
+					return fail("diplomacy opinion needs amount=<a multiple of 5, not 0>");
+				diplomacy.Amount = command.Number;
+			}
+			else if (amount != command.Options.end())
+				return fail(std::string("diplomacy ") + tokens[2] + " takes no amount");
+			std::string why;
+			if (!CheckDiplomacy(diplomacy, why))
+				return fail("diplomacy all takes only friends or neutral (name one kingdom for hostile and opinion)");
 		}
 		else if (verb == "cheat")
 		{

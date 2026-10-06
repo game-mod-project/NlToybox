@@ -8,6 +8,7 @@
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
 #include "core/CostBook.hpp"
+#include "core/DiplomacyPlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
@@ -848,6 +849,7 @@ int main(int argc, char** argv)
 				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/People.cpp)
 				|| area.Id == Area::Army									// 군대: 병사를 만드는 단추
 				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
+				|| area.Id == Area::Diplomacy								// 왕국과의 관계(src/Diplomacy.cpp)
 				|| area.Id == Area::Presets;								// 프리셋: 확인된 항목의 묶음(core/Presets)
 			CHECK(area.Panel == panel);
 		}
@@ -1651,6 +1653,103 @@ int main(int argc, char** argv)
 		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
 		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());
 		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
+	});
+
+	Test("외교: 관계의 종류와 왕국의 이름", [] {
+		// FactionsAlliesMatrix.relationship_to_string 이 돌려준 이름(research/19): 0 allies … 7 opponent
+		CHECK_STR(RelationLabel(0), "동맹");
+		CHECK_STR(RelationLabel(1), "적");
+		CHECK_STR(RelationLabel(2), "철천지원수");
+		CHECK_STR(RelationLabel(3), "중립");
+		CHECK_STR(RelationLabel(4), "우호");
+		CHECK_STR(RelationLabel(5), "봉신");
+		CHECK_STR(RelationLabel(6), "주군");
+		CHECK_STR(RelationLabel(7), "대립");
+		CHECK_STR(RelationLabel(8), "?");
+		CHECK_STR(RelationLabel(-1), "?");
+		CHECK_STR(RelationLabel(3.5), "?");
+		CHECK_STR(RelationLabel(std::numeric_limits<double>::quiet_NaN()), "?");
+		// 왕국은 이름이 faction.new.name.<수> 인 세력이다. 도적, 상인, 교단, 플레이어의 꾸러미는 아니다.
+		CHECK(IsKingdom("faction.new.name.22") && IsKingdom("faction.new.name.1"));
+		CHECK(!IsKingdom("player") && !IsKingdom("forest_bandits") && !IsKingdom("faction.new.name.") && !IsKingdom("faction.new.name.x")
+			&& !IsKingdom("") && !IsKingdom("xfaction.new.name.3") && !IsKingdom("faction.new.name.3 "));
+	});
+
+	Test("외교: 바라는 관계로 가는 한 걸음", [] {
+		// 우호: 우호가 될 때까지 올린다
+		CHECK(StepToward(7, DiplomacyGoal::Friends) == 1 && StepToward(3, DiplomacyGoal::Friends) == 1 && StepToward(2, DiplomacyGoal::Friends) == 1);
+		CHECK(StepToward(4, DiplomacyGoal::Friends) == 0);
+		// 중립: 나쁜 관계면 올리고 우호면 내린다
+		CHECK(StepToward(1, DiplomacyGoal::Neutral) == 1 && StepToward(2, DiplomacyGoal::Neutral) == 1 && StepToward(7, DiplomacyGoal::Neutral) == 1);
+		CHECK(StepToward(4, DiplomacyGoal::Neutral) == -1 && StepToward(3, DiplomacyGoal::Neutral) == 0);
+		// 적대: 철천지원수가 될 때까지 내린다(is_enemy_with 가 참이 되는 관계)
+		CHECK(StepToward(3, DiplomacyGoal::Hostile) == -1 && StepToward(4, DiplomacyGoal::Hostile) == -1 && StepToward(7, DiplomacyGoal::Hostile) == -1
+			&& StepToward(1, DiplomacyGoal::Hostile) == -1);
+		CHECK(StepToward(2, DiplomacyGoal::Hostile) == 0);
+		// 동맹·봉신·주군과 모르는 수는 건드리지 않는다
+		for (const DiplomacyGoal goal : { DiplomacyGoal::Friends, DiplomacyGoal::Neutral, DiplomacyGoal::Hostile })
+			CHECK(StepToward(0, goal) == 2 && StepToward(5, goal) == 2 && StepToward(6, goal) == 2 && StepToward(8, goal) == 2 && StepToward(-1, goal) == 2
+				&& StepToward(3.5, goal) == 2 && StepToward(std::numeric_limits<double>::quiet_NaN(), goal) == 2);
+		CHECK(StepToward(3, DiplomacyGoal::Opinion) == 2);		// 평판의 수는 관계를 보지 않는다
+
+		// 평판의 변화량 → 걸음 수(5 의 배수로, 한도 40)
+		CHECK(OpinionSteps(25) == 5 && OpinionSteps(-25) == -5 && OpinionSteps(5) == 1 && OpinionSteps(-5) == -1);
+		CHECK(OpinionSteps(12) == 2 && OpinionSteps(13) == 3 && OpinionSteps(2) == 0 && OpinionSteps(0) == 0);
+		CHECK(OpinionSteps(1000) == k_OpinionStepsMax && OpinionSteps(-1000) == -k_OpinionStepsMax);
+		CHECK(OpinionSteps(std::numeric_limits<double>::quiet_NaN()) == 0 && OpinionSteps(std::numeric_limits<double>::infinity()) == 0);
+		CHECK(k_OpinionUnit == 5 && k_OpinionStepsMax < 50);		// 그 평판은 50겹까지다
+	});
+
+	Test("외교: 명령의 낱말과 검사", [] {
+		DiplomacyGoal goal = DiplomacyGoal::Opinion;
+		CHECK(ParseDiplomacyGoal("friends", goal) && goal == DiplomacyGoal::Friends);
+		CHECK(ParseDiplomacyGoal("neutral", goal) && goal == DiplomacyGoal::Neutral);
+		CHECK(ParseDiplomacyGoal("hostile", goal) && goal == DiplomacyGoal::Hostile);
+		CHECK(ParseDiplomacyGoal("opinion", goal) && goal == DiplomacyGoal::Opinion);
+		CHECK(!ParseDiplomacyGoal("allies", goal) && !ParseDiplomacyGoal("", goal));
+		CHECK_STR(DiplomacyGoalWord(DiplomacyGoal::Hostile), "hostile");
+		CHECK_STR(DiplomacyGoalLabel(DiplomacyGoal::Friends), "우호");
+		char side = 0;
+		CHECK(ParseDiplomacySide("them", side) && side == 't' && ParseDiplomacySide("us", side) && side == 'u' && ParseDiplomacySide("both", side) && side == 'b');
+		CHECK(!ParseDiplomacySide("all", side) && !ParseDiplomacySide("", side));
+		CHECK(GoodFactionWho("all") && GoodFactionWho("1fa50db321ce450b"));
+		CHECK(!GoodFactionWho("") && !GoodFactionWho("1fa50db321ce450") && !GoodFactionWho("1FA50DB321CE450B") && !GoodFactionWho("lords") && !GoodFactionWho("1fa50db321ce450bz"));
+
+		std::string why;
+		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Friends, 'b', 0 }, why) && why.empty());
+		CHECK(CheckDiplomacy({ "all", DiplomacyGoal::Neutral, 't', 0 }, why));
+		CHECK(CheckDiplomacy({ "all", DiplomacyGoal::Friends, 'b', 0 }, why));
+		// 모든 왕국을 한꺼번에 적으로 돌리지 않는다. 평판의 수도 한 왕국씩.
+		CHECK(!CheckDiplomacy({ "all", DiplomacyGoal::Hostile, 'b', 0 }, why) && !why.empty());
+		CHECK(!CheckDiplomacy({ "all", DiplomacyGoal::Opinion, 'b', 25 }, why));
+		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Hostile, 'u', 0 }, why));
+		CHECK(CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', -25 }, why));
+		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Opinion, 't', 2 }, why));		// 5 의 배수로 반올림하면 0 이다
+		CHECK(!CheckDiplomacy({ "nobody", DiplomacyGoal::Friends, 'b', 0 }, why));
+		CHECK(!CheckDiplomacy({ "1fa50db321ce450b", DiplomacyGoal::Friends, 'x', 0 }, why));
+
+		// 결과의 글: 무엇이 어떻게 바뀌었는지, 안 된 것은 안 됐다고
+		CHECK_STR(DiplomacyReport("크래스터", 't', 7, 3, 1, 'd', ""), "크래스터: 그쪽이 우리를 대립 -> 중립 (평판 +5 를 1번)");
+		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 2, -11, 'd', ""), "크래스터: 우리가 그쪽을 중립 -> 철천지원수 (평판 -5 를 11번)");
+		CHECK_STR(DiplomacyReport("크래스터", 't', 4, 4, 0, 'a', ""), "크래스터: 그쪽이 우리를 이미 우호입니다");
+		CHECK_STR(DiplomacyReport("크래스터", 't', 5, 5, 0, 'k', ""), "크래스터: 그쪽이 우리를 봉신 관계는 건드리지 않습니다");
+		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 40, 'l', ""), "크래스터: 그쪽이 우리를 중립 -> 중립 (평판 +5 를 40번). 한도까지 붙였지만 바라는 관계가 되지 않았습니다");
+		CHECK_STR(DiplomacyReport("크래스터", 'u', 3, 3, 2, 'f', "no such method"), "크래스터: 우리가 그쪽을 중립 -> 중립 (평판 +5 를 2번). 실패: no such method");
+		CHECK(DiplomacyFailed('l') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a') && !DiplomacyFailed('k'));
+
+		// 원격 명령
+		const RemoteCommand list = ParseRemoteLine("diplomacy list");
+		CHECK(list.Error.empty() && list.Verb == "diplomacy" && list.Target == "list");
+		const RemoteCommand one = ParseRemoteLine("diplomacy 1fa50db321ce450b friends side=them");
+		CHECK(one.Error.empty() && one.Target == "1fa50db321ce450b" && one.Options.at("goal") == "friends" && one.Options.at("side") == "them");
+		const RemoteCommand all = ParseRemoteLine("diplomacy all neutral");
+		CHECK(all.Error.empty() && all.Target == "all" && all.Options.at("goal") == "neutral" && all.Options.count("side") == 0);
+		const RemoteCommand opinion = ParseRemoteLine("diplomacy 1fa50db321ce450b opinion amount=-25 side=us");
+		CHECK(opinion.Error.empty() && opinion.Number == -25);
+		for (const char* bad : { "diplomacy", "diplomacy all", "diplomacy all hostile", "diplomacy all opinion amount=25", "diplomacy nobody friends",
+			"diplomacy 1fa50db321ce450b allies", "diplomacy 1fa50db321ce450b friends side=sideways", "diplomacy 1fa50db321ce450b opinion",
+			"diplomacy 1fa50db321ce450b opinion amount=2", "diplomacy list now" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
 	});
 
 	Test("장비: 선호 장비의 묶음과 넣어 줄 것", [] {
