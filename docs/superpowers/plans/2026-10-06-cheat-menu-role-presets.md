@@ -19,8 +19,8 @@
 | 특성 붙이기·떼기: `Traits.trait_attach("이름")`, `trait_detach("이름")` | `research/11`. 게임이 글 하나로 부른다 |
 | 재능을 한 사람에게 여럿 붙이기 | `research/21` 실행 3: 71번 붙여 71번, 한 영주에게 30개, 서로 막는 것 없음 |
 | 특성의 뜻 | 게임의 설명 글(`localization\hints*.csv`)을 읽고 골랐다. **재능마다의 효과를 플레이에서 재지는 않았다** |
-| 프리셋의 특성 95개가 게임에 있는가 | 게임의 특성 281개의 이름과 맞춰 봤다(없는 것 0개) |
-| 능력치의 게임 이름: `main.csv`의 `actor.skill.<열쇠>` | 게임 파일. 모듈이 실행 중에 읽는다(레포에 글을 옮기지 않는다) |
+| 프리셋의 특성 74개(표의 칸은 123개)가 게임에 있는가 | 게임의 특성 281개의 이름과 맞춰 봤다(없는 것 0개) |
+| 능력치의 게임 이름: `main.csv`의 `actor.skill.<열쇠>`. **전투만 `actor.skill.fight`** | 게임 파일(줄 9개: 능력치 여덟과 `points_remain`). 모듈이 실행 중에 읽는다(레포에 글을 옮기지 않는다) |
 
 재지 않은 것: 해로운 특성(`nervous`, `coward`, `pacifist`, `stupidity`, `contemptuous`, `sarcastic`, `cynic`, `envious`, `greedy`)이 `trait_detach`로 떼어지고
 그대로 남는가. 실행 1에서 잰다.

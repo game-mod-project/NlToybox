@@ -141,6 +141,26 @@ namespace NlCore
 		return todo;
 	}
 
+	std::vector<RoleStep> RoleSteps(const RoleTodo& Todo)
+	{
+		std::vector<RoleStep> steps;
+		for (const auto& [index, level] : Todo.Skills)
+			steps.push_back({ 's', index, level, {} });
+		for (const std::string& name : Todo.Remove)
+			steps.push_back({ 'r', -1, 0, name });
+		for (const std::string& name : Todo.Add)
+			steps.push_back({ 'a', -1, 0, name });
+		return steps;
+	}
+
+	bool RoleStepNeeded(const RoleStep& Step, const std::vector<std::string>& TraitsNow)
+	{
+		if (Step.Kind == 's')
+			return true;
+		const bool has = std::find(TraitsNow.begin(), TraitsNow.end(), Step.Name) != TraitsNow.end();
+		return Step.Kind == 'r' ? has : !has;
+	}
+
 	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why)
 	{
 		const std::string head = Name + ": " + Role.Label + " 프리셋 - ";

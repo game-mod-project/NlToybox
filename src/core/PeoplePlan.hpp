@@ -41,11 +41,11 @@ namespace NlCore
 		std::string Who;		// 인물의 uuid. 또는 "lords"(플레이어의 영주 전원), "people"(플레이어의 사람 전원)
 		int Index = -1;			// 능력치나 욕구의 번호
 		double Amount = 0;		// 맞출 수, 더할 수, 나이
-		std::string Text;		// 특성이나 지식의 이름
+		std::string Text;		// 특성이나 지식의 이름, 장비 묶음의 이름, 역할 프리셋의 Id
 	};
 
 	// 원격 명령의 낱말: skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove,
-	// knowledge_all, knowledge_add, money_add, item_add.
+	// knowledge_all, knowledge_add, money_add, item_add, equip, role.
 	bool ParsePersonAct(const std::string& Word, PersonAct& Out);
 	const char* PersonActWord(PersonAct Act);
 	// 그 명령이 번호(능력치·욕구·자원)를, 수를, 글(특성이나 지식의 이름)을 받는가.

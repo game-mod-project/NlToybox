@@ -45,6 +45,19 @@ namespace NlCore
 	// Traits: 지금 가진 특성.
 	RoleTodo PlanRole(const RolePreset& Role, const std::vector<double>& Skills, const std::vector<std::string>& Traits);
 
+	// 할 일을 걸음의 차례로: 능력치 → 떼기 → 붙이기. 해로운 특성을 먼저 뗀다
+	// (그것을 가진 사람에게 맞서는 재능을 게임이 붙여 주는지는 재지 않았다. 거부하든 스스로 떼든 먼저 떼는 쪽이 낫다).
+	struct RoleStep
+	{
+		char Kind = 's';			// 's' 능력치를 쓴다, 'r' 특성을 뗀다, 'a' 특성을 붙인다
+		int Index = -1, Level = 0;	// 's': SkillNames 의 자리와 써 넣을 수
+		std::string Name;			// 'r', 'a': 특성의 이름
+	};
+	std::vector<RoleStep> RoleSteps(const RoleTodo& Todo);
+	// 그 걸음을 지금 해야 하는가. TraitsNow: 걸음 바로 앞에 다시 읽은 특성(앞의 걸음이나 게임이 목록을 바꿨을 수 있다).
+	// 뗄 것이 이미 없거나 붙일 것이 이미 있으면 거짓: 게임의 함수를 부르지 않는다(그런 상태에서 불러 본 적이 없다). 능력치의 걸음은 언제나 참.
+	bool RoleStepNeeded(const RoleStep& Step, const std::vector<std::string>& TraitsNow);
+
 	// 결과의 글. Skills·Added·Removed: 한 것의 수. Failed: 하지 못한 것의 수(Why 에 첫 까닭).
 	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why);
 }

@@ -19,7 +19,9 @@ namespace NlCore
 
 	// 특성의 화면 이름의 열쇠: "trait.<게임의 이름>"(main.csv 에서 본 꼴).
 	std::string TraitCaptionKey(const std::string& Name);
-	// 능력치의 화면 이름의 열쇠: "actor.skill.<능력치의 열쇠>"(main.csv 에서 본 꼴. 열쇠는 PeoplePlan 의 SkillNames 의 것이다).
+	// 능력치의 화면 이름의 열쇠(Skill 은 PeoplePlan 의 SkillNames 의 열쇠). main.csv 의 actor.skill.* 줄에서 본 것:
+	// command, education, fight, knowledge, management, manners, negotiation, oratory (그리고 능력치가 아닌 points_remain).
+	// **전투(combat)의 줄만 이름이 다르다: actor.skill.fight.** 빈 글을 주면 앞머리("actor.skill.")다.
 	std::string SkillCaptionKey(const std::string& Skill);
 
 	// 힌트의 글을 모드창에 보일 글로 고친다(게임은 힌트 창에서 표식을 풀고 자리를 값으로 채운다. 모드창은 그러지 못한다):

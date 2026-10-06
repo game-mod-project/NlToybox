@@ -6,6 +6,7 @@
 #include "DiplomacyPlan.hpp"
 #include "EconomyPlan.hpp"
 #include "PeoplePlan.hpp"
+#include "RolePlan.hpp"
 #include "Presets.hpp"
 #include "WorldPlan.hpp"
 #include "Text.hpp"
@@ -357,6 +358,13 @@ namespace NlCore
 				return fail(std::string("person ") + tokens[1] + " takes only skills_max, needs_fill, happy or cure, lords also knowledge_all, people also equip (name one person for the rest)");
 			if (person.Act == PersonAct::Equip && !FindLoadout(person.Text))
 				return fail("person equip needs name=<h_swordman|h_axeman|h_spearman|h_hammerhead|any>");
+			if (person.Act == PersonAct::Role && !FindRole(person.Text))
+			{
+				std::string ids;
+				for (const RolePreset& role : RolePresets())
+					ids += std::string(ids.empty() ? "" : "|") + role.Id;
+				return fail("person role needs name=<" + ids + ">");
+			}
 			std::string why;
 			if (!CheckPersonCommand(person, why))
 				return fail(std::string("person ") + tokens[2] + " cannot be read");

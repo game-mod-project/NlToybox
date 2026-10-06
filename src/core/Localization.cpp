@@ -149,7 +149,7 @@ namespace NlCore
 
 	std::string SkillCaptionKey(const std::string& Skill)
 	{
-		return "actor.skill." + Skill;
+		return "actor.skill." + (Skill == "combat" ? std::string("fight") : Skill);
 	}
 
 	std::string PlainHint(std::string_view Raw, std::string_view Caption)
