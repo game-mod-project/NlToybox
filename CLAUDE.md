@@ -212,13 +212,39 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     푸는 함수(`reset_agreement`, 인자 5)는 부르지 않았다.
   - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`.
     `queue=1`이면 창의 단추와 같은 길(쌓기)을 탄다.
+- 영주의 호감·충성(`src/Court.cpp`, `core/CourtPlan`. `research/20`). 영주 영역의 아래에 그린다.
+  - 영주가 다른 영주를 보는 평판은 `inst:o_character:<n>.__soul.__character_soul.__opinions`(OpinionMinds)에 든 평판들의 합이다. **대상을 가리키는 인자는 상대의 `__soul.__character_soul`이다**
+    (구조체의 주소로 맞춰 봤다). 수를 바로 쓰지 않고 게임의 디버그 평판(`inst:o_data.opinion_mind_debug_positive|negative`: ±5, 겹침 50)을
+    `opinion_attach(대상, 자료, 1, undefined)`로 붙이고 `detach_generic_opinion_mind(대상, 자료)`로 하나씩 뗀다.
+  - **붙었는지·떼어졌는지는 게임이 세어 주는 수로 본다**: `get_number_of_attached_opinion_minds_for_character(대상, 자료)`가 걸음의 앞뒤로 하나만 바뀌었는가(`NlCore::CourtStepDone`).
+    좋은 것과 나쁜 것을 함께 두지 않는다: 올릴 때 나쁜 것이 있으면 그것부터 뗀다(`PlanCourtStep`). 그래서 겹침 한도에 막혀 반대로 못 가는 일이 없다.
+  - 왕에 대한 충성은 왕을 보는 평판이다: `SoulBasic.get_loyalty_to_king()`(수), `get_loyalty_state()`(0·1·2. 55 에서 2, -19 에서 0 을 봤다. 창의 "낮음·보통·높음"은 모드가 붙인 이름이다),
+    `is_has_loyalty()`(왕과 아이는 거짓). 충성 올리기(`loyal`)는 `is_has_loyalty`가 참인 영주에게만 간다. 왕은 `Faction.get_king_character_soul()`이 돌려준 구조체와 주소가 같은 영주다.
+    왕을 찾지 못하면 충성의 함수를 부르지 않는다(왕이 있는 세이브에서만 쟀다).
+  - 붙인 평판은 두 시간 뒤에도 남았다(세이브에 남는지는 재지 않았다). 좋은 평판 하나의 크기는 사람에 따라 다르다(+5, +6). 그래서 수를 셈하지 않고 평판을 다시 읽으며 한 걸음씩 한다.
+  - 주민·병사의 충성 대상은 `__soul.__fealty.__loyaled_to_uuid`(영주의 uuid, 없으면 빈 글)이고 `__fealty.reset_loyaled_to()`(인자 없음)가 지운다. `o_dummy`에게만 부른다(영주에게는 불러 보지 않았다).
+  - `NlPeople::Rows`가 `Busy`를 돌려주면(인물 쪽이 게임의 함수를 부르는 중에 다시 들어온 틱) 그 틱만 건너뛴다. 쌓인 일을 버리지 않는다.
+  - `__is_king_whose_opinion_defines_loyalty`는 부르지 않는다(그 호출이 든 요청 때 게임의 경고가 났고 원인을 가리지 못했다).
+  - 원격 `court list`, `court <uuid|lords> loyal [goal=]`, `like about=<uuid|lords|king> [goal=]`, `court <uuid> opinion about=<uuid|king> amount=<수>`(한 짝씩만), `clear about=…`, `release`. `queue=1`은 외교와 같다.
+- 특성의 글(`core/Localization`, `src/People.cpp`. `research/20`). **게임 파일의 글을 레포에 싣지 않는다**: 모듈이 시작할 때 게임 폴더의 `localization\main.csv`(화면 이름)와
+  힌트 파일 셋(`hints_tutorial.csv`, `hints_with_icons.csv`, `hints.csv`)을 읽는다(Korean 칸, 비면 English 칸. `ReadLocalization`). 시험은 지어낸 글로 한다.
+  - 화면 이름의 열쇠와 설명의 열쇠는 게임에 묻는다: `gml_Script_trait_property_get(이름, 번호)`(게임이 (글, 정수)로 부른다). 0번 이름, 1번 화면 이름의 열쇠(대개 `trait.<이름>`.
+    `aging`은 `trait.oldman`, 안쪽 특성 `__…__`은 빈 글), **21번 힌트(설명)의 열쇠**. **열쇠를 이름으로 어림하지 않는다**(`hint_<이름>`·`hint_talent_<이름>`·`hint_trait_<이름>`이 섞여 있고 44개는 어느 꼴도 아니다).
+  - 번호는 이 빌드의 것이다. 쓰기 전에 배치를 본다: 이름의 줄이 있는 특성 셋에서 0번이 그 이름이고 1번이 `trait.`로 시작하는가(`TraitLayoutProbes`·`TraitLayoutOk`. 이름순의 앞쪽인 `__…__`으로 확인하지 않는다),
+    21번이 준 열쇠의 절반은 힌트 파일에 있는가(`HintKeysPlausible`). 어긋나면 설명을 붙이지 않고 까닭을 창과 로그에 적는다. 게임이 갱신되면 `research/20`의 표를 다시 잰다.
+  - 힌트의 첫 줄은 제목이고 그 아래가 설명이다(`SplitHint`). 꺾쇠 표식은 지우고 `{…}` 자리는 "(값)"으로 보인다(`PlainHint`). 이름의 줄이 없는 특성은 힌트의 제목을 흐린 글씨의 명칭으로 보인다(`GoodHintTitle`).
+  - 진짜 파일을 코어의 코드로 읽어 보는 선택 시험: `$env:NLTOYBOX_TEST_GAME_DIR = <게임 폴더>`를 주고 `build\nlcore_tests.exe tools\probes`(글은 내지 않고 수만 낸다. 평소 시험은 게임 파일에 기대지 않는다).
+  - **긴 글을 표의 좁은 칸에 두지 않는다**(설명 칸이 한 글자 너비가 돼 세로로 흘렀다). 명칭 아래의 줄로 그린다. 창을 고치면 `shot`으로 받아 눈으로 본다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품), `diplomacy`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품), `diplomacy`, `court`, `traits [find=] [max=]`.
+  - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
+  - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
+  - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).
   잰 것은 `research/07-remote.md`.
   - 게임 화면의 값을 찾는 일은 사용자에게 넘기지 않는다. 실행 묶음을 켜고 세이브를 불러와(`load-save.ps1`) `ask.ps1`로 찾는다.
   - **게임 스크립트는 `gml_Script_` 이름으로만 부르고 훅을 건다.** 접두 없는 이름은 러너에서 다른 루틴을 가리킨다(`NlCore::ScriptRoutineName`).
