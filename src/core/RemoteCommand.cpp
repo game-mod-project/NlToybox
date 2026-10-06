@@ -386,7 +386,8 @@ namespace NlCore
 		{
 			// diplomacy list                                                  왕국들과 지금의 관계
 			// diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]  바라는 관계가 될 때까지 평판을 붙인다(core/DiplomacyPlan)
-			// diplomacy <uuid> opinion amount=<수> [side=them|us|both]         평판을 그만큼 움직인다(5 의 배수로)
+			// diplomacy <uuid> opinion amount=<개수> [side=them|us|both]       디버그 평판을 그 개수만큼 붙인다(-40 ~ 40)
+			// diplomacy <uuid> pact name=<peace|trade|defence>                 그 왕국과 협정을 맺는다
 			if (count >= 2 && tokens[1] == "list")
 			{
 				if (count != 2)
@@ -400,6 +401,13 @@ namespace NlCore
 			command.Target = tokens[1];
 			if (!options(3))
 				return command;
+			// 모르는 열쇠는 받지 않는다(sdie=them 이 조용히 양쪽을 움직이지 않게). queue 는 1 만(창의 단추처럼 쌓는다).
+			for (const auto& [key, value] : command.Options)
+				if (key != "side" && key != "amount" && key != "name" && key != "queue")
+					return fail("diplomacy takes only side=, amount=, name= and queue=1: " + key);
+			const auto queue = command.Options.find("queue");
+			if (queue != command.Options.end() && queue->second != "1")
+				return fail("diplomacy queue= takes only 1");
 			command.Options["goal"] = tokens[2];
 			diplomacy.Who = tokens[1];
 			const auto side = command.Options.find("side");

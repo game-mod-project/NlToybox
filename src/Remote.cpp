@@ -437,7 +437,7 @@ namespace
 		if (goal == C.Options.end() || !NlCore::ParseDiplomacyGoal(goal->second, command.Goal)
 			|| (side != C.Options.end() && !NlCore::ParseDiplomacySide(side->second, command.Side)))
 		{
-			Say("  : diplomacy needs who and friends, neutral, hostile or opinion");
+			Say("  : diplomacy needs who and friends, neutral, hostile, opinion or pact");
 			return;
 		}
 		command.Amount = C.Number;

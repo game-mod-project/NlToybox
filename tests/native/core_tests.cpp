@@ -1737,28 +1737,54 @@ int main(int argc, char** argv)
 	});
 
 	Test("외교: 한 걸음의 판단과 한도", [] {
-		// (지금의 관계, 목표, 방향, 더 붙여도 되는 수, 붙인 수, 이 실행에서 그 대상에게 붙인 좋은 평판·나쁜 평판의 수)
-		DiplomacyStep step = PlanStep(7, DiplomacyGoal::Friends, 0, 40, 0, 0, 0);
+		// (지금의 관계, 목표, 방향, 더 붙여도 되는 수, 붙인 수)
+		DiplomacyStep step = PlanStep(7, DiplomacyGoal::Friends, 0, 40, 0);
 		CHECK(step.Outcome == 0 && step.Direction == 1);
-		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 40, 0, 0, 0).Outcome == 'a');		// 처음부터 그 관계였다
-		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 33, 7, 7, 0).Outcome == 'd');		// 붙여서 됐다
-		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, 0, 40, 40, 0).Outcome == 'l');		// 한도까지 붙였지만 안 됐다
-		CHECK(PlanStep(5, DiplomacyGoal::Neutral, 0, 40, 0, 0, 0).Outcome == 'k');
-		step = PlanStep(4, DiplomacyGoal::Hostile, 0, 40, 0, 0, 0);
+		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 40, 0).Outcome == 'a');		// 처음부터 그 관계였다
+		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 33, 7).Outcome == 'd');		// 붙여서 됐다
+		CHECK(PlanStep(4, DiplomacyGoal::Friends, 0, 0, 40).Outcome == 'd');		// 마지막으로 허락된 걸음에 닿았다: 한도가 아니라 됐다
+		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, 0, 40).Outcome == 'l');		// 한도까지 붙였지만 안 됐다
+		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, -1, 40).Outcome == 'l');		// 음수인 한도도 한도다
+		CHECK(PlanStep(5, DiplomacyGoal::Neutral, 0, 40, 0).Outcome == 'k');
+		step = PlanStep(4, DiplomacyGoal::Hostile, 0, 40, 0);
 		CHECK(step.Outcome == 0 && step.Direction == -1);
 		// 평판의 수: 정한 만큼만. 동맹·봉신·주군·모르는 관계에는 붙이지 않는다(목표가 있는 일과 같다).
-		step = PlanStep(3, DiplomacyGoal::Opinion, -1, 2, 0, 0, 0);
+		step = PlanStep(3, DiplomacyGoal::Opinion, -1, 2, 0);
 		CHECK(step.Outcome == 0 && step.Direction == -1);
-		CHECK(PlanStep(3, DiplomacyGoal::Opinion, -1, 0, -2, 0, 2).Outcome == 'd');
-		CHECK(PlanStep(0, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k' && PlanStep(6, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k'
-			&& PlanStep(8, DiplomacyGoal::Opinion, 1, 2, 0, 0, 0).Outcome == 'k');
-		CHECK(PlanStep(3, DiplomacyGoal::Opinion, 0, 2, 0, 0, 0).Outcome == 'k');		// 방향이 없다
-		// 같은 평판은 50겹까지다: 이 실행에서 그 방향으로 이미 그만큼 붙였으면 더 붙이지 않는다(한도에서 게임이 무엇을 하는지 잰 적이 없다).
-		CHECK(PlanStep(3, DiplomacyGoal::Friends, 0, 40, 0, 50, 0).Outcome == 'l');
-		step = PlanStep(3, DiplomacyGoal::Friends, 0, 40, 0, 49, 50);
-		CHECK(step.Outcome == 0 && step.Direction == 1);
-		CHECK(PlanStep(3, DiplomacyGoal::Opinion, -1, 5, 0, 0, 50).Outcome == 'l');
-		CHECK(PlanStep(3, DiplomacyGoal::Pact, 0, 40, 0, 0, 0).Outcome == 'k');			// 협정은 걸음이 아니다
+		CHECK(PlanStep(3, DiplomacyGoal::Opinion, -1, 0, -2).Outcome == 'd');
+		CHECK(PlanStep(0, DiplomacyGoal::Opinion, 1, 2, 0).Outcome == 'k' && PlanStep(6, DiplomacyGoal::Opinion, 1, 2, 0).Outcome == 'k'
+			&& PlanStep(8, DiplomacyGoal::Opinion, 1, 2, 0).Outcome == 'k');
+		CHECK(PlanStep(3, DiplomacyGoal::Opinion, 0, 2, 0).Outcome == 'k');			// 방향이 없다
+		CHECK(PlanStep(3, DiplomacyGoal::Pact, 0, 40, 0).Outcome == 'k');			// 협정은 걸음이 아니다
+		// 끝나는가: 가짜 관계표로 돌려 본다. 한 걸음에 관계가 어떻게 뛰든 0 을 돌려준 걸음마다 Left 가 줄어 한도 안에 끝난다.
+		for (const DiplomacyGoal goal : { DiplomacyGoal::Friends, DiplomacyGoal::Neutral, DiplomacyGoal::Hostile })
+			for (int start = -60; start <= 60; start += 7)
+			{
+				int opinion = start, left = k_OpinionStepsMax, done = 0, steps = 0;
+				const auto kind = [](int value) { return value >= 25 ? 4 : value <= -45 ? 2 : value <= -20 ? 1 : value < 0 ? 7 : 3; };
+				DiplomacyStep now = PlanStep(kind(opinion), goal, 0, left, done);
+				while (now.Outcome == 0 && steps < 1000)
+				{
+					opinion += now.Direction * 31;		// 중립을 건너뛸 만큼 크게 움직이는 왕
+					left--;
+					done += now.Direction;
+					steps++;
+					now = PlanStep(kind(opinion), goal, 0, left, done);
+				}
+				CHECK(steps <= k_OpinionStepsMax && now.Outcome != 0);
+			}
+	});
+
+	Test("외교: 건드려도 되는 왕국인가를 물은 결과", [] {
+		// (is_destroyed 를 불러 불리언을 받았는가, 그 답, 왕국의 왕을 물어 답을 받았는가, 왕이 구조체인가, 우리 왕을 물어 답을 받았는가, 우리 왕이 구조체인가)
+		CHECK(AliveOutcome(true, false, true, true, true, true) == 0);			// 살아 있고 양쪽에 왕이 있다
+		CHECK(AliveOutcome(true, true, false, false, false, false) == 'x');		// 망했다: 더 묻지 않는다
+		CHECK(AliveOutcome(true, false, true, false, true, true) == 'x');		// 그 왕국에 왕이 없다
+		// 묻지 못한 것은 "망했다"가 아니라 실패다(둘째 검토의 지적: 게임이 갱신돼 함수가 없어지면 스물네 왕국이 모두 망한 것으로 읽혔다).
+		CHECK(AliveOutcome(false, false, false, false, false, false) == 'f');
+		CHECK(AliveOutcome(true, false, false, false, true, true) == 'f');
+		CHECK(AliveOutcome(true, false, true, true, false, false) == 'f');
+		CHECK(AliveOutcome(true, false, true, true, true, false) == 'f');		// 우리 쪽에 왕이 없다: 그 왕국의 탓이 아니다
 	});
 
 	Test("외교: 명령을 일들로 푼다", [] {
@@ -1790,14 +1816,20 @@ int main(int argc, char** argv)
 		// 검토의 지적: 창은 앞의 몇 줄만 보인다. 실패한 줄이 앞에 와야 "안 된 것"을 읽을 수 있다. 실패끼리, 나머지끼리는 한 차례대로.
 		CHECK(tally.Lines() == (std::vector<std::string>{ "C 실패", "E 한도", "A 바꿈", "B 그대로", "D 안 건드림" }));
 		// "이미 그 관계"와 "건드리지 않음"을 "됐다"에 넣지 않는다.
-		CHECK_STR(tally.Summary(), "5개 가운데 바꾼 것 1개, 그대로 둔 것 2개, 안 된 것 2개");
+		CHECK_STR(tally.Summary(), "5개 가운데 한 것 1개, 그대로 둔 것 2개, 안 된 것 2개");
+		// 일을 두 번에 걸쳐 쌓아도 더해진다. 버린 일 뒤의 실패도 실패끼리의 차례대로 앞에 온다.
+		tally.Expect(2);
+		tally.Drop(1, "게임 화면이 아닙니다");
+		tally.Add('f', "F 실패");
+		CHECK(tally.Asked() == 7 && tally.Failed() == 4 && tally.Pending() == 0);
+		CHECK(tally.Lines()[2] == "하지 못하고 버린 일 1개: 게임 화면이 아닙니다" && tally.Lines()[3] == "F 실패" && tally.Lines()[4] == "A 바꿈");
 		// 하지 못하고 버린 일은 실패로 센다(게임 화면을 떠났다. 검토의 지적: 버린 일이 "됐다"에 남았다).
 		DiplomacyTally dropped;
 		dropped.Expect(48);
 		dropped.Add('d', "A 바꿈");
 		dropped.Drop(47, "게임 화면이 아닙니다");
 		CHECK(dropped.Failed() == 47 && dropped.Pending() == 0 && dropped.Lines()[0] == "하지 못하고 버린 일 47개: 게임 화면이 아닙니다");
-		CHECK_STR(dropped.Summary(), "48개 가운데 바꾼 것 1개, 그대로 둔 것 0개, 안 된 것 47개");
+		CHECK_STR(dropped.Summary(), "48개 가운데 한 것 1개, 그대로 둔 것 0개, 안 된 것 47개");
 		dropped.Drop(0, "아무것도");
 		CHECK(dropped.Failed() == 47 && dropped.Lines().size() == 2);
 		// 아직 하는 중
@@ -1805,7 +1837,7 @@ int main(int argc, char** argv)
 		busy.Expect(3);
 		busy.Add('x', "망한 왕국");
 		CHECK(busy.Pending() == 2 && busy.Same() == 1);
-		CHECK_STR(busy.Summary(), "3개 가운데 바꾼 것 0개, 그대로 둔 것 1개, 안 된 것 0개 (남은 일 2개)");
+		CHECK_STR(busy.Summary(), "3개 가운데 한 것 0개, 그대로 둔 것 1개, 안 된 것 0개 (남은 일 2개)");
 		busy.Reset();
 		CHECK(busy.Empty() && busy.Lines().empty() && busy.Pending() == 0);
 	});
@@ -1850,6 +1882,10 @@ int main(int argc, char** argv)
 		CHECK_STR(DiplomacyReport("크래스터", 't', -1, -1, 0, 'f', "관계를 읽지 못했습니다"), "크래스터: 그쪽이 우리를 ? -> ?. 실패: 관계를 읽지 못했습니다");
 		CHECK_STR(DiplomacyReport("크래스터", 't', 3, 3, 0, 'x', ""), "크래스터: 망했거나 왕이 없는 왕국입니다. 건드리지 않습니다");
 		CHECK(DiplomacyFailed('l') && DiplomacyFailed('f') && !DiplomacyFailed('d') && !DiplomacyFailed('a') && !DiplomacyFailed('k') && !DiplomacyFailed('x'));
+		// 평판의 수(목표가 없는 일): 붙인 개수와 관계를 따로 적는다. 관계가 그대로면 그대로라고 적는다(둘째 검토의 지적: 붙인 것을 "바꿨다"고 적지 않는다).
+		CHECK_STR(OpinionReport("라크리아", 'u', 3, 3, -2), "라크리아: 우리가 그쪽을 보는 평판에 나쁜 평판 2개를 붙였습니다 (관계는 중립 그대로)");
+		CHECK_STR(OpinionReport("라크리아", 't', 4, 3, -1), "라크리아: 그쪽이 우리를 보는 평판에 나쁜 평판 1개를 붙였습니다 (관계는 우호 -> 중립)");
+		CHECK_STR(OpinionReport("라크리아", 't', 3, 3, 3), "라크리아: 그쪽이 우리를 보는 평판에 좋은 평판 3개를 붙였습니다 (관계는 중립 그대로)");
 
 		// 원격 명령
 		const RemoteCommand list = ParseRemoteLine("diplomacy list");
@@ -1863,6 +1899,11 @@ int main(int argc, char** argv)
 		// 단추와 같은 길(쌓기)
 		const RemoteCommand queued = ParseRemoteLine("diplomacy 1fa50db321ce450b friends queue=1");
 		CHECK(queued.Error.empty() && queued.Options.count("queue") == 1 && queued.Options.at("goal") == "friends");
+		// 모르는 열쇠는 받지 않는다(검토의 지적: sdie=them 이 조용히 양쪽을 움직였다). queue 는 1 만.
+		CHECK(ParseRemoteLine("diplomacy 1fa50db321ce450b pact name=peace queue=1").Error.empty());
+		for (const char* bad : { "diplomacy 1fa50db321ce450b hostile sdie=them", "diplomacy 1fa50db321ce450b friends queue=0", "diplomacy 1fa50db321ce450b friends queue=yes",
+			"diplomacy 1fa50db321ce450b pact name=peace foo=1", "diplomacy all neutral side=both extra=1" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
 		for (const char* bad : { "diplomacy", "diplomacy all", "diplomacy all hostile", "diplomacy all opinion amount=25", "diplomacy nobody friends",
 			"diplomacy 1fa50db321ce450b allies", "diplomacy 1fa50db321ce450b friends side=sideways", "diplomacy 1fa50db321ce450b opinion",
 			"diplomacy 1fa50db321ce450b opinion amount=0", "diplomacy 1fa50db321ce450b opinion amount=41", "diplomacy 1fa50db321ce450b opinion amount=2.5",
@@ -1889,6 +1930,7 @@ int main(int argc, char** argv)
 		// 쓸 수: 이미 든 협정을 지우지 않게 지금의 비트에 더한다. 칸이 없으면 그 협정의 비트만.
 		CHECK(PactCell(0, DiplomacyPact::Peace) == 4 && PactCell(4, DiplomacyPact::Trade) == 12 && PactCell(12, DiplomacyPact::Defence) == 204);
 		CHECK(PactCell(-1, DiplomacyPact::Trade) == 8 && PactCell(4, DiplomacyPact::Peace) == 4);
+		CHECK(PactCell(64, DiplomacyPact::Defence) == 192 && PactCell(68, DiplomacyPact::Trade) == 76);		// 모르는 비트(반쪽)도 지우지 않는다
 		// 창에 보일 글
 		CHECK_STR(PactText(0), "-");
 		CHECK_STR(PactText(-1), "-");

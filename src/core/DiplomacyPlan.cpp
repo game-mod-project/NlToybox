@@ -209,7 +209,7 @@ namespace NlCore
 		return static_cast<int>(Amount);
 	}
 
-	DiplomacyStep PlanStep(double Kind, DiplomacyGoal Goal, int Sign, int Left, int Done, int Good, int Bad)
+	DiplomacyStep PlanStep(double Kind, DiplomacyGoal Goal, int Sign, int Left, int Done)
 	{
 		DiplomacyStep step;
 		const int kind = WholeKind(Kind);
@@ -254,14 +254,28 @@ namespace NlCore
 				return step;
 			}
 		}
-		// 같은 평판의 겹침 한도까지 가지 않는다.
-		if ((direction > 0 ? Good : Bad) >= k_OpinionStackLimit)
-		{
-			step.Outcome = 'l';
-			return step;
-		}
 		step.Direction = direction;
 		return step;
+	}
+
+	char AliveOutcome(bool Asked, bool Destroyed, bool KingAsked, bool HasKing, bool OursAsked, bool OursHasKing)
+	{
+		if (!Asked)
+			return 'f';			// 묻지 못한 것을 "망했다"로 읽지 않는다
+		if (Destroyed)
+			return 'x';
+		if (!KingAsked)
+			return 'f';
+		if (!HasKing)
+			return 'x';
+		return OursAsked && OursHasKing ? 0 : 'f';
+	}
+
+	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps)
+	{
+		const std::string before = RelationLabel(Before), after = RelationLabel(After);
+		return Name + (Side == 't' ? ": 그쪽이 우리를 보는 평판에 " : ": 우리가 그쪽을 보는 평판에 ") + (Steps > 0 ? "좋은" : "나쁜") + " 평판 "
+			+ std::to_string(Steps > 0 ? Steps : -Steps) + "개를 붙였습니다 (관계는 " + (before == after ? before + " 그대로" : before + " -> " + after) + ")";
 	}
 
 	bool GoodFactionWho(const std::string& Who)
@@ -342,7 +356,7 @@ namespace NlCore
 
 	std::string DiplomacyTally::Summary() const
 	{
-		std::string text = std::to_string(m_Asked) + "개 가운데 바꾼 것 " + std::to_string(m_Changed) + "개, 그대로 둔 것 " + std::to_string(m_Same)
+		std::string text = std::to_string(m_Asked) + "개 가운데 한 것 " + std::to_string(m_Changed) + "개, 그대로 둔 것 " + std::to_string(m_Same)
 			+ "개, 안 된 것 " + std::to_string(m_Failed) + "개";
 		if (Pending() > 0)
 			text += " (남은 일 " + std::to_string(Pending()) + "개)";

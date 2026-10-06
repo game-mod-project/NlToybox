@@ -35,22 +35,28 @@ namespace NlCore
 
 	constexpr int k_OpinionUnit = 5;			// 디버그 평판의 자료에 적힌 크기(opinion_mind_debug_positive·negative 의 __opinion_modify 의 절댓값). 붙이기 전에 견준다
 	constexpr int k_OpinionStepsMax = 40;		// 한 번의 명령이 한쪽에 붙이는 평판의 한도(그 평판의 겹침 한도보다 작게)
-	constexpr int k_OpinionStackLimit = 50;		// 그 평판의 겹침 한도(__stack_limit). 한도에서 게임이 무엇을 하는지는 재지 않았다: 거기까지 가지 않는다
+	constexpr int k_OpinionStackLimit = 50;		// 그 평판의 자료에 적힌 겹침 한도(__stack_limit). 모듈은 세지 않는다(세이브를 다시 불러오면 센 수가 게임과 어긋난다)
 	// 평판의 수(Opinion 의 Amount): 붙일 디버그 평판의 개수다(부호가 방향). 0 이 아닌 정수이고 절댓값이 한도 안이어야 한다. 아니면 0(받지 않는다).
-	// 하나가 관계를 얼마나 움직이는지는 왕마다 달랐다(중립에서 우호까지 1개 ~ 15개). 그래서 수치가 아니라 개수로 다룬다.
+	// 중립에서 우호가 되기까지 드는 개수는 왕국마다 달랐다(1개 ~ 15개. research/19). 그래서 수치를 약속하지 않고 개수로 다룬다.
 	int OpinionSteps(double Amount);
 
 	// 일의 한 걸음의 판단. Outcome 이 0 이면 Direction(+1 좋은 평판, -1 나쁜 평판)을 하나 붙인다. 아니면 끝났다:
 	//   'd' 됐다(바라는 관계가 됐다, 정한 만큼 붙였다), 'a' 처음부터 그 관계였다, 'k' 건드리지 않는 관계다(동맹·봉신·주군·모르는 수. 방향이 없는 평판, 협정도),
-	//   'l' 한도까지 붙였지만 되지 않았다(이 명령의 한도, 또는 이 실행에서 그 방향으로 붙인 수가 겹침 한도에 닿았다).
+	//   'l' 이 명령의 한도까지 붙였지만 되지 않았다.
 	// Kind: 지금의 관계. Sign: Opinion 의 방향. Left: 이 일이 더 붙여도 되는 수. Done: 이 일이 붙인 수(부호가 방향).
-	// Good·Bad: 이 실행에서 그 대상에게 이미 붙인 좋은 평판·나쁜 평판의 수.
+	// 0 을 돌려준 걸음마다 부른 쪽이 Left 를 하나 줄인다. 그래서 관계가 어떻게 뛰든 한도 안에 끝난다(시험이 가짜 관계표로 돌려 본다).
 	struct DiplomacyStep
 	{
 		char Outcome = 0;
 		int Direction = 0;
 	};
-	DiplomacyStep PlanStep(double Kind, DiplomacyGoal Goal, int Sign, int Left, int Done, int Good, int Bad);
+	DiplomacyStep PlanStep(double Kind, DiplomacyGoal Goal, int Sign, int Left, int Done);
+
+	// 그 왕국을 건드려도 되는가: 망했는지(is_destroyed)와 양쪽에 왕이 있는지(get_king_character_soul)를 물은 결과로 정한다.
+	// Asked: is_destroyed 를 불러 불리언을 받았다. Destroyed: 그 답. KingAsked·HasKing: 그 왕국의 왕을 물어 답을 받았다, 구조체다.
+	// OursAsked·OursHasKing: 우리 왕을 물어 답을 받았다, 구조체다.
+	// 돌려주는 값: 0 건드려도 된다, 'x' 망했거나 그 왕국에 왕이 없다(건드리지 않는다), 'f' 묻지 못했거나 우리 쪽에 왕이 없다(실패).
+	char AliveOutcome(bool Asked, bool Destroyed, bool KingAsked, bool HasKing, bool OursAsked, bool OursHasKing);
 
 	// 협정(FactionsAgreementMatrix 의 칸의 비트. 게임의 판정 함수가 is_has_agreement 에 넘기는 수): 평화 4, 교역 협정 8, 방어 동맹 192.
 	enum class DiplomacyPact { Peace, Trade, Defence };
@@ -99,9 +105,12 @@ namespace NlCore
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why);
 	// 그 결과가 실패인가('l', 'f').
 	bool DiplomacyFailed(char Outcome);
+	// 평판의 수(목표가 없는 일)를 정한 만큼 붙인 뒤의 글. 붙인 개수와 관계를 따로 적는다(붙인 것을 "바꿨다"고 적지 않는다).
+	// 붙었는지는 게임의 함수가 구조체를 돌려준 것으로 본 것이다(평판의 수를 다시 읽는 길은 재지 못했다).
+	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps);
 
 	// 명령 하나(또는 쌓인 일들)의 결과를 세고 줄을 모은다. 실패한 줄을 앞에 둔다(창은 앞의 몇 줄만 보인다).
-	// "이미 그 관계였다"와 "건드리지 않았다"는 바꾼 것에 넣지 않는다.
+	// "이미 그 관계였다"와 "건드리지 않았다"는 한 것에 넣지 않는다(그대로 둔 것).
 	class DiplomacyTally
 	{
 	public:
