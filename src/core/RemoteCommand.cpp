@@ -429,7 +429,7 @@ namespace NlCore
 		}
 		else if (verb == "crime")
 		{
-			// crime list | clear <uuid|all> | return_stolen | absolve <uuid|lords> | acquit <uuid|lords>      범죄 패널의 단추와 같은 길(core/CrimePlan)
+			// crime list | clear <uuid|all> | return_stolen <uuid|all> | absolve <uuid|lords> | acquit <uuid|lords>      범죄 패널의 단추와 같은 길(core/CrimePlan)
 			CrimeCommand crime;
 			std::string why;
 			if (!ParseCrimeCommand(std::vector<std::string>(tokens.begin() + 1, tokens.end()), crime, why))

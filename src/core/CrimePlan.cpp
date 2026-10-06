@@ -19,7 +19,7 @@ namespace NlCore
 		constexpr ActInfo k_Acts[] = {
 			{ CrimeAct::List, "list", 'n' },
 			{ CrimeAct::Clear, "clear", 'a' },
-			{ CrimeAct::ReturnStolen, "return_stolen", 'n' },
+			{ CrimeAct::ReturnStolen, "return_stolen", 'a' },
 			{ CrimeAct::Absolve, "absolve", 'l' },
 			{ CrimeAct::Acquit, "acquit", 'l' },
 		};
@@ -51,7 +51,7 @@ namespace NlCore
 
 	bool IsVagabondFlag(bool Read, double Raw)
 	{
-		return Read && std::isfinite(Raw) && Raw != 0;
+		return Read && std::isfinite(Raw) && Raw > 0;
 	}
 
 	std::string VagabondLine(const Vagabond& Who, double Now)
@@ -69,21 +69,49 @@ namespace NlCore
 		return out;
 	}
 
-	std::string CrimeSummary(int Vagabonds, int Thugs, double EventsToday, double LastCrimes)
+	bool CanClear(const Vagabond& Who)
+	{
+		return !Who.Thug;
+	}
+
+	std::string LordsLine(int Lords, int WithCrimes, int Unread)
+	{
+		if (Lords <= 0)
+			return "플레이어의 영주가 없습니다";
+		std::string out = "플레이어의 영주 " + People(Lords) + " 가운데 죄나 범죄 혐의가 있는 사람 " + People(WithCrimes);
+		if (Unread > 0)
+			out += " (" + People(Unread) + "은 읽지 못했습니다)";
+		return out;
+	}
+
+	ClearOutcome AfterClear(bool SamePerson, bool FlagRead, double Raw)
+	{
+		if (!SamePerson || !FlagRead || !std::isfinite(Raw))
+			return ClearOutcome::Unknown;
+		return Raw > 0 ? ClearOutcome::Still : ClearOutcome::Cleared;
+	}
+
+	std::string StolenReport(int Called, double GoldBefore, double GoldAfter, const std::string& Why)
+	{
+		if (Called <= 0)
+			return Why.empty() ? std::string("부를 부랑자가 없습니다") : "게임의 '훔친 것 되돌리기'를 부르지 못했습니다: " + Why;
+		return "부랑자 " + People(Called) + "에게 게임의 '훔친 것 되돌리기'를 불렀습니다: 훔친 금화의 합 " + std::to_string(std::llround(GoldBefore)) + " 에서 "
+			+ std::to_string(std::llround(GoldAfter)) + " (확인 전의 기능입니다" + (Why.empty() ? std::string() : ". 못 부른 사람이 있습니다: " + Why) + ")";
+	}
+
+	std::string CrimeSummary(int Vagabonds, int Thugs, int Unread)
 	{
 		std::string out = Vagabonds > 0 ? "부랑자 " + People(Vagabonds) : std::string("부랑자 없음");
 		if (Vagabonds > 0 && Thugs > 0)
 			out += " (깡패 " + People(Thugs) + ")";
-		if (std::isfinite(EventsToday) && EventsToday >= 0)
-			out += ", 오늘의 범죄 사건 " + std::to_string(std::llround(EventsToday)) + "건";
-		if (std::isfinite(LastCrimes) && LastCrimes >= 0)
-			out += ", 범죄 기록 " + std::to_string(std::llround(LastCrimes)) + "건";
+		if (Unread > 0)
+			out += " (주민 " + People(Unread) + "은 읽지 못했습니다)";
 		return out;
 	}
 
 	bool ParseCrimeCommand(const std::vector<std::string>& Words, CrimeCommand& Out, std::string& Why)
 	{
-		static const char* k_Usage = "crime needs list, clear <uuid|all>, return_stolen, absolve <uuid|lords> or acquit <uuid|lords>";
+		static const char* k_Usage = "crime needs list, clear <uuid|all>, return_stolen <uuid|all>, absolve <uuid|lords> or acquit <uuid|lords>";
 		if (Words.empty())
 		{
 			Why = k_Usage;
@@ -124,32 +152,44 @@ namespace NlCore
 		return "";
 	}
 
-	std::string ClearReport(int Asked, int Done, int Skipped, const std::string& Why)
+	std::string ClearReport(int Asked, int Done, int Skipped, int Unsure, const std::string& Why)
 	{
 		if (Asked <= 0)
-			return "부랑자가 없습니다";
+			return "되돌릴 부랑자가 없습니다";
 		if (Done == Asked)
 			return "부랑자 " + People(Asked) + "을 주민으로 되돌렸습니다";
-		std::string out = "부랑자 " + People(Asked) + " 가운데 " + People(Done) + "을 주민으로 되돌렸습니다 (";
-		const int failed = Asked - Done - Skipped;
+		std::string notes;
+		const auto note = [&notes](const std::string& text) { notes += std::string(notes.empty() ? "" : ", ") + text; };
+		const int failed = Asked - Done - Skipped - Unsure;
 		if (Skipped > 0)
-			out += "그사이 범죄자가 아니게 됐거나 자리가 바뀐 " + People(Skipped) + "은 건너뜀";
+			note("그사이 범죄자가 아니게 됐거나 자리가 바뀐 " + People(Skipped) + "은 건너뜀");
+		if (Unsure > 0)
+			note(People(Unsure) + "은 부른 뒤 확인하지 못함");
 		if (failed > 0)
-			out += std::string(Skipped > 0 ? ", " : "") + People(failed) + "은 못 함" + (Why.empty() ? "" : ": " + Why);
-		return out + ")";
+			note(People(failed) + "은 못 함" + (Why.empty() ? "" : ": " + Why));
+		return "부랑자 " + People(Asked) + " 가운데 " + People(Done) + "을 주민으로 되돌렸습니다 (" + notes + ")";
 	}
 
-	std::string TraitClearReport(bool Sins, int Lords, int Removed, int Failed, const std::string& Why)
+	std::string TraitClearReport(bool Sins, int Lords, int Removed, int Failed, int Unread, const std::string& Why)
 	{
 		const char* what = Sins ? "죄" : "범죄 혐의";
 		if (Lords <= 0)
-			return Why.empty() ? std::string("플레이어의 영주가 없습니다") : "영주를 읽지 못했습니다: " + Why;
+			return "플레이어의 영주가 없습니다";
 		if (Removed == 0 && Failed == 0)
-			return std::string("지울 ") + what + "가 없습니다 (영주 " + People(Lords) + ")";
-		std::string out = "영주 " + People(Lords) + "에게서 " + what + " " + std::to_string(Removed) + "개를 지웠습니다";
+		{
+			if (Unread <= 0)
+				return std::string("지울 ") + what + "가 없습니다 (영주 " + People(Lords) + ")";
+			if (Unread >= Lords)
+				return "영주 " + People(Lords) + "의 특성을 읽지 못했습니다";
+			return "영주 " + People(Lords) + " 가운데 " + People(Unread) + "의 특성을 읽지 못했습니다 (나머지에게는 지울 " + what + "가 없습니다)";
+		}
+		std::string notes;
+		const auto note = [&notes](const std::string& text) { notes += std::string(notes.empty() ? "" : ", ") + text; };
 		if (Failed > 0)
-			out += " (" + std::to_string(Failed) + "개는 못 뗌" + (Why.empty() ? "" : ": " + Why) + ")";
-		return out;
+			note(std::to_string(Failed) + "개는 못 뗌" + (Why.empty() ? "" : ": " + Why));
+		if (Unread > 0)
+			note(People(Unread) + "은 읽지 못함");
+		return "영주 " + People(Lords) + "에게서 " + what + " " + std::to_string(Removed) + "개를 지웠습니다" + (notes.empty() ? "" : " (" + notes + ")");
 	}
 
 	const std::vector<const char*>& BanditTurnVars()
