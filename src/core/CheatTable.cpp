@@ -315,6 +315,11 @@ namespace NlCore
 			// 세이브에 남는 자료다("mines_stock"). src/World.cpp 가 1초마다 줄어든 수를 되돌려 쓴다(core/WorldPlan 의 KeepStock).
 			{ "mine_stock_hold", Area::World, "광산의 매장량이 줄지 않음", "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock", C, 1, 0, 0, 0, false,
 				"켠 동안 광산마다 매장량이 줄면 줄기 전의 수로 되돌려 쓴다(1초마다). 끄면 그때부터 다시 준다. 효과는 확인 전" },
+			// 지도 공개(research/25): GlobalMapManager.is_initial_area_visible(지역 구조체) -> 불리언. 세계 지도가 열려 있는 동안 게임이 프레임마다 부른다.
+			// 참을 돌려주게 하자(원격 override) 안개 속 지역이 밝아지고 마을의 이름과 지역의 자원 아이콘이 나타났고, 그만두자 원래대로 돌아갔다.
+			// 지도 물체의 is_in_fog_of_war()는 따라 바뀌지 않는다(96개 가운데 83개가 그대로 안개 속으로 읽혔다). 게임의 다른 판정이 그것을 쓰는지는 모른다.
+			{ "reveal_map", Area::World, "세계 지도의 안개 걷기", "inst:o_global_map.__m_global_map.is_initial_area_visible", H, 1, 0, 0, 0, false,
+				"게임이 '이 지역이 보이는가'를 물을 때 언제나 그렇다고 답하게 한다. 세계 지도에서 안개 속 지역의 마을 이름과 자원이 보인다. 끄면 원래대로 돌아간다" },
 			// 세계 지도 관리자(inst:o_global_map.__m_global_map, GlobalMapManager)의 디버그 깃발. 뜻은 이름에서 읽은 것이다. 세이브에 그 열쇠는 없다.
 			{ "fast_map_moving", Area::World, "세계 지도의 이동을 빠르게", "inst:o_global_map.__m_global_map.__debug_fast_moving", T, 1, 0, 0, 0, false,
 				"세계 지도에서 움직이는 것을 빠르게 하는 개발자 스위치로 보인다" },

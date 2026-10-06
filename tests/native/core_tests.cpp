@@ -815,7 +815,11 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 71);
+		CHECK(Cheats().size() == 72);
+		// 지도 공개(research/25): GlobalMapManager.is_initial_area_visible(지역 구조체) -> 불리언. 참을 돌려주게 하자 세계 지도의 안개가 걷혔다
+		// (화면에서 봤다: 지역의 밝기, 마을의 이름, 자원 아이콘). 물체의 is_visible 만으로는 지역이 어두운 채였고 is_in_fog_of_war 만으로는 화면이 그대로였다.
+		CHECK(FindCheat("reveal_map") && FindCheat("reveal_map")->Kind == CheatKind::Hook && FindCheat("reveal_map")->On == 1 && FindCheat("reveal_map")->Where == Area::World
+			&& std::string(FindCheat("reveal_map")->Path) == "inst:o_global_map.__m_global_map.is_initial_area_visible" && HookForcedKind(FindCheat("reveal_map")->Kind) == 'b');
 		// 늑대의 최대 수: WolvesManager.get_max_number_of_wolves()(인자 없음)가 밤에 한 번 불려 수(11.1)를 돌려줬다(research/25). 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
 		CHECK(FindCheat("no_wolves") && FindCheat("no_wolves")->Kind == CheatKind::HookNumber && FindCheat("no_wolves")->On == 0 && FindCheat("no_wolves")->Where == Area::World
 			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n' && !FindCheat("no_wolves")->Verified);
