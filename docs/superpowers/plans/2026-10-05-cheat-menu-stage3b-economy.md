@@ -28,7 +28,7 @@
 
 ## 계획 검토와 구현 뒤에 바뀐 것
 
-Task 1~3 은 구현했다(커밋 `a8f06b6`, `04b7936`, Task 3 의 커밋). 독립 검토("고친 뒤 진행", BLOCKER 1)와 사용자의 확인을 반영해
+Task 1~3 은 구현했다(커밋 `5ec5814`, `5d27ab5`, Task 3 의 커밋). 독립 검토("고친 뒤 진행", BLOCKER 1)와 사용자의 확인을 반영해
 아래 Task 1~3 의 본문과 달라진 곳은 다음과 같다. **`src/Economy.cpp`의 블록은 실제 파일과 같게 맞췄다.** 나머지는 커밋이 기준이다.
 
 - 브랜치: Task 1 앞에서 `git -C E:\NlToyBox switch -c feat/cheat-economy`(`feat/cheat-remote` 위에 쌓는다).
@@ -37,7 +37,7 @@ Task 1~3 은 구현했다(커밋 `a8f06b6`, `04b7936`, Task 3 의 커밋). 독�
 - Task 3: 치트 표의 수는 31 → 30 이다(`resources_edit_mode`를 뺐다. `cap_*` 여섯은 코드 검토 뒤에 다시 뺐다). 시험 파일의 그 줄을 고치고 `instant_build`의 `Verified`,
   `resources_edit_mode`와 `cap_food`가 없는 것을 확인하는 줄을 더했다. 갈래의 차례는 게임의 `__categories_names`를 따른다. 부르기 전의 로그를 호출마다 남기고,
   `change`가 돌려준 적용된 변화량이 청한 것과 다르면 로그와 창에 알린다. 다시 읽지 못하면 쌓인 명령을 버린다. `Do`의 답에 자원의 앞뒤 수를 넣었다.
-- `NlAccess::CallMethod`는 묶인 곳도 묶을 곳도 없는 메서드를 부르지 않는다(`feat/cheat-remote`의 `083ed4f`).
+- `NlAccess::CallMethod`는 묶인 곳도 묶을 곳도 없는 메서드를 부르지 않는다(`feat/cheat-remote`의 `94a157d`).
 - 코드 검토(Critical 0, Important 8) 뒤: `PlanEconomy(Command, Gold, Counts, Free, Stocked)` — 넘기는 변화량은 언제나 유한한 정수다(`Settle`). 읽은 수가 수가 아니면 하지 않는다.
   줄일 때는 예약되지 않은 수(`__no_reserve__`)까지만. 갈래에 없는 자원(0번)은 하나씩으로도 건드리지 않는다. 같은 자원을 두 번 하지 않는다.
   청한 만큼 바뀌었는지는 함수의 반환값이 아니라 앞뒤의 수로 본다(`EconomyShortfall`). 금화의 입력 칸은 지금 금화로 채운다(0 인 채 "맞추기"를 누르면 금화가 사라진다).

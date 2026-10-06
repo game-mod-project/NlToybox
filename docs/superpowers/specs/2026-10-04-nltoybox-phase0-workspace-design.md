@@ -327,7 +327,7 @@ main ← develop ← feat/* | fix/* | chore/* | docs/*
 ```
 
 - `main`은 보호 브랜치다. 직접 커밋하지 않는다. 예외는 저장소를 시작한 빈 루트 커밋
-  하나다(`531f239`).
+  하나다(`b3ea63e`).
 - Phase 0 작업은 `chore/workspace-setup`에서 하고 `develop`에 `git merge --no-ff`로 넣는다.
 - 원격 저장소는 이번 범위에서 만들지 않는다. 그래서 PR 대신 로컬 merge commit을 쓴다.
   원격을 만들면 형제 레포처럼 2단계 PR로 바꾸고 `CLAUDE.md`를 고친다.

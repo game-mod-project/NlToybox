@@ -85,8 +85,8 @@
 ### 결과 (2026-10-06)
 
 - Task 1: 조사 실행 한 번(`stage4-session1`). 답은 `research/11-people.md`.
-- Task 2·3: 인물 패널, 영주·사람 전원의 일괄, 표의 인구 항목 6개(모듈 0.10.0, 커밋 `254d93a`). 한 커밋으로 냈다.
-- Task 4: 독립 검토(Critical 0, Important 2, Minor 16) → 고침(0.10.1, `95e55ec`). 확인 실행 둘(`stage4-session2`, `stage4-session3`): 세이브를 게임의 `load_save`로 직접 불러왔다
+- Task 2·3: 인물 패널, 영주·사람 전원의 일괄, 표의 인구 항목 6개(모듈 0.10.0, 커밋 `18cae17`). 한 커밋으로 냈다.
+- Task 4: 독립 검토(Critical 0, Important 2, Minor 16) → 고침(0.10.1, `f98ce66`). 확인 실행 둘(`stage4-session2`, `stage4-session3`): 세이브를 게임의 `load_save`로 직접 불러왔다
   (`tools/load-save.ps1`). 확인에서 죽음 캐시(`__is_dead` −4)의 버그를 찾아 고쳤다. 마지막 빌드에서 고친 것을 다시 봤다.
 
 ## Self-Review
