@@ -8,6 +8,7 @@
 #include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/Localization.hpp"
+#include "core/RolePlan.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
@@ -112,6 +113,11 @@ namespace
 	std::unordered_map<std::string, TraitText> g_TraitTexts;		// 게임의 이름 -> 보일 글. 게임을 불러올 때마다 채운다(LoadTraitNames)
 	std::string g_TraitHintNote = "설명을 아직 읽지 않았습니다";		// 설명이 몇 개 붙었는가, 또는 붙이지 않은 까닭(게임을 불러올 때마다 다시 적는다)
 	std::string g_HintFilesNote;		// 힌트 파일을 읽은 결과(시작할 때 한 번)
+	// 능력치의 화면 이름(능력치의 열쇠 -> 게임의 한국어 이름. 비면 영어). 시작할 때 main.csv 에서 읽는다(열쇠 "actor.skill.<열쇠>").
+	// 읽지 못한 것은 여기 없고 그때는 모듈의 이름(SkillNames)을 보인다.
+	std::unordered_map<std::string, std::string> g_SkillCaptions;
+	int g_RolePick = 0;					// 창의 선택: 역할 프리셋의 자리(core/RolePlan 의 차례)
+	std::string g_RoleLast, g_RoleLastFor;		// 역할 프리셋의 마지막 결과와 그 사람의 uuid(단추 아래에 보인다. 맨 아래의 글까지 내려가지 않아도 되게)
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
@@ -194,6 +200,14 @@ namespace
 		return caption.empty() ? Name : caption + " (" + Name + ")";
 	}
 
+	// 능력치의 보일 이름: 게임의 글을 읽었으면 그것, 아니면 모듈의 이름.
+	const char* SkillLabel(size_t Index)
+	{
+		const NlCore::NamedKey& skill = NlCore::SkillNames()[Index];
+		const auto found = g_SkillCaptions.find(skill.Key);
+		return found != g_SkillCaptions.end() ? found->second.c_str() : skill.Label;
+	}
+
 	// 게임의 현지화 파일에서 특성의 화면 이름을 읽는다. 러너를 부르지 않는다(파일만 읽는다).
 	void LoadTraitFiles(const std::filesystem::path& GameDir)
 	{
@@ -217,6 +231,17 @@ namespace
 					g_TraitCaptions.emplace(key.substr(prefix.size()), std::move(value));
 				g_TraitTextNote = "게임의 localization\\main.csv 에서 특성의 이름 " + std::to_string(g_TraitCaptions.size()) + "개를 읽었습니다";
 			}
+			// 능력치의 이름도 같은 파일에 있다. 여덟 열쇠의 줄만 받는다(한 줄짜리 짧은 글만. 아니면 모듈의 이름을 쓴다).
+			g_SkillCaptions.clear();
+			std::unordered_map<std::string, std::string> skill_rows;
+			std::string skill_why;
+			if (NlCore::ReadLocalization(text, NlCore::SkillCaptionKey(""), { "Korean", "English" }, skill_rows, skill_why))
+				for (const NlCore::NamedKey& skill : NlCore::SkillNames())
+				{
+					const auto row = skill_rows.find(NlCore::SkillCaptionKey(skill.Key));
+					if (row != skill_rows.end() && !row->second.empty() && row->second.size() <= 48 && row->second.find_first_of("\r\n<{") == std::string::npos)
+						g_SkillCaptions.emplace(skill.Key, row->second);
+				}
 		}
 
 		// 힌트의 글: 게임의 locale_definition.json 이 드는 힌트 파일 셋. 같은 열쇠가 여러 파일에 있으면 먼저 읽은 것을 둔다
@@ -453,6 +478,17 @@ namespace
 		Log("people: " + std::to_string(g_Now.TraitNames.size()) + " trait names");
 		// 보일 이름과 설명, 그리고 창에 보일 차례(TraitNames 는 이름순으로 둔다: 이분 탐색에 쓴다).
 		LoadTraitTexts(g_Now.TraitNames);
+		// 역할 프리셋이 드는 특성 가운데 이 게임에 없는 것(이 빌드에서는 없었다. 게임이 갱신되면 생길 수 있다). 그런 것은 붙이지 않고 결과에 적는다.
+		std::vector<std::string> missing;
+		for (const NlCore::RolePreset& role : NlCore::RolePresets())
+			for (const std::vector<const char*>* side : { &role.Add, &role.Remove })
+				for (const char* name : *side)
+					if (!std::binary_search(g_Now.TraitNames.begin(), g_Now.TraitNames.end(), std::string(name)) && std::find(missing.begin(), missing.end(), name) == missing.end())
+						missing.push_back(name);
+		std::string names;
+		for (const std::string& name : missing)
+			names += " " + name;
+		Log("people: role presets name " + std::to_string(missing.size()) + " trait(s) this game does not have" + (names.empty() ? "" : ":" + names));
 		g_Now.TraitShown = g_Now.TraitNames;
 		std::sort(g_Now.TraitShown.begin(), g_Now.TraitShown.end(),
 			[](const std::string& a, const std::string& b) { return NlCore::TraitBefore(a, TraitCaption(a), b, TraitCaption(b)); });
@@ -565,18 +601,20 @@ namespace
 		});
 	}
 
-	void ReadTraits(const RValue& Soul, std::vector<std::string>& Out)
+	// 가진 특성의 이름들. 목록을 읽지 못하면 거짓(빈 목록과 가른다).
+	bool ReadTraits(const RValue& Soul, std::vector<std::string>& Out)
 	{
 		RValue list;
 		std::string why;
 		Out.clear();
 		if (!NlAccess::Follow(Soul, { { '.', "__traits", 0 }, { '.', "__list_of_traits", 0 } }, list, why) || !list.IsArray())
-			return;
+			return false;
 		NlAccess::ForEachChild(list, Holder::Array, [&](const PathStep&, const RValue& name) {
 			if (name.IsString())
 				Out.push_back(name.ToString());
 			return true;
 		});
+		return true;
 	}
 
 	// 착용 중인 장비의 자원 번호들(값 읽기). __soul.__equipment.__cached_armor·__cached_first_arm·__cached_second_arm 의 __resource(research/12: 6, 10, -1).
@@ -684,6 +722,118 @@ namespace
 		Log("people call trait_detach(" + Name + ") on " + Row.Uuid);		// 부르기 전에 남긴다
 		RValue result;
 		return NlAccess::CallMethod(NlCore::ParseAskPath(Base(Row) + ".__soul.__traits.trait_detach"), { RValue(std::string_view(Name)) }, result, Note);
+	}
+
+	// 특성을 붙인다: Traits.trait_attach("이름") -> uuid. 게임이 글 하나로 부르는 것을 기록했다. 붙인 뒤 다시 읽어 확인한다(Soul 은 다시 읽은 것이 된다).
+	bool Attach(const PersonRow& Row, const std::string& Name, RValue& Soul, std::string& Note)
+	{
+		Log("people call trait_attach(" + Name + ") on " + Row.Uuid);		// 부르기 전에 남긴다
+		RValue result;
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(Base(Row) + ".__soul.__traits.trait_attach"), { RValue(std::string_view(Name)) }, result, Note))
+			return false;
+		if (!StillThere(Row, Soul))
+		{
+			Note = "그 자리의 사람이 바뀌었습니다";
+			return false;
+		}
+		std::vector<std::string> traits;
+		ReadTraits(Soul, traits);
+		if (!Has(traits, Name))
+		{
+			Note = "게임이 붙이지 않았습니다";		// 까닭은 재지 않았다(재능 71개를 붙일 때는 거부가 없었다. research/21)
+			return false;
+		}
+		return true;
+	}
+
+	// 역할 프리셋(core/RolePlan)을 한 사람에게 입힌다: 능력치는 올리기만 하고, 그 역할에 해로운 특성을 떼고, 재능을 붙인다(차례는 core 의 RoleSteps).
+	// 쓰는 길은 한 사람 명령의 것과 같다(능력치: 있는 칸에 쓰고 다시 읽기, 특성: trait_detach·trait_attach 뒤 목록을 다시 읽기).
+	// 걸음마다 그 자리의 사람이 그대로인지 보고, 특성의 걸음은 바로 앞에 목록을 다시 읽어 아직 할 일인지 본다(없는 것을 떼거나 있는 것을 붙이려 부르지 않는다).
+	// Note 는 결과의 글이다(RoleReport: 이름, 한 것, 하지 못한 것).
+	void ApplyRole(const NlCore::RolePreset& Role, const PersonRow& Row, RValue& Soul, std::string& Note)
+	{
+		const std::string soul = Base(Row) + ".__soul";
+		const std::vector<NlCore::NamedKey>& skills = NlCore::SkillNames();
+		int raised = 0, added = 0, removed = 0, failed = 0;
+		std::string why;
+		const auto fail = [&](const std::string& what, const std::string& note) {
+			failed++;
+			const std::string text = what + ": " + (note.empty() ? "하지 못했습니다" : note);
+			if (why.empty())
+				why = text;
+			Log(std::string("people: role ") + Role.Id + " on " + Row.Uuid + " could not do " + text);
+		};
+
+		std::vector<double> levels;
+		for (const NlCore::NamedKey& skill : skills)
+		{
+			double level = k_Unknown;
+			if (!NlAccess::ReadNumber(soul + ".__skills.__level." + skill.Key, level))
+				level = k_Unknown;		// 그 사람에게 없는 능력치(주민은 전투만 있다). 계획이 건너뛴다
+			levels.push_back(level);
+		}
+		std::vector<std::string> traits;
+		if (!ReadTraits(Soul, traits))
+		{
+			// 읽지 못한 목록을 빈 목록으로 보면 이미 가진 특성에 붙이기를 부르게 된다. 아무것도 하지 않는다.
+			fail("특성", "그 사람의 특성을 읽지 못했습니다");
+			Note = NlCore::RoleReport(Row.Name, Role, 0, 0, 0, failed, why);
+			return;
+		}
+		const std::vector<NlCore::RoleStep> steps = NlCore::RoleSteps(NlCore::PlanRole(Role, levels, traits));
+		std::string plan;
+		for (const NlCore::RoleStep& step : steps)
+			plan += std::string(" ") + step.Kind + ":" + (step.Kind == 's' ? std::string(skills[step.Index].Key) + "=" + std::to_string(step.Level) : step.Name);
+		Log(std::string("people: role ") + Role.Id + " on " + Row.Uuid + " steps:" + (plan.empty() ? " none" : plan));		// 부르기 전에 남긴다
+
+		bool there = true;		// 그 자리의 사람이 그대로다. 아니게 되면 더 쓰지도 부르지도 않는다
+		for (const NlCore::RoleStep& step : steps)
+		{
+			const std::string what = step.Kind == 's' ? std::string(skills[step.Index].Key) : step.Name;
+			std::string note;
+			if (!there)
+			{
+				fail(what, "그 자리의 사람이 바뀌었습니다");
+				continue;
+			}
+			if (step.Kind == 's')
+			{
+				if (WriteAt(soul + ".__skills.__level." + skills[step.Index].Key, step.Level, note))
+					raised++;
+				else
+					fail(what, note);
+				continue;
+			}
+			if (!ReadTraits(Soul, traits))
+			{
+				fail(what, "그 사람의 특성을 읽지 못했습니다");
+				continue;
+			}
+			if (!NlCore::RoleStepNeeded(step, traits))
+				continue;		// 앞의 걸음이나 게임이 이미 뗐거나 붙였다. 부르지 않는다
+			if (step.Kind == 'a')
+			{
+				if (!KnownTrait(step.Name))
+					fail(what, "게임에 없는 특성입니다");
+				else if (Attach(Row, step.Name, Soul, note))
+					added++;
+				else
+				{
+					fail(what, note);
+					there = StillThere(Row, Soul);
+				}
+				continue;
+			}
+			const bool called = Detach(Row, step.Name, note);
+			there = StillThere(Row, Soul);
+			std::vector<std::string> after;
+			const bool read = there && ReadTraits(Soul, after);
+			if (called && read && !Has(after, step.Name))
+				removed++;
+			else
+				fail(what, !there ? "그 자리의 사람이 바뀌었습니다" : !called ? note : !read ? "그 사람의 특성을 읽지 못했습니다" : "게임이 떼지 않았습니다");
+		}
+		Note = NlCore::RoleReport(Row.Name, Role, raised, added, removed, failed, why);
 	}
 
 	// 한 사람에게 명령 하나를 한다. 안 됐으면 거짓이고 Note 에 까닭. 됐을 때의 Note 는 덧붙일 말(없어도 된다).
@@ -799,19 +949,18 @@ namespace
 				Note = "이미 있는 특성입니다";
 				return true;
 			}
-			// Traits.trait_attach("이름") -> uuid: 게임이 글 하나로 부르는 것을 기록했다.
-			Log("people call trait_attach(" + C.Text + ") on " + Row.Uuid);
-			if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".__traits.trait_attach"), { RValue(std::string_view(C.Text)) }, result, Note))
-				return false;
-			if (!StillThere(Row, soul_value))
-				return false;
-			ReadTraits(soul_value, traits);
-			if (!Has(traits, C.Text))
+			return Attach(Row, C.Text, soul_value, Note);
+		}
+		case PersonAct::Role:
+		{
+			const NlCore::RolePreset* role = NlCore::FindRole(C.Text);
+			if (!role)
 			{
-				Note = "게임이 붙이지 않았습니다";		// 함께 가질 수 없는 특성이 있다
+				Note = "모르는 역할 프리셋입니다";
 				return false;
 			}
-			return true;
+			ApplyRole(*role, Row, soul_value, Note);
+			return true;		// 한 것과 하지 못한 것은 글이 말한다(Execute 가 그 글을 그대로 돌려준다)
 		}
 		case PersonAct::TraitRemove:
 		{
@@ -1057,6 +1206,12 @@ namespace
 			else if (first_failure.empty())
 				first_failure = row.Name + ": " + (one.empty() ? "하지 못했습니다" : one);
 		}
+		if (C.Act == PersonAct::Role && done == 1 && !note.empty())
+		{
+			// 역할 프리셋은 그 글이 곧 결과다(이름, 한 것, 하지 못한 것. core 의 RoleReport). 아래의 집계 줄("1/1")은 적지 않는다: 일부만 됐어도 1/1 이 된다.
+			Log("people: role on " + C.Who + ": " + note);
+			return note;
+		}
 		Log(std::string("people: ") + NlCore::PersonActWord(C.Act) + " on " + C.Who + ": " + std::to_string(done) + "/" + std::to_string(targets.size())
 			+ (first_failure.empty() ? "" : " (first failure: " + first_failure + ")"));
 
@@ -1066,6 +1221,17 @@ namespace
 		if (!first_failure.empty())
 			text += "; " + first_failure;
 		return text;
+	}
+
+	// 명령을 하고 마지막으로 한 일로 적어 둔다. 역할 프리셋의 결과는 그 단추 아래에도 보인다.
+	void Run(const PersonCommand& C)
+	{
+		g_Now.Last = Execute(C);
+		if (C.Act == PersonAct::Role)
+		{
+			g_RoleLast = g_Now.Last;
+			g_RoleLastFor = C.Who;
+		}
 	}
 
 	// 병사를 만든다. 돌려주는 글: 한 일.
@@ -1481,6 +1647,100 @@ namespace
 		}
 	}
 
+	// 특성의 설명을 풍선 글로(바로 앞에 그린 것 위에 마우스가 있을 때).
+	void TraitTooltip(const std::string& Name)
+	{
+		const std::string& about = TraitHint(Name);
+		if (!about.empty() && ImGui::BeginItemTooltip())
+		{
+			ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
+			ImGui::TextUnformatted(about.c_str());
+			ImGui::PopTextWrapPos();
+			ImGui::EndTooltip();
+		}
+	}
+
+	// 역할 프리셋: 고르면 그 사람에게서 무엇이 바뀌는지 보이고, '이 역할로'를 누르면 틱이 입힌다.
+	// 미리 보기는 읽어 둔 값(Detail)으로 셈한다(core 의 PlanRole. 러너를 부르지 않는다). 틱은 적용할 때 값을 다시 읽어 다시 셈한다.
+	void DrawRole(const PersonRow& Row, const Detail& One)
+	{
+		const std::vector<NlCore::RolePreset>& roles = NlCore::RolePresets();
+		if (g_RolePick < 0 || static_cast<size_t>(g_RolePick) >= roles.size())
+			g_RolePick = 0;
+		ImGui::SetNextItemWidth(200);
+		if (ImGui::BeginCombo("##role", roles[g_RolePick].Label))
+		{
+			for (size_t i = 0; i < roles.size(); i++)
+				if (ImGui::Selectable(roles[i].Label, static_cast<int>(i) == g_RolePick))
+					g_RolePick = static_cast<int>(i);
+			ImGui::EndCombo();
+		}
+		const NlCore::RolePreset& role = roles[g_RolePick];
+		const NlCore::RoleTodo todo = NlCore::PlanRole(role, One.Skills, One.Traits);
+		ImGui::SameLine();
+		ImGui::BeginDisabled(todo.Empty());
+		if (ImGui::Button("이 역할로"))
+			Push(PersonAct::Role, Row.Uuid, -1, 0, role.Id);
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (todo.Empty())
+			ImGui::TextDisabled("바꿀 것이 없습니다 (이미 이 프리셋대로입니다)");
+		else
+			ImGui::TextDisabled("능력치 %d개를 올리고, 특성 %d개를 붙이고, %d개를 뗍니다", static_cast<int>(todo.Skills.size()), static_cast<int>(todo.Add.size()),
+				static_cast<int>(todo.Remove.size()));
+		if (g_RoleLastFor == Row.Uuid && !g_RoleLast.empty())
+			Hint("마지막 결과 - " + g_RoleLast);
+
+		// 능력치: 프리셋의 것을 차례대로. 지금 값이 더 높으면 그대로 둔다.
+		const std::vector<NlCore::NamedKey>& skills = NlCore::SkillNames();
+		std::string line = "능력치:";
+		for (const NlCore::RoleSkill& wanted : role.Skills)
+			for (size_t i = 0; i < skills.size(); i++)
+			{
+				if (std::string(skills[i].Key) != wanted.Skill)
+					continue;
+				const double now = i < One.Skills.size() ? One.Skills[i] : k_Unknown;
+				line += std::string(line.back() == ':' ? " " : ",  ") + SkillLabel(i) + " ";
+				if (now == k_Unknown)
+					line += "없음";		// 그 사람에게 없는 능력치(주민은 전투만 있다)
+				else if (now >= wanted.Level)
+					line += NumberText(now, 0) + " (그대로)";
+				else
+					line += NumberText(now, 0) + " -> " + std::to_string(wanted.Level);
+			}
+		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted(line.c_str());
+		ImGui::PopTextWrapPos();
+
+		// 특성: 한 줄에 하나(설명은 풍선 글로). 좁은 창에서도 읽히게 표의 칸에 두지 않는다.
+		ImGui::TextUnformatted("붙일 특성:");
+		ImGui::Indent();
+		for (const char* name : role.Add)
+		{
+			if (Has(One.Traits, name))
+				ImGui::TextDisabled("있음    %s", TraitLabel(name).c_str());
+			else if (!KnownTrait(name))
+				ImGui::TextDisabled("게임에 없음    %s", name);
+			else
+				ImGui::Text("붙임    %s", TraitLabel(name).c_str());
+			TraitTooltip(name);
+		}
+		ImGui::Unindent();
+		ImGui::TextUnformatted("뗄 특성 (이 역할에 해로운 것. 가진 것만 뗍니다):");
+		ImGui::Indent();
+		for (const char* name : role.Remove)
+		{
+			if (Has(One.Traits, name))
+				ImGui::Text("뗌    %s", TraitLabel(name).c_str());
+			else
+				ImGui::TextDisabled("없음    %s", TraitLabel(name).c_str());
+			TraitTooltip(name);
+		}
+		ImGui::Unindent();
+		Hint("능력치는 올리기만 합니다(이미 더 높은 것과 프리셋에 없는 것은 그대로 둡니다). 특성은 게임의 설명 글을 읽고 골랐고, 재능마다의 효과를 플레이에서 재지는 않았습니다. "
+			"한 번에 되돌리는 단추는 없습니다: 붙인 특성은 아래 '특성'에서 하나씩 떼고, 능력치는 아래 '능력치'에서 내립니다.");
+	}
+
 	void DrawDetail(const PersonRow& Row)
 	{
 		const Detail& one = g_Now.One;
@@ -1521,6 +1781,9 @@ namespace
 			Push(PersonAct::SkillsMax, who);
 		Hint("기분은 게임이 생각의 합으로 다시 셈합니다. '행복하게'는 게임의 디버그용 생각(+100, 하루)을 붙입니다. 능력치는 0~20, 나이는 1~120 입니다.");
 
+		ImGui::SeparatorText("역할 프리셋");
+		DrawRole(Row, one);
+
 		ImGui::SeparatorText("능력치");
 		if (ImGui::BeginTable("skills", 3, ImGuiTableFlags_SizingFixedFit))
 		{
@@ -1531,7 +1794,7 @@ namespace
 					continue;		// 그 사람에게 없는 능력치(주민은 전투만 있다)
 				ImGui::TableNextRow();
 				ImGui::TableNextColumn();
-				ImGui::Text("%s (%s)", skills[i].Label, skills[i].Key);
+				ImGui::Text("%s (%s)", SkillLabel(i), skills[i].Key);
 				ImGui::TableNextColumn();
 				ImGui::Text("%s  +%s", NumberText(one.Skills[i], 0).c_str(), NlCore::Fixed(one.Points[i], 2).c_str());
 				ImGui::TableNextColumn();
@@ -1592,14 +1855,7 @@ namespace
 			ImGui::PopID();
 			ImGui::SameLine();
 			ImGui::TextUnformatted(TraitLabel(one.Traits[i]).c_str());
-			const std::string& about = TraitHint(one.Traits[i]);
-			if (!about.empty() && ImGui::BeginItemTooltip())
-			{
-				ImGui::PushTextWrapPos(ImGui::GetFontSize() * 26);
-				ImGui::TextUnformatted(about.c_str());
-				ImGui::PopTextWrapPos();
-				ImGui::EndTooltip();
-			}
+			TraitTooltip(one.Traits[i]);
 		}
 		ImGui::SetNextItemWidth(180);
 		ImGui::InputText("찾기 (명칭, 게임의 이름, 설명의 글)", g_TraitFilter, sizeof(g_TraitFilter));
@@ -1678,6 +1934,10 @@ void NlPeople::Init(LogFn Log_, const std::filesystem::path& GameDir)
 	LoadTraitFiles(GameDir);
 	Log("people: " + g_TraitTextNote);
 	Log("people: " + g_HintFilesNote);
+	Log("people: skill names from the game's main.csv: " + std::to_string(g_SkillCaptions.size()) + " of " + std::to_string(NlCore::SkillNames().size()));
+	std::string why;
+	if (!NlCore::CheckRoles(why))
+		Log("people: the role preset table is wrong: " + why);		// 시험이 막는다. 여기까지 오면 로그에 남긴다
 }
 
 void NlPeople::GameTick(double Now, bool Active)
@@ -1712,7 +1972,7 @@ void NlPeople::GameTick(double Now, bool Active)
 		{
 			const PersonCommand command = g_Queue.front();
 			g_Queue.pop_front();
-			g_Now.Last = Execute(command);
+			Run(command);
 		}
 		RefreshDetail();
 		g_NextScan = Now + 2;
@@ -2013,7 +2273,7 @@ std::vector<std::string> NlPeople::Do(const NlCore::PersonCommand& Command)
 	if (g_Busy)
 		return { "busy" };
 	const Busy busy;
-	g_Now.Last = Execute(Command);
+	Run(Command);
 	return { g_Now.Last };
 }
 

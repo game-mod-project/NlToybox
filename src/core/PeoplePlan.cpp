@@ -1,5 +1,7 @@
 #include "PeoplePlan.hpp"
 
+#include "RolePlan.hpp"
+
 #include <algorithm>
 #include <cctype>
 #include <cmath>
@@ -19,7 +21,7 @@ namespace NlCore
 			{ PersonAct::NeedSet, "need_set" }, { PersonAct::NeedsFill, "needs_fill" }, { PersonAct::AgeSet, "age_set" },
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
 			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
-			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" },
+			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" }, { PersonAct::Role, "role" },
 		};
 
 		bool Clamp(double Value, double Low, double High, bool Whole, double& Out)
@@ -95,7 +97,7 @@ namespace NlCore
 
 	bool NeedsText(PersonAct Act)
 	{
-		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip;
+		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip || Act == PersonAct::Role;
 	}
 
 	bool GoodWho(const std::string& Who)
@@ -272,6 +274,8 @@ namespace NlCore
 		// 지식의 이름도 특성의 이름과 같은 꼴이다(소문자·숫자·밑줄). 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 		if (Why.empty() && Command.Act == PersonAct::Equip && !FindLoadout(Command.Text))
 			Why = "모르는 장비 묶음입니다";
+		if (Why.empty() && Command.Act == PersonAct::Role && !FindRole(Command.Text))
+			Why = "모르는 역할 프리셋입니다";
 		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
 			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
 		if (Why.empty() && trait && IsProtectedTrait(Command.Text))

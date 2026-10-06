@@ -248,13 +248,24 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 힌트의 첫 줄은 제목이고 그 아래가 설명이다(`SplitHint`). 꺾쇠 표식은 지우고 `{…}` 자리는 "(값)"으로 보인다(`PlainHint`). 이름의 줄이 없는 특성은 힌트의 제목을 흐린 글씨의 명칭으로 보인다(`GoodHintTitle`).
   - 진짜 파일을 코어의 코드로 읽어 보는 선택 시험: `$env:NLTOYBOX_TEST_GAME_DIR = <게임 폴더>`를 주고 `build\nlcore_tests.exe tools\probes`(글은 내지 않고 수만 낸다. 평소 시험은 게임 파일에 기대지 않는다).
   - **긴 글을 표의 좁은 칸에 두지 않는다**(설명 칸이 한 글자 너비가 돼 세로로 흘렀다). 명칭 아래의 줄로 그린다. 창을 고치면 `shot`으로 받아 눈으로 본다.
+- 역할 프리셋(`src/core/RolePlan`, `src/People.cpp`의 `ApplyRole`. `research/22`): 한 사람에게 능력치를 올리고(내리지 않는다), 그 역할에 해로운 특성을 떼고, 재능을 붙인다.
+  인물 탭의 "역할 프리셋"과 원격 `person <uuid> role name=<Id>`가 같은 길을 탄다(한 사람을 짚어서만. `lords`·`people`에게는 가지 않는다).
+  - **표(`RolePresets`)는 사용자가 정한 것이다**: 핵심 능력치 20, 보조 15, 올리기만. 고칠 때는 시험의 크기 표(`Size`)와 넣지 않기로 한 이름들도 함께 본다.
+    특성의 이름이 게임에 있는지는 게임을 불러올 때의 로그로 본다(`role presets name N trait(s) this game does not have`. 이 빌드에서는 0).
+  - 차례는 능력치, 떼기, 붙이기다(`RoleSteps`). 특성의 걸음마다 목록을 다시 읽어 이미 없는 것을 떼거나 이미 있는 것을 붙이려 부르지 않는다(`RoleStepNeeded`).
+    특성을 읽지 못한 것과 없는 것을 가른다(`ReadTraits`의 반환값). 결과의 글은 한 것과 하지 못한 것을 수로 말한다(`RoleReport`).
+  - 잰 것: 프리셋 13개의 특성 74개가 모두 붙고, 해로운 특성 아홉 종이 떼어지고, 두 시간 뒤에도 그대로다. `coward`를 가진 사람에게 `fearless`·`brave`가 함께 붙는다(게임이 막지 않는다).
+  - **재능마다의 효과는 재지 않았다.** 본 것은 둘이다: `stupidity`를 떼면 생각의 합이 25 내려간다(다시 붙이면 돌아온다),
+    붙인 재능의 행동을 게임이 돌리려 한다(`redeemer`·`musician`의 "Trait action …" 경고가 게임의 오류 파일에 남았다).
+  - 능력치의 화면 이름은 `main.csv`의 `actor.skill.<열쇠>`에서 읽는다. **전투만 `actor.skill.fight`다**(`SkillCaptionKey`. 여덟이 같은 꼴이라고 어림했다가 틀렸다).
+  - **`shot`에는 이름을 준다**(`shot role-before`. 이름이 없으면 찍히지 않는다). 받은 화면은 `ask.ps1`이 `refs\ui\<이름>.png`로 옮긴다. 명령 뒤의 화면은 2초쯤 두고 찍는다.
 - 게임은 잡은 오류와 불러오기·저장의 시각을 `%LOCALAPPDATA%\Strategy\catched_errors_<버전>.txt`에 적는다. 실행 묶음 뒤에 그 파일의 끝을 본다(읽기만 한다).
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
   - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).

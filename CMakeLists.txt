@@ -24,6 +24,7 @@ add_library(nlcore STATIC
   src/core/PeoplePlan.cpp
   src/core/Presets.cpp
   src/core/Rate.cpp
+  src/core/RolePlan.cpp
   src/core/RemoteCommand.cpp
   src/core/Text.cpp
   src/core/WorldPlan.cpp
