@@ -147,6 +147,11 @@ namespace NlCore
 		return "trait." + Name;
 	}
 
+	std::string SkillCaptionKey(const std::string& Skill)
+	{
+		return "actor.skill." + Skill;
+	}
+
 	std::string PlainHint(std::string_view Raw, std::string_view Caption)
 	{
 		// 첫 줄이 이름과 같으면 뗀다.

@@ -32,6 +32,7 @@ namespace NlCore
 	{
 		SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove,
 		KnowledgeAll, KnowledgeAdd, MoneyAdd, ItemAdd, Equip,
+		Role,		// 역할 프리셋을 입힌다(Text 는 프리셋의 Id. core/RolePlan). 한 사람을 짚어서만
 	};
 
 	struct PersonCommand

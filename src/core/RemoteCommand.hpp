@@ -23,6 +23,8 @@
 //                                                   채우는 것은 cheat resource_floor on 일 때다(research/18)
 //   person list [all=1],  person show <uuid>        사람들의 목록, 한 사람의 값(인물 패널과 같은 것)
 //   person <uuid|lords|people> <할 일> [index=N] [amount=N] [name=글]
+//   person <uuid> role name=<king|steward|scholar|instructor|general|duelist|politician|schemer|socialite|priest|trader|producer|teacher>
+//                                                   역할 프리셋을 입힌다: 능력치를 올리고(내리지 않는다) 재능을 붙이고 해로운 특성을 뗀다(core/RolePlan)
 //                                                   인물 패널과 같은 길로 고친다. 할 일: skill_set, skill_add, skills_max, need_set, needs_fill,
 //                                                   age_set, happy, cure, trait_add, trait_remove, knowledge_all, knowledge_add,
 //                                                   money_add, item_add, equip name=<장비 묶음> (core/PeoplePlan)
