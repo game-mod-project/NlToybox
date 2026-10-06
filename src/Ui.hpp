@@ -47,6 +47,11 @@ namespace NlUi
 	// 모드창을 열거나 닫는다(F8 과 같다).
 	void SetVisible(bool Visible);
 
+	// 수 입력 칸. 치는 동안의 수는 들고 있다가 칸을 떠날 때(Enter, Tab, 다른 곳을 누름) 한 번 참을 돌려주고 Out 에 넣는다(core 의 StepNumberEdit).
+	// Key: 칸을 가리는 열쇠(항목의 Id, 주소). 잡힌 칸은 한 번에 하나뿐이라 편집 상태는 하나이고 열쇠가 바뀌면 버린다. 너비는 SetNextItemWidth 로 미리 정한다.
+	// 수 입력 칸에 EnterReturnsTrue 를 주지 않는다(CLAUDE.md). 그리는 쪽에서 부른다.
+	bool InputNumber(const char* Label, const std::string& Key, double Value, const char* Format, double& Out);
+
 	// 흐린 글씨의 줄바꿈되는 글(도움말, 한 일). 그리는 쪽에서 부른다. 패널 다섯이 같은 것을 따로 두고 있었다(2026-10-07 리뷰).
 	void Hint(const char* Text);
 	void Hint(const std::string& Text);

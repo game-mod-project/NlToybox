@@ -2,6 +2,7 @@
 
 #include "Access.hpp"
 #include "Search.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Text.hpp"
 
@@ -317,10 +318,10 @@ namespace
 		}
 		else if (Row.IsNumber)
 		{
-			double value = Row.Number;
+			double typed = 0;
 			ImGui::SetNextItemWidth(-FLT_MIN);
-			if (ImGui::InputDouble("##n", &value, 0, 0, "%.10g", ImGuiInputTextFlags_EnterReturnsTrue))
-				PushPath(Command::Kind::WriteNumber, Path, value);
+			if (NlUi::InputNumber("##n", "value:" + Path, Row.Number, "%.10g", typed))		// 칸을 떠날 때 쓴다(Enter 로만 받던 것을 고쳤다. research/18 의 끝)
+				PushPath(Command::Kind::WriteNumber, Path, typed);
 		}
 		else if (Row.IsString && Row.Raw.size() < 255)
 		{
@@ -536,10 +537,10 @@ namespace
 			if (watch.HasLock)
 			{
 				ImGui::SameLine();
-				double value = watch.LockValue;
+				double typed = 0;
 				ImGui::SetNextItemWidth(110);
-				if (ImGui::InputDouble("##lv", &value, 0, 0, "%.10g", ImGuiInputTextFlags_EnterReturnsTrue))
-					PushPath(Command::Kind::SetLock, watch.Path, value, watch.Locked);
+				if (NlUi::InputNumber("##lv", "lock:" + watch.Path, watch.LockValue, "%.10g", typed))		// 칸을 떠날 때 건다
+					PushPath(Command::Kind::SetLock, watch.Path, typed, watch.Locked);
 				if (!watch.Note.empty())
 				{
 					ImGui::SameLine();

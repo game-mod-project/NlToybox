@@ -21,6 +21,7 @@ add_library(nlcore STATIC
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
   src/core/Knobs.cpp
+  src/core/NumberEdit.cpp
   src/core/Localization.cpp
   src/core/PeoplePlan.cpp
   src/core/Presets.cpp

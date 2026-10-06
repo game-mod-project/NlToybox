@@ -16,6 +16,7 @@
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
 #include "core/Localization.hpp"
+#include "core/NumberEdit.hpp"
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
 #include "core/Presets.hpp"
@@ -2883,28 +2884,28 @@ int main(int argc, char** argv)
 	Test("경제: 최소값 칸의 편집 - 치는 동안은 들고 있다가 칸을 떠날 때 한 번 넣는다", [] {
 		// 사용자 보고(2026-10-06): 자원마다의 최소값을 칸에서 정할 수 없다. 칸이 "Enter 를 눌렀을 때만 참"에 기대고 있었는데
 		// Dear ImGui 의 수 입력 칸은 그것을 지원하지 않는다(InputScalar 의 단언). Enter 말고는 수를 넣을 길이 없었고 칸을 떠나면 친 수가 버려졌다.
-		FloorEdit edit;
+		NumberEdit edit;
 		double out = -1;
 		// 2, 20, 200 을 치는 동안에는 넣지 않는다(치는 도중의 수로 창고를 채우지 않게)
-		CHECK(!StepFloorEdit(edit, true, 2, false, true, out));
-		CHECK(!StepFloorEdit(edit, true, 20, false, true, out));
-		CHECK(!StepFloorEdit(edit, false, 20, false, true, out));		// 잡혀 있기만 한 프레임
-		CHECK(!StepFloorEdit(edit, true, 200, false, true, out));
+		CHECK(!StepNumberEdit(edit, true, 2, false, true, out));
+		CHECK(!StepNumberEdit(edit, true, 20, false, true, out));
+		CHECK(!StepNumberEdit(edit, false, 20, false, true, out));		// 잡혀 있기만 한 프레임
+		CHECK(!StepNumberEdit(edit, true, 200, false, true, out));
 		CHECK(edit.Has && edit.Value == 200);
 		// 칸을 떠나면(Enter, Tab, 다른 곳을 누름) 마지막에 친 수를 한 번 넣는다
-		CHECK(StepFloorEdit(edit, false, 0, true, false, out) && out == 200);
+		CHECK(StepNumberEdit(edit, false, 0, true, false, out) && out == 200);
 		CHECK(!edit.Has);
-		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));			// 두 번 넣지 않는다
+		CHECK(!StepNumberEdit(edit, false, 0, true, false, out));			// 두 번 넣지 않는다
 		// 치는 프레임에 바로 떠나도 넣는다
-		CHECK(StepFloorEdit(edit, true, 7, true, false, out) && out == 7 && !edit.Has);
+		CHECK(StepNumberEdit(edit, true, 7, true, false, out) && out == 7 && !edit.Has);
 		// 치지 않고 떠나면 넣지 않는다
-		CHECK(!StepFloorEdit(edit, false, 0, true, false, out));
+		CHECK(!StepNumberEdit(edit, false, 0, true, false, out));
 		// 0 도 친 수다(지운다는 뜻). 넣는다
-		CHECK(!StepFloorEdit(edit, true, 0, false, true, out));
-		CHECK(StepFloorEdit(edit, false, 99, true, false, out) && out == 0);
+		CHECK(!StepNumberEdit(edit, true, 0, false, true, out));
+		CHECK(StepNumberEdit(edit, false, 99, true, false, out) && out == 0);
 		// 치다 만 수가 남았는데 칸이 잡혀 있지도 떠나지도 않았으면(창이 닫혔다) 버린다
-		CHECK(!StepFloorEdit(edit, true, 55, false, true, out));
-		CHECK(!StepFloorEdit(edit, false, 0, false, false, out) && !edit.Has);
+		CHECK(!StepNumberEdit(edit, true, 55, false, true, out));
+		CHECK(!StepNumberEdit(edit, false, 0, false, false, out) && !edit.Has);
 	});
 
 	Test("원격: 모드창에 입력을 넣는 줄(ui click, type, key)", [] {

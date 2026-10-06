@@ -1,6 +1,7 @@
 #include "Ui.hpp"
 
 #include "Game.hpp"
+#include "core/NumberEdit.hpp"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -608,4 +609,24 @@ void NlUi::Hint(const char* Text)
 void NlUi::Hint(const std::string& Text)
 {
 	Hint(Text.c_str());
+}
+
+namespace
+{
+	NlCore::NumberEdit g_NumberEdit;		// 잡힌 수 입력 칸의 편집 상태(한 번에 하나)
+	std::string g_NumberEditKey;
+}
+
+bool NlUi::InputNumber(const char* Label, const std::string& Key, double Value, const char* Format, double& Out)
+{
+	const bool typed = ImGui::InputDouble(Label, &Value, 0, 0, Format);
+	const bool active = ImGui::IsItemActive(), left = ImGui::IsItemDeactivatedAfterEdit();
+	if (g_NumberEditKey != Key)
+	{
+		if (!typed && !active && !left)		// 다른 칸의 상태를 건드리지 않는다
+			return false;
+		g_NumberEdit = NlCore::NumberEdit();
+		g_NumberEditKey = Key;
+	}
+	return NlCore::StepNumberEdit(g_NumberEdit, typed, Value, left, active, Out);		// 열쇠가 같으면 매 프레임 부른다(잡혀 있지 않으면 남은 수를 버린다)
 }
