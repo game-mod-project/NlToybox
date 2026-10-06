@@ -215,10 +215,15 @@ namespace NlCore
 			// 치명적인 통증의 한도 get_mortal_pain_threshold() -> 40. self 가 플레이어의 영혼인지로 아군과 적을 가린다(src/People.cpp 의 BattleTick 이 한 함수에 둘을 함께 건다).
 			// 전투 기술은 올린 값이 20 에서 멈춘다(기술은 0~20 이다). 게임이 받는 수가 바뀌는 것까지 봤다(0.16.0. research/16):
 			// 통증 한도는 아군 40 => 120, 그 밖 40 => 12. 전투 기술은 그 밖의 5 => 3, 3 => 2 만(플레이어의 사람은 싸우지 않았다). 싸움의 결과가 달라지는 것은 보지 못했다.
-			{ "ally_power", Area::Army, "아군 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 2, 0, 1, 5, false,
-				"플레이어의 사람이 싸울 때의 전투 기술에 곱한다(올린 값은 20 에서 멈춘다)" },
-			{ "enemy_power", Area::Army, "적 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 0.5, 0, 0.1, 1, false,
-				"플레이어의 사람이 아닌 모두(손님, 상인, 다른 세력, 짐승)가 싸울 때의 전투 기술에 곱한다. 1 아래로는 내려가지 않는다" },
+			// 실제 싸움 둘(침입, 도적 기지. research/23)에서 전투 기술의 둘을 봤다: 아군 12·13·15·16 => 20, 적 4 => 2, 5 => 3, 3 => 2, 그리고 공격의 추첨 배율이
+			// 바꾼 수와 맞아떨어졌다(0.1 + 0.09 x 기술. 값 넷에 맞춘 식). 사용자가 이 둘을 확인으로 올리기로 했다(2026-10-06). 승패를 배율 없는 싸움과 견준 것은 아니다.
+			// 맷집의 둘은 다음 싸움으로 미뤘다(적이 낮춘 한도 12 에서 죽는지를 가리지 못했다).
+			{ "ally_power", Area::Army, "아군 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 2, 0, 1, 5, true,
+				"플레이어의 사람이 싸울 때의 전투 기술에 곱한다(올린 값은 20 에서 멈춘다). 실제 싸움에서 게임이 올린 수를 받고 공격의 추첨이 그 수를 따르는 것을 봤다. "
+				"배율 없는 싸움과 승패를 견준 것은 아니다" },
+			{ "enemy_power", Area::Army, "적 전투력 배율", "inst:o_character.__soul.get_combat_level_in_battle", CS, 0.5, 0, 0.1, 1, true,
+				"플레이어의 사람이 아닌 모두(손님, 상인, 다른 세력, 짐승)가 싸울 때의 전투 기술에 곱한다. 1 아래로는 내려가지 않는다. "
+				"실제 싸움에서 게임이 낮춘 수를 받고 공격의 추첨이 그 수를 따르는 것을 봤다. 배율 없는 싸움과 승패를 견준 것은 아니다" },
 			{ "ally_toughness", Area::Army, "아군 맷집 배율", "inst:o_character.__soul.get_mortal_pain_threshold", CS, 3, 0, 1, 10, false,
 				"플레이어의 사람이 버티는 통증의 한도(치명적인 통증)에 곱한다. 더 잘 버틸 것으로 보인다" },
 			{ "enemy_toughness", Area::Army, "적 맷집 배율", "inst:o_character.__soul.get_mortal_pain_threshold", CS, 0.3, 0, 0.1, 1, false,

@@ -50,6 +50,9 @@
 //   traits [find=<글>] [max=<수>]                   게임의 특성들: 이름, 화면 이름, 설명의 앞부분(모듈이 게임의 현지화 파일에서 읽은 것). 인물 패널의 찾기 칸도 그 글이 된다
 //                                                   find 는 이름, 화면 이름, 설명의 글 어디에든 들어 있으면 맞는다
 //   page <영역의 키>                                모드창의 영역을 고른다(explorer, economy, build, …)
+//   ui click x=<수> y=<수>                          모드창에 마우스 누름을 넣는다(Dear ImGui 의 입력 큐에. 진짜 마우스는 건드리지 않는다). 자리는 shot 으로 본다
+//   ui type text=<글>,  ui key name=<enter|tab|escape|backspace>
+//                                                   잡혀 있는 입력 칸에 글자를 넣는다, 키를 눌렀다 뗀다(창의 입력 칸을 시험하려고 둔다)
 //   cheat <치트의 Id> on|off                        치트 표의 항목을 켜고 끈다(모드창의 체크와 같다)
 //   state,  shot <이름>,  window open|close
 // 인자: n:<수>  s:<글> 또는 s:{공백이 든 글}  b:0|1  u(undefined)  p:<주소>(그 주소의 값)
