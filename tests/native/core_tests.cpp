@@ -26,6 +26,7 @@
 #include "core/Retry.hpp"
 #include "core/RolePlan.hpp"
 #include "core/Schedule.hpp"
+#include "core/SeasonPlan.hpp"
 #include "core/Text.hpp"
 
 #include <algorithm>
@@ -814,7 +815,36 @@ int main(int argc, char** argv)
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 66);
+		CHECK(Cheats().size() == 72);
+		// 지도 공개(research/25): GlobalMapManager.is_initial_area_visible(지역 구조체) -> 불리언. 참을 돌려주게 하자 세계 지도의 안개가 걷혔다
+		// (화면에서 봤다: 지역의 밝기, 마을의 이름, 자원 아이콘). 물체의 is_visible 만으로는 지역이 어두운 채였고 is_in_fog_of_war 만으로는 화면이 그대로였다.
+		CHECK(FindCheat("reveal_map") && FindCheat("reveal_map")->Kind == CheatKind::Hook && FindCheat("reveal_map")->On == 1 && FindCheat("reveal_map")->Where == Area::World
+			&& std::string(FindCheat("reveal_map")->Path) == "inst:o_global_map.__m_global_map.is_initial_area_visible" && HookForcedKind(FindCheat("reveal_map")->Kind) == 'b');
+		// 늑대의 최대 수: WolvesManager.get_max_number_of_wolves()(인자 없음)가 밤에 한 번 불려 수(11.1)를 돌려줬다(research/25). 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
+		CHECK(FindCheat("no_wolves") && FindCheat("no_wolves")->Kind == CheatKind::HookNumber && FindCheat("no_wolves")->On == 0 && FindCheat("no_wolves")->Where == Area::World
+			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n');
+		// 광산의 매장량 붙들기는 모듈의 일이다(src/World.cpp 가 줄어든 매장량을 되돌려 쓴다).
+		CHECK(FindCheat("mine_stock_hold") && FindCheat("mine_stock_hold")->Kind == CheatKind::Custom && FindCheat("mine_stock_hold")->Where == Area::World);
+		// 실행 2 에서 플레이로 본 것(research/25): 붙든 네 시간 동안 단계가 넘어가지 않았고 끄자 다음 정각에 넘어갔다, 켠 채 자동 저장 시각을 세 번 넘겨도 파일이 생기지 않았다,
+		// 켠 두 밤에는 늑대를 만들지 않았고 끈 두 밤에는 만들었다, 게임이 네 번 캐도 매장량이 그대로였다, 켜자 지도의 안개가 걷히고 끄자 돌아왔다.
+		for (const char* id : { "season_hold", "no_autosave", "no_wolves", "mine_stock_hold", "reveal_map" })
+			CHECK(FindCheat(id)->Verified);
+		CHECK(!FindCheat("fast_map_moving")->Verified && !FindCheat("fast_global_tasks")->Verified);		// 재지 못했다
+		// 확인된 훅과 모듈의 일은 켠 채 저장돼 있으면 다음 실행에서도 켜진 채로 시작한다.
+		// 저장 끄기는 그 실행에서만 간다(검토 I4): 켠 것을 잊고 다음 날 몇 시간을 해도 자동 저장이 하나도 생기지 않는 일이 없게, 켠 채 저장돼 있어도 꺼진 채로 시작한다.
+		CheatState world;
+		world.On = { "season_hold", "no_wolves", "mine_stock_hold", "reveal_map", "no_autosave" };
+		CHECK(KeepKnown(world).On == (std::set<std::string>{ "season_hold", "no_wolves", "mine_stock_hold", "reveal_map" }));
+		CHECK(FindCheat("no_autosave")->ThisRunOnly);
+		for (const Cheat& cheat : Cheats())
+			CHECK(cheat.ThisRunOnly == (std::string(cheat.Id) == "no_autosave"));
+		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
+		// (어느 것이 확인됐는지는 아래에서 본다)
+		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);
+		CHECK(FindCheat("fast_map_moving") && FindCheat("fast_map_moving")->Kind == CheatKind::Toggle && FindCheat("fast_map_moving")->Where == Area::World
+			&& std::string(FindCheat("fast_map_moving")->Path) == "inst:o_global_map.__m_global_map.__debug_fast_moving");
+		CHECK(FindCheat("no_autosave") && FindCheat("no_autosave")->Kind == CheatKind::Toggle && FindCheat("no_autosave")->Where == Area::Util
+			&& std::string(FindCheat("no_autosave")->Path) == "inst:o_debug.is_save_disabled" && FindCheat("no_autosave")->On == 1 && FindCheat("no_autosave")->Off == 0);
 		// 종교(research/21): 신앙심 채워 두기, 성스러운 보호 유지(수 1 을 돌려주게 한다), 종교 반란 없음, 종교 비용 없음, 신앙 회복 배율, 설교 전환 계수.
 		CHECK(FindCheat("piety_full") && FindCheat("piety_full")->Kind == CheatKind::Custom && FindCheat("piety_full")->Where == Area::Religion);
 		// 신앙심 채워 두기는 플레이에서 봤다(켜고 40분 뒤 플레이어의 사람 14명이 모두 100, 플레이어의 사람이 아닌 둘은 평소대로 줄었다. research/21)
@@ -1748,6 +1778,17 @@ int main(int argc, char** argv)
 		CHECK(ParseWorldAct("cooldowns_clear", act) && act == WorldAct::CooldownsClear);
 		CHECK(!ParseWorldAct("ambush", act) && !ParseWorldAct("", act));		// 궁수 매복은 불러서 게임이 끝났다(research/14). 넣지 않는다
 		CHECK(std::string(WorldActWord(WorldAct::BishopSend)) == "bishop" && std::string(WorldActWord(WorldAct::CooldownsClear)) == "cooldowns_clear");
+		// 계절의 일(research/25): 보기, 미루기, 지금 단계 끝내기. 날씨를 일으키는 함수(__start_rain 들)는 꼴을 보지 못해 넣지 않는다.
+		CHECK(ParseWorldAct("season", act) && act == WorldAct::SeasonShow);
+		CHECK(ParseWorldAct("season_delay", act) && act == WorldAct::SeasonDelay);
+		CHECK(ParseWorldAct("season_end", act) && act == WorldAct::SeasonEnd);
+		CHECK(std::string(WorldActWord(WorldAct::SeasonShow)) == "season" && std::string(WorldActWord(WorldAct::SeasonEnd)) == "season_end");
+		CHECK(!ParseWorldAct("rain", act) && !ParseWorldAct("season_", act));
+		// 낱말의 목록(틀린 낱말에 답할 글)은 표에서 만든다.
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end");
+		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
+		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
+			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend));
 
 		// 이벤트 쿨다운 한 칸: 0 보다 큰 수에만 0 을 쓴다
 		CHECK(ShouldClearCooldown(true, 19) && ShouldClearCooldown(true, 0.5));
@@ -1774,6 +1815,9 @@ int main(int argc, char** argv)
 		RemoteCommand c = ParseRemoteLine("world bishop");
 		CHECK(c.Error.empty() && c.Verb == "world" && c.Target == "bishop");
 		CHECK(ParseRemoteLine("world cooldowns_clear").Error.empty());
+		for (const char* word : { "season", "season_delay", "season_end" })
+			CHECK(ParseRemoteLine(std::string("world ") + word).Error.empty() && ParseRemoteLine(std::string("world ") + word).Target == word);
+		CHECK(ParseRemoteLine("world rain").Error.find("season_delay") != std::string::npos);		// 틀린 낱말에는 되는 낱말을 알려 준다
 		CHECK(!ParseRemoteLine("world").Error.empty() && !ParseRemoteLine("world ambush").Error.empty() && !ParseRemoteLine("world bishop now").Error.empty());
 	});
 
@@ -3157,6 +3201,115 @@ int main(int argc, char** argv)
 		}
 		CHECK(titled >= 3000 && bodies >= 2500 && tagged == 0);
 		std::printf("  real files: %zu trait captions, %zu hints (%zu titled, %zu with a body, longest body %zu bytes)\n", captions.size(), hints.size(), titled, bodies, longest);
+	});
+
+	Test("계절: 남은 시간의 글, 미루기와 끝내기에 쓸 시작 시각, 붙들기", [] {
+		// 게임은 지금 단계의 남은 시간을 시작 시각에서 셈한다(research/25: 시작을 86400 뒤로 쓰자 남은 시간이 86400 늘었다).
+		// 잰 값: 지금 537321.83, 시작 374400, 단계의 길이 345600 일 때 게임의 함수가 182678.17 을 돌려줬다.
+		CHECK(std::fabs(PhaseRemain(537321.83, 374400, 345600) - 182678.17) < 0.01);
+
+		// 남은 시간의 글: 날과 시간. 한 시간이 안 되면 그렇게 말하고, 셈할 수 없는 수는 물음표다.
+		CHECK(SpanText(528278.17) == "6일 2시간");
+		CHECK(SpanText(86400) == "1일" && SpanText(90000) == "1일 1시간" && SpanText(7200) == "2시간" && SpanText(3599) == "1시간 미만" && SpanText(0) == "1시간 미만");
+		CHECK(SpanText(-5) == "0" && SpanText(std::numeric_limits<double>::infinity()) == "?" && SpanText(std::nan("")) == "?");
+
+		// 미루기: 시작 시각을 뒤로 민다. 지금보다 뒤의 시각은 쓰지 않는다(지나간 시간이 음수가 되지 않게). 밀 것이 없으면 쓰지 않는다.
+		double out = 0;
+		CHECK(DelaySeasonStart(537321.83, 374400, 86400, out) && out == 460800);
+		CHECK(DelaySeasonStart(537321.83, 500000, 86400, out) && out == 537321.83);		// 지금까지만
+		CHECK(!DelaySeasonStart(537321.83, 537321.83, 86400, out));						// 이미 지금이다
+		CHECK(!DelaySeasonStart(537321.83, 600000, 86400, out));						// 시작이 지금보다 뒤다: 건드리지 않는다
+		CHECK(!DelaySeasonStart(537321.83, 374400, 0, out) && !DelaySeasonStart(537321.83, 374400, -5, out));
+		CHECK(!DelaySeasonStart(std::nan(""), 374400, 86400, out) && !DelaySeasonStart(537321.83, std::nan(""), 86400, out)
+			&& !DelaySeasonStart(537321.83, 374400, std::numeric_limits<double>::infinity(), out));
+
+		// 미룬 결과의 글: 청한 만큼 밀렸으면 그만큼, 지금에 막혀 덜 밀렸으면 실제로 밀린 만큼을 말한다(검토 I2: 30분만 밀고 "하루 미뤘습니다"라고 했다).
+		CHECK(DelayReport(86400, 86400) == "1일 미뤘습니다.");
+		CHECK(DelayReport(1800, 86400) == "1시간 미만만 미뤘습니다(이 단계의 시작이 지금이 됐습니다. 더는 밀 수 없습니다).");
+		CHECK(DelayReport(18000, 86400) == "5시간만 미뤘습니다(이 단계의 시작이 지금이 됐습니다. 더는 밀 수 없습니다).");
+
+		// 끝내기는 0 보다 앞의 시작 시각을 쓰지 않는다: 게임을 시작한 지 단계의 길이만큼 지나지 않았으면 끝낼 수 없다(그런 시작 시각을 게임에서 본 적이 없다).
+		CHECK(PhaseEndTooEarly(200000, 345600, 60) && !PhaseEndTooEarly(345540, 345600, 60) && !PhaseEndTooEarly(537321.83, 345600, 60));
+		CHECK(!EndPhaseStart(200000, 100000, 345600, 60, out));
+		CHECK(EndPhaseStart(345540, 100000, 345600, 60, out) && out == 0);
+
+		// 끝내기: 남은 시간이 Lead 초가 되게 시작 시각을 당긴다. 이미 그만큼밖에 남지 않았으면 쓰지 않는다.
+		CHECK(EndPhaseStart(537321.83, 374400, 345600, 60, out) && std::fabs(PhaseRemain(537321.83, out, 345600) - 60) < 1e-6 && out < 374400);
+		CHECK(!EndPhaseStart(537321.83, 191781.83, 345600, 60, out));					// 남은 시간이 딱 60초
+		CHECK(!EndPhaseStart(537321.83, 100000, 345600, 60, out));						// 이미 지났다
+		CHECK(!EndPhaseStart(537321.83, 374400, 0, 60, out) && !EndPhaseStart(537321.83, 374400, -1, 60, out));		// 길이를 읽지 못했다
+		CHECK(!EndPhaseStart(537321.83, 374400, 345600, -1, out) && !EndPhaseStart(std::nan(""), 374400, 345600, 60, out));
+
+		// 붙들기: 켠 뒤 처음 본 "지나간 시간"을 기억하고, 그 시간이 그대로이게 시작 시각을 따라 민다.
+		const PlaceKey here{ 0x1000, 7 }, other_map{ 0x2000, 7 }, other_game{ 0x1000, 9 };		// 관리자 구조체의 주소와 지도 관리 인스턴스(지어낸 수)
+		SeasonHold hold;
+		CHECK(!StepSeasonHold(hold, true, 1000, 400, 0, here, out) && hold.Has && hold.Elapsed == 600);		// 처음 본 틱에는 쓰지 않는다
+		CHECK(!StepSeasonHold(hold, true, 1000.4, 400, 0, here, out));										// 1초가 안 되는 차이는 쓰지 않는다
+		CHECK(StepSeasonHold(hold, true, 1060, 400, 0, here, out) && out == 460);							// 60초가 흘렀다: 시작을 60 뒤로
+		CHECK(!StepSeasonHold(hold, true, 1060, 460, 0, here, out));											// 쓴 뒤에는 쓸 것이 없다
+		// 단계가 바뀌었거나(게임이 넘겼다, 또는 '끝내기'를 눌렀다) 시각이 거꾸로 갔으면(다른 세이브) 다시 기억한다.
+		CHECK(!StepSeasonHold(hold, true, 1100, 1090, 1, here, out) && hold.Elapsed == 10 && hold.Phase == 1);
+		CHECK(!StepSeasonHold(hold, true, 500, 100, 1, here, out) && hold.Elapsed == 400);
+		// 자리가 바뀌었으면 다시 기억한다: 같은 단계, 더 뒤의 시각이라도 다른 세이브(지도 관리 인스턴스가 다르다)나 다른 지도(관리자 구조체가 다르다)의 것이면
+		// 앞의 게임에서 기억한 "지나간 시간"으로 쓰지 않는다(검토 I1: 3일 지난 게임에서 붙들다가 6시간 지난 세이브를 불러오면 그 세이브의 계절이 당겨졌다).
+		SeasonHold loaded;
+		CHECK(!StepSeasonHold(loaded, true, 1000, 400, 1, here, out) && loaded.Elapsed == 600);
+		CHECK(!StepSeasonHold(loaded, true, 5000, 4900, 1, other_game, out) && loaded.Elapsed == 100);		// 쓰지 않고 새 값을 기억한다
+		CHECK(StepSeasonHold(loaded, true, 5060, 4900, 1, other_game, out) && out == 4960);					// 그 뒤로는 새 게임의 값으로 붙든다
+		CHECK(!StepSeasonHold(loaded, true, 5060, 300, 1, other_map, out) && loaded.Elapsed == 4760);			// 다른 지도의 관리자
+		// 쓰는 값은 지금보다 뒤가 아니다(기억한 지나간 시간은 음수가 아니다).
+		for (double now : { 1000.0, 1300.0, 9000.0 })
+			if (StepSeasonHold(loaded, true, now + 6000, 300, 1, other_map, out))
+				CHECK(out <= now + 6000);
+
+		// 시작 시각이 지금보다 뒤로 읽히면 지나간 시간을 0 으로 본다.
+		SeasonHold odd;
+		CHECK(!StepSeasonHold(odd, true, 100, 300, 0, here, out) && odd.Elapsed == 0);
+		CHECK(StepSeasonHold(odd, true, 100, 300, 0, here, out) && out == 100);
+		// 끄면 잊는다. 꺼진 동안에는 쓰지 않는다. 읽지 못한 수로는 아무것도 하지 않는다.
+		CHECK(!StepSeasonHold(hold, false, 2000, 100, 1, here, out) && !hold.Has);
+		CHECK(!StepSeasonHold(hold, true, std::nan(""), 100, 1, here, out) && !hold.Has);
+		// 밖에서 시작 시각을 바꿨으면(미루기) 잊게 한다: 다음 틱에 새 값을 기억한다.
+		SeasonHold moved;
+		StepSeasonHold(moved, true, 1000, 400, 0, here, out);
+		ForgetSeasonHold(moved);
+		CHECK(!StepSeasonHold(moved, true, 1000, 900, 0, here, out) && moved.Elapsed == 100);
+
+		// 쓴 뒤의 확인: 게임의 함수가 돌려주는 남은 시간이 바라던 쪽으로 움직였는가(1초 넘게). 시작 시각이 써졌다는 것만으로 됐다고 하지 않는다.
+		CHECK(RemainMoved(true, 182678, 269078) && !RemainMoved(true, 182678, 182678) && !RemainMoved(true, 182678, 182678.5) && !RemainMoved(true, 182678, 100));
+		CHECK(RemainMoved(false, 182678, 60) && !RemainMoved(false, 182678, 182678) && !RemainMoved(false, 60, 182678));
+		CHECK(!RemainMoved(true, std::nan(""), 5) && !RemainMoved(false, 5, std::nan("")));
+
+		// 상태의 글: 가혹한 계절이 아닐 때는 올 때까지, 가혹한 계절일 때는 끝날 때까지. 이름이 없으면 이름 없이. (이름은 지어낸 것이다)
+		CHECK(SeasonLine(false, "별비", 528278.17, 873878.17) == "가혹한 계절(별비)까지 6일 2시간");
+		CHECK(SeasonLine(true, "별비", 0, 100000) == "가혹한 계절(별비) 중입니다. 끝나기까지 1일 3시간");
+		CHECK(SeasonLine(false, "", 7200, 0) == "가혹한 계절까지 2시간");
+		// 광산의 매장량 붙들기: 켠 동안 광산마다 본 가장 큰 값을 기억하고, 줄었으면 그 값으로 되돌려 쓴다(게임이 캘 때마다 1 씩 줄였다: 18 -> 17).
+		std::map<std::string, double> kept;
+		CHECK(!KeepStock(kept, "69_156", 18, out) && kept["69_156"] == 18);		// 처음 본 값은 기억만 한다
+		CHECK(KeepStock(kept, "69_156", 17, out) && out == 18);					// 줄었다: 되돌려 쓴다
+		CHECK(!KeepStock(kept, "69_156", 18, out));								// 그대로다
+		CHECK(!KeepStock(kept, "69_156", 25, out) && kept["69_156"] == 25);		// 늘었으면 그 값을 기억한다
+		CHECK(!KeepStock(kept, "12_40", 3, out) && KeepStock(kept, "12_40", 0, out) && out == 3 && kept.size() == 2);		// 광산마다 따로
+		CHECK(!KeepStock(kept, "x", std::nan(""), out) && !KeepStock(kept, "y", -1, out) && kept.size() == 2);			// 수가 아니거나 음수인 칸은 건드리지 않는다
+		// 켤 때 이미 0 인 광산은 0 을 기억한다(되살리지 않는다).
+		CHECK(!KeepStock(kept, "empty", 0, out) && kept["empty"] == 0 && !KeepStock(kept, "empty", 0, out));
+		// 기억한 수가 어느 게임·어느 지도의 것인지: 자리가 바뀌었거나 시각이 거꾸로 갔으면 모두 잊는다(같은 자리의 열쇠를 가진 다른 세이브의 광산에 앞의 수를 쓰지 않는다).
+		StockBook book;
+		EnterStockPlace(book, here, 1000);
+		KeepStock(book.Kept, "69_156", 18, out);
+		EnterStockPlace(book, here, 1060);
+		CHECK(book.Kept.size() == 1);											// 같은 자리, 시각이 앞으로: 그대로
+		EnterStockPlace(book, other_game, 2000);
+		CHECK(book.Kept.empty() && !KeepStock(book.Kept, "69_156", 5, out));		// 다른 세이브: 5 를 18 로 되돌려 쓰지 않는다
+		EnterStockPlace(book, other_map, 2100);
+		CHECK(book.Kept.empty());
+		KeepStock(book.Kept, "1_1", 9, out);
+		EnterStockPlace(book, other_map, 500);
+		CHECK(book.Kept.empty());												// 시각이 거꾸로 갔다
+
+		// 단계의 글: 게임의 단계는 0 부터다. 창에는 1 부터 센다.
+		CHECK(PhaseNote(0, 182678.17) == "단계 1, 이 단계는 2일 2시간 남음" && PhaseNote(2, 3000) == "단계 3, 이 단계는 1시간 미만 남음");
 	});
 
 	Test("tools/probes 의 요청 파일은 모두 오류 없이 읽힌다", [] {

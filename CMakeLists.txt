@@ -26,6 +26,7 @@ add_library(nlcore STATIC
   src/core/FamilyPlan.cpp
   src/core/Rate.cpp
   src/core/RolePlan.cpp
+  src/core/SeasonPlan.cpp
   src/core/RemoteCommand.cpp
   src/core/Text.cpp
   src/core/WorldPlan.cpp

@@ -1,6 +1,7 @@
 param(
     [string]$Name,              # 세이브 파일 이름의 일부(확장자 없이). 없으면 게임이 "계속하기"로 불러올 세이브(가장 최근 것)
     [switch]$List,              # 불러오지 않고 세이브의 이름만 늘어놓는다
+    [switch]$KeepSaving,        # 불러온 뒤 게임의 저장을 끄지 않는다(평소에는 실행 묶음이면 끈다)
     [int]$TimeoutSec = 240
 )
 $ErrorActionPreference = 'Stop'
@@ -84,6 +85,19 @@ while ((Get-Date) -lt $deadline) {
     $state = Ask-Lines @('state') 30
     if ($state -match 'in_game 1') {
         $state | Where-Object { $_ -match 'game_time|o_character|o_dummy' } | ForEach-Object { Write-Host $_ }
+        # 실행 묶음이면 게임의 저장을 끈다(치트 표의 no_autosave. research/25: 켠 채 자동 저장의 시각을 세 번 넘겨도 파일이 생기지 않았다).
+        # 실행 묶음의 설정은 끌 때 버려지므로 사용자의 게임에는 남지 않는다. 묶음이 아니면(사용자의 설정이 제자리에 있다) 건드리지 않는다.
+        $modDir = Join-Path (Get-NlGameDir) 'mods\Aurie'
+        $inSession = (Test-Path -LiteralPath (Join-Path $modDir 'NlToyBox.session.txt')) -or [bool](Get-ChildItem -LiteralPath $modDir -Filter '*.kept' -ErrorAction SilentlyContinue)
+        if ($KeepSaving) { Write-Host '게임의 저장: 그대로 둠 (-KeepSaving)' }
+        elseif (-not $inSession) { Write-Host '게임의 저장: 그대로 둠 (실행 묶음이 아닙니다)' }
+        else {
+            $null = Ask-Lines @('cheat no_autosave on') 30
+            Start-Sleep -Seconds 2
+            $flag = Ask-Lines @('ask inst:o_debug.is_save_disabled') 30
+            if ("$flag" -match '=\s+bool\s+true') { Write-Host '게임의 저장: 끔 (no_autosave)' }
+            else { Write-Host '경고: 게임의 저장을 끄지 못했습니다. 시험 값이 든 채 자동 저장의 시각을 넘기지 마세요.' }
+        }
         Write-Host 'PASS'
         exit 0
     }

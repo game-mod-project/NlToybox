@@ -81,6 +81,7 @@ namespace NlCore
 		double Min, Max;		// 수가 있는 종류의 범위(Number 는 값, 배율은 배율)
 		bool Verified;			// 플레이에서 효과를 봤는가
 		const char* Help;		// 변수 이름에서 읽은 뜻. Verified 가 아니면 추정이다
+		bool ThisRunOnly = false;	// 켠 채 저장돼 있어도 다음 실행은 꺼진 채로 시작한다(게임의 저장 끄기: 켠 것을 잊으면 잃는 것이 크다)
 	};
 
 	const std::vector<Cheat>& Cheats();
@@ -88,5 +89,6 @@ namespace NlCore
 
 	// 상태 파일에서 읽은 것을 표에 맞춘다: 표에 없는 Id 와 종류가 다른 Id 를 버리고, 수를 범위 안으로 당긴다. 즐겨찾기와 잠금은 그대로 둔다.
 	// 훅(Hook, HookNumber)과 Custom 은 Verified 인 것만 켠 채로 남긴다(확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다).
+	// ThisRunOnly 인 항목은 언제나 꺼진 채로 시작한다.
 	CheatState KeepKnown(CheatState State);
 }
