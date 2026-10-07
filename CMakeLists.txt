@@ -94,6 +94,8 @@ add_library(nltoybox SHARED
   src/TraitText.cpp
   src/Shield.cpp
   src/Hold.cpp
+  src/PeopleActs.cpp
+  src/PeopleDraw.cpp
   src/Recorder.cpp
   src/Remote.cpp
   src/Search.cpp
