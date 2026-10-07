@@ -1,6 +1,7 @@
 #include "Production.hpp"
 
 #include "Access.hpp"
+#include "Buildings.hpp"
 #include "Jobs.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
@@ -22,9 +23,6 @@ using NlJobs::Visit;
 namespace
 {
 	// research/10 에서 잰 것이다(0.5588.9777.0).
-	// 건물 종류의 이름들과 구조체(research/09. src/Build.cpp 와 같다).
-	constexpr const char* k_AllNames = "gml_Script_building_generic_get_array_of_all_buildings";
-	constexpr const char* k_Generic = "gml_Script_get_generic_building";
 	// 창고 종류(hall, storage, granary, armory, default) → __capacity_in_categories.<갈래>.capacity
 	constexpr const char* k_Warehouses = "inst:o_data.__building_warehouse_data.__generic_warehouses";
 	// 설교의 종류 열 가지(__name, __cost …). research/21.
@@ -74,28 +72,17 @@ namespace
 	// ds_map 의 번호는 게임이 자료를 다시 만들면 다른 것에 다시 쓰일 수 있어 열쇠로 삼지 않는다).
 	bool WalkRecipes(const Visit& V, bool Inputs, std::string& Why)
 	{
-		RValue names;
-		if (!NlGame::CallScript(k_AllNames, {}, names) || !names.IsArray())
-		{
-			Why = "the list of buildings is not available";
-			return false;
-		}
-
 		std::vector<double> seen;
-		NlAccess::ForEachChild(names, Holder::Array, [&](const PathStep&, const RValue& name) {
-			if (!name.IsString())
-				return true;
-			RValue generic, map;
+		return NlBuildings::ForEachType([&](const std::string& key, const RValue& generic) {
+			RValue map;
 			std::string why;
-			if (!NlGame::CallScript(k_Generic, { name }, generic) || !generic.IsStruct()
-				|| !NlAccess::Follow(generic, { { '.', "__production", 0 }, { '.', "__map_of_production", 0 } }, map, why) || !NlGame::IsNumber(map))
+			if (!NlAccess::Follow(generic, { { '.', "__production", 0 }, { '.', "__map_of_production", 0 } }, map, why) || !NlGame::IsNumber(map))
 				return true;		// 만드는 것이 없는 건물 종류
 			const double id = map.ToDouble();
 			if (std::find(seen.begin(), seen.end(), id) != seen.end())
 				return true;
 			seen.push_back(id);
 
-			const std::string key = name.ToString();
 			NlAccess::ForEachChild(map, Holder::Map, [&](const PathStep& produced, const RValue& recipe) {
 				double resource = 0;
 				if (!recipe.IsStruct() || !NlCore::ParseNumber(produced.Name, resource))
@@ -122,8 +109,7 @@ namespace
 				return true;
 			});
 			return true;
-		});
-		return true;
+		}, Why);
 	}
 
 	// 종교 행동의 비용: 게임 변수 여섯과 설교 종류마다의 __cost(inst:o_data.__preach_data.__preach_list. 열쇠는 "preach.<설교의 이름>"). research/21.

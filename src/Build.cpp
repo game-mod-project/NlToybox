@@ -1,6 +1,7 @@
 #include "Build.hpp"
 
 #include "Access.hpp"
+#include "Buildings.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
@@ -18,9 +19,7 @@ namespace
 {
 	// research/09 에서 잰 것이다(0.5588.9777.0).
 	constexpr const char* k_Cheat = "build_free";
-	// 인자 없이 건물 종류의 이름 171개를 배열로 돌려준다(기계어로 인자 0 을 봤고, treecall 로 불러 봤다).
-	constexpr const char* k_AllNames = "gml_Script_building_generic_get_array_of_all_buildings";
-	// (이름) → 건물 종류의 구조체. 게임이 (string)으로 수천 번 부르는 것을 기록했다.
+	// (이름) → 건물 종류의 구조체. StillZero 가 장부의 첫 자리 하나를 다시 볼 때만 쓴다(걷기는 src/Buildings). 리팩토링 C 의 Task 3 에서 StillZero 와 함께 없어진다.
 	constexpr const char* k_Generic = "gml_Script_get_generic_building";
 	// 건물 종류.__construction_cost.levels[등급] = undefined 또는 { money, resources.__array_of_resource_quantity[39] }
 
@@ -48,34 +47,22 @@ namespace
 	// 건물 종류의 등급별 비용 구조체들을 차례로 넘긴다. 건물 종류의 목록을 얻지 못하면 거짓이고 Why 에 까닭.
 	bool ForEachCost(const std::function<void(const std::string& Building, int Level, const RValue& Cost)>& Visit, Walk& Seen, std::string& Why)
 	{
-		RValue names;		// 이 함수 안에서만 든다
-		if (!NlGame::CallScript(k_AllNames, {}, names) || !names.IsArray())
-		{
-			Why = "the list of buildings is not available";
-			return false;
-		}
-
-		NlAccess::ForEachChild(names, Holder::Array, [&](const PathStep&, const RValue& name) {
-			if (!name.IsString())
-				return true;
-			RValue generic, levels;
+		return NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
+			RValue levels;
 			std::string why;
-			if (!NlGame::CallScript(k_Generic, { name }, generic) || !generic.IsStruct()
-				|| !NlAccess::Follow(generic, { { '.', "__construction_cost", 0 }, { '.', "levels", 0 } }, levels, why) || !levels.IsArray())
+			if (!NlAccess::Follow(generic, { { '.', "__construction_cost", 0 }, { '.', "levels", 0 } }, levels, why) || !levels.IsArray())
 			{
 				Seen.Skipped++;
 				return true;
 			}
 			Seen.Buildings++;
-			const std::string building = name.ToString();
 			NlAccess::ForEachChild(levels, Holder::Array, [&](const PathStep& step, const RValue& cost) {
 				if (cost.IsStruct())
 					Visit(building, static_cast<int>(step.Index), cost);
 				return true;
 			});
 			return true;
-		});
-		return true;
+		}, Why);
 	}
 
 	// 등급 하나의 비용에서 칸들의 배열(자원)을 얻는다.
