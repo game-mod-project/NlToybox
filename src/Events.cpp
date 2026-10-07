@@ -124,12 +124,17 @@ namespace
 		bool Read = false, Present = false;
 		std::string Name;		// 그 구조체의 __system_name 이나 __name(글일 때)
 	};
+	struct ForcedEvent		// 예약된 강제 이벤트(틱이 읽는다). Read: 자리를 읽었다. Present: 구조체가 있다. Name: 그 __system_name(글일 때)
+	{
+		bool Read = false, Present = false;
+		std::string Name;
+	};
 	struct Snapshot			// 틱이 채우고 Draw 가 읽는다. 글과 수만
 	{
 		bool Ready = false;
 		std::vector<std::string> Names;					// 보일 이름(표의 차례, 그 뒤 표에 없는 것)
 		std::unordered_map<std::string, double> Cooldowns, GroupCooldowns;		// 이름 → 남은 날(없으면 칸이 없다)
-		std::string Forced;								// 예약된 이벤트의 이름(없으면 빈 글)
+		ForcedEvent Forced;								// 예약된 강제 이벤트(읽었는가, 있는가, 이름)
 		int Delayed = -1;								// 지연 생성의 수(-1: 읽지 못함)
 		size_t MissingFromGame = 0;						// 표에만 있는 이름의 수
 		std::array<Status, k_Families> Families;		// 가족을 자리로(EventFamily 의 수)
@@ -203,10 +208,22 @@ namespace
 		});
 	}
 
-	std::string ReadForced()
+	// 예약의 자리: 구조체면 예약이 있다(이름은 __system_name 이 글일 때만). 읽지 못한 것과 없는 것을 가른다(최종 리뷰 3번).
+	ForcedEvent ReadForced()
 	{
+		ForcedEvent out;
+		RValue value;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(std::string(k_EventsData) + ".__debug_forced_event"), value, why))
+			return out;
+		out.Read = true;
+		if (!value.IsStruct())
+			return out;		// undefined: 예약이 없다
+		out.Present = true;
 		std::string name;
-		return NlAccess::ReadText(std::string(k_EventsData) + ".__debug_forced_event.__system_name", name) ? name : std::string();
+		if (NlAccess::ReadText(std::string(k_EventsData) + ".__debug_forced_event.__system_name", name))
+			out.Name = name;
+		return out;
 	}
 
 	int ReadDelayed()
@@ -226,7 +243,7 @@ namespace
 		const NlCore::EventListing merged = NlCore::MergeEventNames(g_EventNames);
 		next.Names = merged.Known;
 		next.Names.insert(next.Names.end(), merged.Extra.begin(), merged.Extra.end());
-		next.MissingFromGame = merged.MissingFromGame;
+		next.MissingFromGame = g_EventNames.empty() ? 0 : merged.MissingFromGame;		// 이름을 읽기 전에는 "표의 61줄이 없다"고 말하지 않는다
 		ReadCooldowns(std::string(k_Director) + ".__events_cooldowns", next.Cooldowns);
 		ReadCooldowns(std::string(k_Director) + ".__events_groups_cooldowns", next.GroupCooldowns);
 		next.Forced = ReadForced();
@@ -246,17 +263,20 @@ namespace
 	// 예약 취소: 예약을 읽고, 있으면 게임의 reset_debug_forced_event()(인자 없음. 게임이 그 꼴로 부른다. research/28·29)를 부르고, 다시 읽어 판정한다.
 	std::string CancelNow()
 	{
-		const std::string before = ReadForced();
-		if (NlCore::ChooseCancelStep(!before.empty()) == NlCore::CancelStep::Nothing)
+		const ForcedEvent before = ReadForced();
+		if (!before.Read)
+			return NlCore::CancelEventReport('f', "예약의 자리를 읽지 못했습니다");
+		if (NlCore::ChooseCancelStep(before.Present) == NlCore::CancelStep::Nothing)
 			return NlCore::CancelEventReport('n', std::string());
+		const std::string name = NlCore::ForcedEventText(true, true, before.Name);
 		RValue result;		// 이 함수 안에서만 든다
 		std::string why;
-		Log("world call reset_debug_forced_event() (forced: " + before + ")");		// 부르기 전에 남긴다
+		Log("world call reset_debug_forced_event() (forced: " + name + ")");		// 부르기 전에 남긴다
 		if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_EventsData) + ".reset_debug_forced_event"), {}, result, why))
 			return NlCore::CancelEventReport('f', why);
-		const std::string after = ReadForced();
-		Log("world: forced event after reset: " + (after.empty() ? std::string("(none)") : after));
-		return NlCore::CancelEventReport(after.empty() ? 'd' : 'u', before);
+		const ForcedEvent after = ReadForced();
+		Log("world: forced event after reset: " + NlCore::ForcedEventText(after.Read, after.Present, after.Name));
+		return NlCore::CancelEventReport(after.Read && !after.Present ? 'd' : 'u', name);
 	}
 
 	// 끝내기: 확인된 가족만. 진행 중을 읽고, 표의 꼴(지금은 인자 없음뿐)로 부르고, 다시 읽어 판정한다.
@@ -394,8 +414,9 @@ void NlEvents::Draw()
 		NlUi::Hint("게임 화면에서 이벤트의 상태를 읽습니다.");
 	else
 	{
-		ImGui::Text("예약된 이벤트: %s", g_Now.Forced.empty() ? "없음" : (LabelOf(g_Now.Forced) + "  (" + g_Now.Forced + ")").c_str());
-		if (!g_Now.Forced.empty())
+		const bool named = g_Now.Forced.Present && !g_Now.Forced.Name.empty();
+		ImGui::Text("예약된 이벤트: %s", named ? (LabelOf(g_Now.Forced.Name) + "  (" + g_Now.Forced.Name + ")").c_str() : NlCore::ForcedEventText(g_Now.Forced.Read, g_Now.Forced.Present, g_Now.Forced.Name).c_str());
+		if (g_Now.Forced.Present)
 		{
 			ImGui::SameLine();
 			if (ImGui::Button("예약 취소"))
@@ -545,7 +566,7 @@ std::vector<std::string> NlEvents::List(const std::string& Group, const std::str
 		ReadEventNames();
 	ReadSnapshot();
 	std::vector<std::string> lines;
-	lines.push_back("예약: " + (g_Now.Forced.empty() ? std::string("없음") : g_Now.Forced) + " (지연 " + (g_Now.Delayed < 0 ? std::string("?") : std::to_string(g_Now.Delayed)) + ")");
+	lines.push_back("예약: " + NlCore::ForcedEventText(g_Now.Forced.Read, g_Now.Forced.Present, g_Now.Forced.Name) + " (지연 " + (g_Now.Delayed < 0 ? std::string("?") : std::to_string(g_Now.Delayed)) + ")");
 	for (const NlCore::EventEndRow& row : NlCore::EventEndTable())
 	{
 		const Status& status = g_Now.Families[static_cast<size_t>(row.Family)];

@@ -210,7 +210,7 @@ namespace NlCore
 
 	bool EventEndAllowed(const EventEndRow& Row)
 	{
-		return Row.Verified;
+		return Row.Verified && Row.ArgShape[0] == 0;		// 빈 글 = 인자 없음. 다른 꼴은 부르는 코드가 아직 없다
 	}
 
 	bool ParseEventFamily(const std::string& Word, EventFamily& Out)
@@ -238,6 +238,15 @@ namespace NlCore
 		if (!Present)
 			return "없음";
 		return Name.empty() ? "진행 중 (이름을 읽지 못함)" : "진행 중: " + Name;
+	}
+
+	std::string ForcedEventText(bool Read, bool Present, const std::string& Name)
+	{
+		if (!Read)
+			return "읽지 못함";
+		if (!Present)
+			return "없음";
+		return Name.empty() ? "(이름을 읽지 못함)" : Name;
 	}
 
 	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why)

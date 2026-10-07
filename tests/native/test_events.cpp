@@ -81,12 +81,18 @@ void RunEventsTests()
 		CHECK(FindEventEnd(EventFamily::Rebellion) == nullptr && FindEventEnd(EventFamily::None) == nullptr);
 		const EventEndRow verified{ EventFamily::Raid, "a", "b", "", true };
 		CHECK(EventEndAllowed(verified));
+		// 인자의 꼴: 빈 글만 "인자 없음"으로 부를 수 있다. 확인됐어도 다른 꼴이 적혀 있으면 아직 부르지 못한다(최종 리뷰 2번: 헤더와 코드의 규약을 하나로).
+		const EventEndRow shaped{ EventFamily::Raid, "a", "b", "(struct)", true };
+		CHECK(!EventEndAllowed(shaped));
 		EventFamily family = EventFamily::None;
 		CHECK(ParseEventFamily("raid", family) && family == EventFamily::Raid);
 		CHECK(ParseEventFamily("unrest", family) && family == EventFamily::Unrest);
 		CHECK(!ParseEventFamily("rebellion", family) && !ParseEventFamily("", family) && !ParseEventFamily("RAID", family));
 		// 예약 취소: 예약이 없으면 함수를 부르지 않는다
 		CHECK(ChooseCancelStep(false) == CancelStep::Nothing && ChooseCancelStep(true) == CancelStep::Call);
+		// 예약의 글(최종 리뷰 3번): 자리를 읽지 못한 것과 없는 것을 가른다. 구조체는 있는데 이름을 못 읽은 것도 따로.
+		CHECK_STR(ForcedEventText(false, false, ""), "읽지 못함"); CHECK_STR(ForcedEventText(true, false, ""), "없음");
+		CHECK_STR(ForcedEventText(true, true, ""), "(이름을 읽지 못함)"); CHECK_STR(ForcedEventText(true, true, "u_guest_joker"), "u_guest_joker");
 		// 상태의 글
 		CHECK_STR(EventStatusText(EventFamily::Raid, true, false, ""), "없음");
 		CHECK_STR(EventStatusText(EventFamily::Raid, true, true, "raid_bandits"), "진행 중: raid_bandits");

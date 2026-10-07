@@ -46,7 +46,8 @@ namespace NlCore
 	};
 	EventListing MergeEventNames(const std::vector<std::string>& GameNames);
 
-	// 끝내기의 후보(research/29 에서 이름만 봤다). StatusPath: 진행 중의 자리(undefined·-4 면 없음, 구조체면 진행 중). EndPath: 끝내는 함수. ArgShape: 게임이 부르는 꼴(확인 전에는 빈 글).
+	// 끝내기의 후보(research/29 에서 이름만 봤다). StatusPath: 진행 중의 자리(undefined·-4 면 없음, 구조체면 진행 중). EndPath: 끝내는 함수.
+	// ArgShape: 인자의 꼴. **빈 글 = 인자 없음**(지금 부를 수 있는 유일한 꼴). 다른 글("(struct)" 같은)은 게임에서 본 꼴을 적어 두되 아직 부르지 못한다(그 꼴을 부르는 코드를 더한 뒤에 빈 글이 아닌 꼴을 허용한다).
 	// Verified: 게임에서 인자와 효과를 본 뒤에만 참(스펙 §7 의 절차). 그때까지 부르지 않는다.
 	struct EventEndRow
 	{
@@ -58,7 +59,7 @@ namespace NlCore
 	};
 	const std::vector<EventEndRow>& EventEndTable();			// 다섯: 습격, 예언, 음모, 손님, 소요
 	const EventEndRow* FindEventEnd(EventFamily Family);		// 없으면 nullptr(None, Rebellion)
-	bool EventEndAllowed(const EventEndRow& Row);				// Verified 일 때만
+	bool EventEndAllowed(const EventEndRow& Row);				// Verified 이고 인자의 꼴이 빈 글(인자 없음)일 때만
 	bool ParseEventFamily(const std::string& Word, EventFamily& Out);	// 끝내기의 가족 다섯의 열쇠(raid …)만. rebellion 은 받지 않는다
 
 	// 예약 취소: 예약이 없으면 함수를 부르지 않는다.
@@ -67,6 +68,8 @@ namespace NlCore
 
 	// 진행 중의 글. Read: 자리를 읽었다. Present: 구조체가 있다. Name: 그 구조체의 이름(없으면 빈 글). Rebellion 은 언제나 "모름".
 	std::string EventStatusText(EventFamily Family, bool Read, bool Present, const std::string& Name);
+	// 예약된 강제 이벤트의 글. Read: 자리(__debug_forced_event)를 읽었다. Present: 구조체가 있다. Name: 그 __system_name(글일 때). 읽지 못한 것을 "없음"으로 적지 않는다.
+	std::string ForcedEventText(bool Read, bool Present, const std::string& Name);
 	// 일으키기의 결과. Outcome: 'n' 그 이름의 이벤트가 없다, 'w' 쓰지 못했다(Why), 'd' 써 두었다(감독이 다음에 뽑을 때 고른다. research/28).
 	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why);
 	// 취소의 결과. 'n' 예약이 없었다, 'f' 함수를 부르지 못했다(Detail 에 까닭), 'u' 부른 뒤에도 남아 있다(Detail 에 이름), 'd' 지웠다(Detail 에 이름).
