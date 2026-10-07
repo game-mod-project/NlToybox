@@ -1,6 +1,8 @@
 #include "Tweaks.hpp"
 
+#include "Access.hpp"
 #include "Game.hpp"
+#include "core/AskPath.hpp"
 #include "core/Knobs.hpp"
 #include "core/Text.hpp"
 
@@ -328,7 +330,8 @@ void NlTweaks::GameTick()
 
 	Locate();
 	RValue vars;		// 못 찾으면 undefined 로 남고, 그 항목은 "못 찾음"이 된다
-	NlGame::Resolve("global.__gameplay_vars", vars);
+	std::string why;
+	NlAccess::Read(NlCore::ParseAskPath("global.__gameplay_vars"), vars, why);
 	for (Knob& knob : g_Knobs)
 	{
 		if (knob.Factor == 1 && knob.Applied == 1)

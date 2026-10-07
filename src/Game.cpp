@@ -128,46 +128,6 @@ std::string NlGame::RoomName()
 	return name.ToString();
 }
 
-bool NlGame::Resolve(const std::string& Path, RValue& Out)
-{
-	CInstance* global = Global();
-	if (!global || Path.rfind("global.", 0) != 0)
-		return false;
-
-	RValue current(global);
-	size_t begin = 7;	// "global." 다음
-	while (true)
-	{
-		const size_t dot = Path.find('.', begin);
-		const std::string name = Path.substr(begin, dot == std::string::npos ? std::string::npos : dot - begin);
-		if (!current.IsStruct())
-			return false;
-
-		// 이름이 같은 멤버를 열거로 찾는다. 없는 이름으로 GetInstanceMember 를 부르면 YYToolkit 이 구조체에 대고
-		// variable_instance_exists 를 부르는데(MI_Public.cpp 268~291행), 이 러너에서 그것이 되는지는 확인하지 못했다.
-		// 열거는 단계 0 에서 써 본 길이다.
-		RValue next;
-		bool found = false;
-		g_Yytk->EnumInstanceMembers(current, [&](const char* MemberName, RValue* Value) -> bool
-		{
-			if (!MemberName || !Value || name != MemberName)
-				return false;
-			next = *Value;
-			found = true;
-			return true;	// 찾았으니 그만 돈다
-		});
-		if (!found)
-			return false;
-		current = next;
-
-		if (dot == std::string::npos)
-			break;
-		begin = dot + 1;
-	}
-	Out = current;
-	return true;
-}
-
 int NlGame::MemberCount(const RValue& Struct)
 {
 	// EnumInstanceMembers 가 멤버 수를 얻는 바로 그 호출이다(YYToolkit MI_Public.cpp 350행).
