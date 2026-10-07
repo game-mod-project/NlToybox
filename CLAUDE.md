@@ -217,6 +217,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     지도를 떠나면 분대의 주소가 없어진다: 그 주소로 건 기록은 스크립트 이름으로 멈춘다.
   - **사용자가 하는 게임을 지켜볼 때는 읽기와 `record`만 쓴다**: 값을 쓰지 않고, 게임의 함수를 부르지 않고, `session.ps1`로 끄지 않는다. 끝나면 내가 건 기록만 멈춘다
     (`unrecord <주소>`. `unrecord all`은 치트가 건 것의 기록까지 멈춘다). **기록의 표본은 건 뒤의 처음 여섯뿐이다**: 적의 표본을 받으려면 싸움이 붙은 뒤에 `record`를 다시 보낸다.
+    `records <주소>`도 주소를 받는다(`records become_thug` 같은 짧은 이름은 아무것도 찾지 못한다. 전부는 `records`). **일어나는 때를 모르는 호출은 불러오자마자 기록을 건다**(깡패 전환을 늦게 걸어 대조에서 놓쳤다).
     `list <그릇> max=5`는 찾는 칸을 자를 수 있다(칸 하나는 `ask`로 바로 묻는다).
 - 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다
   (`CheckPreset`과 시험이 막는다). 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켠다(이미 켜져 있고 배율이 같으면 건드리지 않는다). 탐색기의 잠금과 배율 7개는 건드리지 않는다.
@@ -268,8 +269,13 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `src/Production.cpp`의 일이 쓴다(`WalkVars`, `WalkReligionCosts`. 열쇠의 목록은 `core/WorldPlan`). 세이브에는 그 열쇠가 없다. **게임이 그 값을 따르는지는 보지 못했다**(설교를 정하는 것은 게임의 창이다).
   - **표에 `global.` 뿌리로 값을 써 넣는 항목(Toggle, Number)을 두지 않는다**(시험이 막는다): 메인 메뉴에서도 써지고, 창이 보이는 동안 전역 4,700여 개를 훑는다. 게임 변수는 모듈의 일(Custom·CustomScale)로 쓴다.
   - 설교의 효과(설교 강도, 전환 확률, 헌금)는 재지 못했다: 설교가 정해져 있지 않은 세이브에서는 그 스크립트들이 한 번도 불리지 않는다. 돌려주는 형을 보지 못한 함수에는 배율을 걸지 않는다.
+    **설교를 거는 함수는 `c_church.set_preach(영혼, 설교 자료)`다**(`inst:o_building:<n>.c_church`. 자료는 `inst:o_data.__preach_data.__preach_list[n]`. 거꾸로(자료, uuid 글) 부르면 `get_uuid`를 찾지 못해 게임이 끝났다. `research/27`).
+    그렇게 건 설교(`c_church.__preach` 구조체: `__preach`, `__preacher_uuid`, `__is_player_inited` false)는 **08:00 에 시작되지 않고 지워졌다.** 게임의 창이 더 하는 일을 모른다. 헌금은 그래서 못 쟀다.
   - 건물의 종류는 `inst:o_building:<n>.raw_caption`(`"building.stone_church"`)으로 가린다. 교회의 구성요소는 `c_church`(교회가 아니면 -4).
-- **시간을 흘리는 스크립트는 배속이 0 으로 떨어지면 다시 건다**(아덴 세이브는 4일차 08:00 에 이야기 창이 떠 멈춘다. 다시 걸지 않으면 거기서 선다. `research/21`).
+- **시간을 흘리는 스크립트는 배속이 바라는 수와 다르면 다시 건다**(0 만이 아니다. `research/21`, `27`): 아덴 세이브는 **아침마다 08:01 에 이야기 창("신제국". 자정의 통계 창도 있다)이 떠 멈춘다**
+  (`o_time_controller.is_fully_paused` 참. `time resume`으로는 풀리지 않는다: `write inst:o_time_controller.is_fully_paused=0` 뒤에 `__set_warp`를 다시 건다. 창은 그대로 두고 흐른다),
+  **날마다 11:00 쯤 배속이 1 로 돌아온다**(세 실행에서 같았다. `time resume`도 x1 로 푼다: `__set_warp`는 그 뒤에). `ask`의 글 답에는 따옴표가 붙는다(`= string "5c61…"`. uuid 를 견줄 때 뗀다).
+  `cheat`로 쓴 값은 다음 틱에 써지므로 같은 요청 묶음의 `ask`는 옛 값을 본다(2초 뒤에 따로 묻는다). 아무것도 켜지 않은 **대조 실행이 먼저다**: 같은 세이브에서 깡패·노사·헌금은 대조에서도 안 일어나 켠 실행만으로는 가릴 수 없었다(`research/27`).
 - 특성의 글(`core/Localization`, `src/People.cpp`. `research/20`). **게임 파일의 글을 레포에 싣지 않는다**: 모듈이 시작할 때 게임 폴더의 `localization\main.csv`(화면 이름)와
   힌트 파일 셋(`hints_tutorial.csv`, `hints_with_icons.csv`, `hints.csv`)을 읽는다(Korean 칸, 비면 English 칸. `ReadLocalization`). 시험은 지어낸 글로 한다.
   - 화면 이름의 열쇠와 설명의 열쇠는 게임에 묻는다: `gml_Script_trait_property_get(이름, 번호)`(게임이 (글, 정수)로 부른다). 0번 이름, 1번 화면 이름의 열쇠(대개 `trait.<이름>`.

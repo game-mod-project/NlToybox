@@ -156,7 +156,8 @@ namespace NlCore
 			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
 				"건물을 놓으면 바로 다 지어진다" },
 			// 사용자가 플레이에서 봤다: 건설 목록은 풀리지만 조건에 걸리는 건물은 여전히 지을 수 없다. 조건까지 푸는 것은 아직 없다.
-			{ "build_all", Area::Build, "건설 목록 모두 열기 (조건은 그대로)", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, false,
+			// 사용자가 플레이에서 본 것(위의 줄)이 이 항목의 효과("목록이 모두 보인다")다. 2026-10-07 의 확인 캠페인에서 그 범위로 확인으로 올렸다(research/27).
+			{ "build_all", Area::Build, "건설 목록 모두 열기 (조건은 그대로)", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, true,
 				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
@@ -179,7 +180,7 @@ namespace NlCore
 			// 인물마다 __soul.__aging.__old.__debug_is_can_die_of_old_age(true)가 있다. 켜면 false 로, 끄면 다시 true 로 써지는 것까지 봤다(손님은 그대로).
 			// 이름에서 읽은 뜻이고, 늙어도 죽지 않는지는 보지 못했다. 세이브에는 남지 않는다(열쇠 0건).
 			{ "no_old_age_death", Area::People, "노화로 죽지 않음", "inst:o_character.__soul.__aging.__old.__debug_is_can_die_of_old_age", C, 1, 0, 0, 0, false,
-				"플레이어의 사람 모두의 '노화로 죽을 수 있다'를 끈다. 끄면 다시 켠다" },
+				"플레이어의 영주(o_character) 모두의 '노화로 죽을 수 있다'를 끈다. 끄면 다시 켠다. research/27: 95세로 만든 영주는 끈 채에도 켠 채에도 4일 동안 죽지 않았다(켠 채에는 게임의 경고 'soul isn't character or die'가 사라졌다). 주민에게는 쓰지 않는다" },
 			// 이주 관리자의 다음 이주 보너스. 3 을 쓰자 그날 저녁 "3명의 이주자가 도착했습니다"가 뜨고 주민이 31 → 34 가 됐다(2026-10-06, 0.9.1).
 			// 게임이 이주 때 이 값을 0 으로 되돌린다. 값을 정해 두면 다시 써 넣으므로 날마다 그만큼 더 온다. 켠 채 저장하면 세이브에 남는다(그 열쇠가 있다).
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
@@ -199,8 +200,10 @@ namespace NlCore
 				"게임 변수 pregnancy_mother_die 와 trait_death_in_childbirth 를 0 으로 쓴다. 이름으로 보아 출산으로 죽지 않을 것으로 보인다 "
 				"(끈 채 22번의 출산에서도 어머니가 죽지 않아 가리지 못했다)" },
 
+			// 2026-10-07(research/27): 같은 70명으로 낮의 두 시간씩을 견줬다. 0 으로 쓴 창에서 영주 둘의 휴식이 7 줄었고, 원래 값 3 의 창에서는 아무도 줄지 않았다.
+			// 시간당 감소를 바로 정하는 값이 아니다(줄어드는 것은 활동에 매인 것으로 보인다). 무엇을 정하는지는 모른다.
 			{ "rest_decrease", Area::People, "휴식 감소(시간당)", "inst:o_debug.debug_rest_decrease_per_hour", N, 0, 0, 0, 20, false,
-				"한 시간에 휴식이 줄어드는 양으로 보인다(원래 3). 0 이면 피로가 쌓이지 않을 것으로 보인다" },
+				"이름으로 보아 한 시간에 휴식이 줄어드는 양(원래 3). 0 으로 써도 낮 두 시간에 휴식이 주는 사람이 있었고 3 일 때 주는 사람이 없었다: 시간당 감소를 바로 정하는 값이 아니다" },
 			{ "no_occupational_disease", Area::People, "직업병 끔", "inst:o_debug.debug_is_occupational_disease_enabled", T, 0, 1, 0, 0, false,
 				"직업병이 생기는지를 정하는 값으로 보인다(원래 켜져 있다)" },
 
@@ -258,8 +261,10 @@ namespace NlCore
 				"적의 매복이 인물을 공격하는지를 정하는 값으로 보인다(원래 켜져 있다)" },
 			{ "dodge_base", Area::Army, "회피 기본값", "inst:o_debug.battle_dodge_base", N, 0, 0, 0, 100, false,
 				"battle_params.json 의 battle_dodge_base 가 옮겨진 값이다(원래 20)" },
+			// 2026-10-07(research/27): 고용 창의 값은 get_soldier_cost() 와 같은데, 이 변수를 1·20 으로 써도 그 함수가 100·45 그대로였고 다시 연 창도 그대로였다.
+			// 그 함수가 이 변수를 읽지 않거나 값이 영혼에 굳어 있다(새로 오는 사람의 값에 먹는지는 보지 못했다).
 			{ "hire_price_factor", Area::Army, "병사 고용가 계수", "inst:o_debug.soldier_hiring_price_skill_factor", N, 0, 0, 0, 20, false,
-				"battle_params.json 의 soldier_hiring_price_skill_factor 가 옮겨진 값이다(원래 5). 전투 기술에 따른 고용가로 보인다" },
+				"battle_params.json 의 soldier_hiring_price_skill_factor 가 옮겨진 값이다(원래 5). 써도 지금 고용 창의 값은 바뀌지 않았다(새로 오는 사람에게 먹는지는 확인 전)" },
 
 			// 세력의 적대 판정(research/14): Faction.is_enemy_with(세력) -> 불리언. 게임이 구조체 하나로 네 시간에 270번 불렀고 true 와 false 를 모두 봤다.
 			// 생성자의 정적 메서드라 플레이어의 세력에서 스크립트를 찾는다. 건 훅은 모든 세력의 호출에 걸린다. 효과(전쟁, 습격, 지도의 표시)는 보지 못했다.
@@ -296,7 +301,7 @@ namespace NlCore
 			{ "preach_conversion", Area::Religion, "설교 전환 배율", "global.__gameplay_vars.church_preach_conversion_factor", CS, 3, 0, 1, 20, false,
 				"이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 게임 변수(원래 1)에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "donation_runes", Area::Religion, "헌금 룬", "inst:o_debug.church_donation_runes", N, 0, 0, 0, 100, false,
-				"교회 헌금으로 내는 룬의 수로 보인다(원래 1)" },
+				"교회 헌금으로 내는 룬의 수로 보인다(원래 1. 3 과 2 의 문턱·광신도 값이 함께 있다). 효과를 보지 못했다: 설교 없이 2일, 직접 건 설교(c_church.set_preach(영혼, 자료))는 08:00 에 지워졌다(research/27)" },
 			{ "donation_runes_fanatic", Area::Religion, "헌금 룬(광신도)", "inst:o_debug.church_donation_runes_fanatic", N, 0, 0, 0, 100, false,
 				"광신도가 헌금으로 내는 룬의 수로 보인다(원래 2)" },
 
@@ -313,7 +318,7 @@ namespace NlCore
 			{ "no_bandit_turn", Area::Crime, "주민이 도적으로 넘어가지 않음", "global.__gameplay_vars.dummy_turn_to_bandit_chance", C, 1, 0, 0, 0, false,
 				"이름으로 보아 주민이 도적이 될 확률인 게임 변수 둘(dummy_turn_to_bandit_chance, 그 _peaceful)을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "thug_days", Area::Crime, "부랑자가 깡패가 되기까지의 날 배율", "global.__gameplay_vars.dummy_criminal_days_to_thug", CS, 10, 0, 1, 100, false,
-				"이름으로 보아 범죄자가 깡패가 되기까지의 날(원래 2)인 게임 변수에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+				"이름으로 보아 범죄자가 깡패가 되기까지의 날(원래 2)인 게임 변수에 곱한다. 끄면 원래 값으로 되돌린다. 효과를 보지 못했다(research/27: 20 으로 써 둔 채에도 게임이 만든 범죄자가 3일째에 깡패가 됐다. become_thug(true) 3번)" },
 			{ "crime_minds_off", Area::Crime, "범죄로 인한 기분 저하 없음", "global.__gameplay_vars.mind_crime_not_punished_modify", C, 1, 0, 0, 0, false,
 				"이름으로 보아 범죄의 피해와 '범죄자가 벌받지 않음'의 생각의 크기인 게임 변수 둘(mind_crime_not_punished_modify, mind_crime_victim_modify)을 0 으로 쓴다. "
 				"끄면 원래 값으로 되돌린다. 효과는 확인 전" },
@@ -322,8 +327,8 @@ namespace NlCore
 
 			{ "fast_global_tasks", Area::World, "전역 지도의 행동을 빠르게", "inst:o_debug.is_fast_action_task_on_global_map", T, 1, 0, 0, 0, false,
 				"전역 지도에서 하는 행동을 빨리 끝내는 개발자 스위치로 보인다" },
-			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, false,
-				"나무의 성장을 끄는 개발자 스위치로 보인다" },
+			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, true,
+				"켜면 나무 관리자의 성장 시계(__hours_passed)가 선다(research/27: 켠 채 25시간 동안 3 그대로. 끈 채에는 시간마다 1 씩 올라 10시간마다 0 으로). 나무의 수가 느는 것은 두 상태 모두에서 보지 못했다" },
 			// 계절 붙들기(research/25): 게임은 지금 단계의 남은 시간을 시작 시각(__start_phase_time)에서 셈한다(시작을 하루 뒤로 쓰자 남은 시간이 하루 늘었다).
 			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons").
 			// 플레이에서 봤다(실행 2, 0.26.0): 남은 시간을 2시간 반으로 만들고 켠 채 네 시간을 돌리자 남은 시간과 단계가 그대로였고(정각을 네 번 지났다),
@@ -356,7 +361,7 @@ namespace NlCore
 				"세계 지도에서 움직이는 것을 빠르게 하는 개발자 스위치로 보인다" },
 
 			{ "hide_events", Area::Events, "이벤트 표시 끔", "inst:o_debug.is_display_event_disabled", T, 1, 0, 0, 0, false,
-				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다)" },
+				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다). 켠 채에도 아침 08:00 의 이야기 창(신제국)은 떠서 게임이 멈췄다(research/27)" },
 
 			// 게임의 저장을 끄는 디버그 깃발. 세이브에 그 열쇠는 없다.
 			// 플레이에서 봤다(실행 2): 켠 채 자동 저장의 시각을 세 번(저녁, 아침, 저녁) 넘겼는데 세이브 폴더에 새 파일이 생기지 않았다
@@ -377,14 +382,16 @@ namespace NlCore
 				"게임의 'Debug Log' 창을 여는 스위치로 보인다" },
 			{ "show_grid", Area::Util, "격자 보기", "inst:o_debug.is_show_grid", T, 1, 0, 0, 0, false,
 				"지도의 격자를 그리는 개발자 스위치로 보인다" },
-			{ "hide_gui", Area::Util, "게임 UI 숨기기", "inst:o_debug.is_gw_gui_draw_disabled", T, 1, 0, 0, 0, false,
-				"게임의 UI 를 그리지 않는 개발자 스위치로 보인다(스크린샷용)" },
+			// 플레이에서 봤다(2026-10-07, research/27): 켜자 HUD(자원, 영주 초상, 아래 단추 줄, 도움말)가 모두 사라지고 끄자 돌아왔다.
+			{ "hide_gui", Area::Util, "게임 UI 숨기기", "inst:o_debug.is_gw_gui_draw_disabled", T, 1, 0, 0, 0, true,
+				"게임의 UI(자원, 영주 초상, 아래 단추 줄, 도움말)를 그리지 않는다(스크린샷용). 모드창은 그대로 보인다" },
 			{ "hide_popups", Area::Util, "알림 팝업 숨기기", "inst:o_debug.is_hide_popup_messages", T, 1, 0, 0, 0, false,
 				"인물 위의 알림 글을 숨기는 개발자 스위치로 보인다" },
 			{ "hide_bubbles", Area::Util, "말풍선 숨기기", "inst:o_debug.is_hide_speech_bubbles", T, 1, 0, 0, 0, false,
 				"말풍선을 숨기는 개발자 스위치로 보인다" },
-			{ "hide_names", Area::Util, "인물 이름 숨기기", "inst:o_debug.is_hide_character_names", T, 1, 0, 0, 0, false,
-				"인물의 이름표를 숨기는 개발자 스위치로 보인다" },
+			// 플레이에서 봤다(2026-10-07, research/27): 켜자 인물 위의 이름표가 사라졌다(HUD 는 그대로).
+			{ "hide_names", Area::Util, "인물 이름 숨기기", "inst:o_debug.is_hide_character_names", T, 1, 0, 0, 0, true,
+				"인물 위의 이름표를 그리지 않는다" },
 		};
 		return cheats;
 	}
