@@ -79,7 +79,10 @@
   `world events group=GUEST find=bard` → `GUEST  u_guest_bard  음유시인  보통  cd -` 한 줄(1 of 61). `world event name=u_guest_joker` → 예약 `u_guest_joker (지연 0)`, 창에 "예약된 이벤트: 어릿광대 (u_guest_joker)"와 [예약 취소].
   `world event_cancel` → "예약을 지웠습니다: u_guest_joker"(로그 `world call reset_debug_forced_event() (forced: u_guest_joker)` → `forced event after reset: (none)`), 다시 → "예약된 이벤트가 없습니다"(함수를 부르지 않았다: 로그에 그 줄이 한 번뿐).
   `world event_end kind=raid` → "습격 끝내기는 확인 전이라 부르지 않습니다 …", `kind=rebellion` → `world event_end needs kind=<…>`. `world cooldowns_clear` → "이벤트 쿨다운 1개와 묶음 쿨다운 1개를 0 으로 썼습니다". 월드 패널에 이벤트의 글이 섞이지 않았다. 게임의 오류 파일에 새 ERROR 없음.
-  **본 문제**: 표가 패널의 너비를 넘어 "묶음 쿨다운" 칸이 잘리고 "일으키기" 단추가 보이지 않았다(`events-forced.png`). 단추 칸을 맨 앞으로 옮기고 표에 가로·세로 스크롤을 주었다(고친 화면은 다음 켜기에서 본다).
+  **본 문제**: 표가 패널의 너비를 넘어 "묶음 쿨다운" 칸이 잘리고 "일으키기" 단추가 보이지 않았다(`events-forced.png`). 단추 칸을 맨 앞으로 옮기고 표에 가로·세로 스크롤을 주었다.
+- 둘째 켜기(`refs/runtime/events-tab-run2.*`, `refs/ui/events2-forced.png`·`events2-filter.png`·`events2-after.png`. 적재 판정 PASS): 고친 표에서 "일으키기" 단추가 줄마다 맨 앞에 보이고 묶음·이름·갈래·쿨다운 칸이 보인다("묶음 쿨다운"은 가로 스크롤 뒤에).
+  찾기 칸에 `bard` 를 쳐 넣자(`ui click`·`ui type`) 표가 `GUEST  음유시인  u_guest_bard  보통  -  1일` 한 줄이 됐다(묶음 쿨다운 GUEST 1일). 최종 리뷰의 고침 뒤에도 `world event name=u_guest_joker` → 예약 `u_guest_joker`, `world event_cancel` → "예약을 지웠습니다: u_guest_joker"(로그 `forced event after reset: 없음`), 다시 → "예약된 이벤트가 없습니다".
+- 최종 리뷰(fable)에서 고친 것: 끝내기는 `Verified` 이고 인자의 꼴이 빈 글(인자 없음)일 때만 허용(`EventEndAllowed`. 헤더에 규약을 적었다), 예약의 자리를 읽지 못한 것과 없는 것을 가른다(`ForcedEventText`: "읽지 못함"·"없음"·"(이름을 읽지 못함)". 취소는 못 읽으면 부르지 않고 'f'), 표에 없는 줄 수는 이름을 읽은 뒤에만 센다.
 
 ## 남은 것
 
