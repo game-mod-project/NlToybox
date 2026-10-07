@@ -23,6 +23,9 @@ void RunWorldTests()
 		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
 		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
 			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend) && WorldActChanges(WorldAct::SaveNow) && WorldActChanges(WorldAct::EventForce));
+		// 계절의 일인가(src/Season 이 제 자리에 결과를 둔다. World 의 "마지막 한 일"에 섞지 않는다. 리팩토링 C 의 최종 리뷰에서 잡았다).
+		CHECK(IsSeasonAct(WorldAct::SeasonShow) && IsSeasonAct(WorldAct::SeasonDelay) && IsSeasonAct(WorldAct::SeasonEnd)
+			&& !IsSeasonAct(WorldAct::SaveNow) && !IsSeasonAct(WorldAct::EventForce) && !IsSeasonAct(WorldAct::BishopSend) && !IsSeasonAct(WorldAct::CooldownsClear));
 		// 이벤트의 이름: 게임의 시스템 이름(글자·숫자·밑줄). 빈 글과 공백·점은 받지 않는다.
 		CHECK(GoodEventName("u_guest_bard") && GoodEventName("raid_bandits") && !GoodEventName("") && !GoodEventName("u guest") && !GoodEventName("a.b") && !GoodEventName("name=x"));
 		// 원격: world save, world event name=<이름>. event 는 이름이 꼭 있어야 하고, 다른 일은 이름을 받지 않는다.

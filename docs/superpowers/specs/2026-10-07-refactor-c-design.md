@@ -42,7 +42,7 @@
 
 - `WorldAct`, `core/WorldPlan`, `core/SeasonPlan`, 원격 `world season|season_delay|season_end` 는 그대로. 결과의 글(`g_SeasonLast`)은 `Season` 이 들고 제 `Draw` 에 보인다.
 - 틱: `Menu.cpp` 가 `NlWorld::GameTick` 뒤에 `NlSeason::Tick(now, visible && page == Area::World)` 와 `NlMines::Tick(now)` 를 부른다(지금은 `NlWorld::GameTick` 이 안에서 셋을 돌린다. 차례는 같다: 큐 → 계절 붙들기 → 광산 → 계절 읽기).
-- 뮤텍스: 파일마다 제 것 하나. 셋은 서로를 부르지 않는다. `g_Busy` 는 `World` 에만 남는다(게임의 함수를 부르는 것은 거기뿐이다. 계절·광산은 읽고 쓰기만 한다).
+- 뮤텍스: 파일마다 제 것 하나. 셋은 서로를 부르지 않는다. `g_Busy` 는 `World` 와 `Season` 에 둔다(둘 다 게임의 함수를 부른다: World 는 주교·저장·이벤트, Season 은 계절의 읽기 함수 셋 `is_extreme`·`__get_remain_time_of_current_phase`·`get_remain_time_to_extreme_season`). 광산만 읽고 쓰기만 한다. (처음에는 "World 에만"이라고 적었다가 최종 리뷰에서 고쳤다.)
 
 ## 4. 자료를 돌며 쓰는 일의 엔진과 건설비 — R8, 건설비
 

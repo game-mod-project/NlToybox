@@ -283,10 +283,7 @@ namespace
 			Log(std::string("world: bishop ") + (!reread ? "called (cannot read back)" : came ? "is here" : "called (not here yet)"));
 			return reread && came ? "주교가 왔습니다" : "주교를 불렀습니다 (아직 왔다고 읽히지 않습니다)";
 		}
-		case WorldAct::SeasonShow:
-		case WorldAct::SeasonDelay:
-		case WorldAct::SeasonEnd:
-			return NlSeason::Do(Act);		// 계절은 src/Season (리팩토링 C)
+		// 계절의 일(SeasonShow·SeasonDelay·SeasonEnd)은 여기 오지 않는다: NlWorld::Do 가 NlSeason::Do 로 바로 돌려준다(src/Season 이 제 자리에 결과를 둔다).
 		}
 		return std::string();
 	}
@@ -419,6 +416,8 @@ void NlWorld::DrawUtil()
 
 std::string NlWorld::Do(NlCore::WorldAct Act)
 {
+	if (NlCore::IsSeasonAct(Act))
+		return NlSeason::Do(Act);		// 계절은 src/Season 이 하고 제 자리(계절 패널)에 적는다. 이벤트·종교 패널의 "마지막 한 일"에 섞지 않는다(최종 리뷰 1번)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return "busy";

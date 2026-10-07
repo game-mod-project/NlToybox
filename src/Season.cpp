@@ -5,6 +5,7 @@
 #include "Game.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/Guard.hpp"
 #include "core/Localization.hpp"
 #include "core/SeasonPlan.hpp"
 #include "core/Text.hpp"
@@ -56,6 +57,7 @@ namespace
 	std::unordered_map<std::string, std::string> g_SeasonCaptions;		// extreme_season.<이름> -> 화면 이름
 
 	bool g_HoldWasOn = false;			// 지난 틱에 켜져 있었는가(끈 틱에 한 번 정리한다)
+	bool g_Busy = false;				// 하는 중이다. 계절의 읽기는 게임의 함수(is_extreme 들)를 부르므로, 그것이 오브젝트 이벤트를 일으켜 틱이 다시 들어오면 안쪽은 아무것도 하지 않는다(World 와 같다)
 
 	void Log(const std::string& Line)
 	{
@@ -294,6 +296,9 @@ void NlSeason::Init(LogFn Log_, const std::filesystem::path& GameDir)
 void NlSeason::Tick(double Now, bool Visible)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!g_Queue.empty())
 	{
 		const WorldAct act = g_Queue.front();
@@ -343,5 +348,8 @@ void NlSeason::Draw()
 std::string NlSeason::Do(NlCore::WorldAct Act)
 {
 	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return "busy";
+	const NlCore::ScopedFlag busy(g_Busy);
 	return Remember(Act, DoNow(Act));
 }
