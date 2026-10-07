@@ -36,7 +36,6 @@ namespace
 	std::string g_PendingEvent;			// 일으킬 이벤트의 이름(창이 적고 틱이 쓴다)
 	std::vector<std::string> g_EventNames;	// 게임의 이벤트 이름들(감독의 자료의 ds_map 열쇠. 게임 화면에서 한 번 읽는다)
 	double g_NextNames = 0;				// 이름을 다시 읽어 볼 시각
-	int g_EventPick = 0;				// 창의 선택
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 
 	void Log(const std::string& Line)
@@ -389,31 +388,127 @@ void NlEvents::Tick(double Now, bool Visible)
 void NlEvents::Draw()
 {
 	std::lock_guard lock(g_Mutex);
-	// 이벤트 골라 일으키기(2026-10-07. research/28): 이름을 고르고 누르면 틱이 그 이벤트의 구조체를 감독의 강제 이벤트에 쓴다.
-	ImGui::SeparatorText("이벤트 골라 일으키기");
-	if (g_EventNames.empty())
-		NlUi::Hint("게임 화면에서 이벤트의 이름을 읽습니다.");
+	// 예약(강제 이벤트)과 취소. research/28·29.
+	ImGui::SeparatorText("예약");
+	if (!g_Now.Ready)
+		NlUi::Hint("게임 화면에서 이벤트의 상태를 읽습니다.");
 	else
 	{
-		if (g_EventPick < 0 || static_cast<size_t>(g_EventPick) >= g_EventNames.size())
-			g_EventPick = 0;
-		ImGui::SetNextItemWidth(320);
-		if (ImGui::BeginCombo("##event", g_EventNames[g_EventPick].c_str()))
+		ImGui::Text("예약된 이벤트: %s", g_Now.Forced.empty() ? "없음" : (LabelOf(g_Now.Forced) + "  (" + g_Now.Forced + ")").c_str());
+		if (!g_Now.Forced.empty())
 		{
-			for (size_t i = 0; i < g_EventNames.size(); i++)
-				if (ImGui::Selectable(g_EventNames[i].c_str(), static_cast<int>(i) == g_EventPick))
-					g_EventPick = static_cast<int>(i);
-			ImGui::EndCombo();
+			ImGui::SameLine();
+			if (ImGui::Button("예약 취소"))
+				Push(WorldAct::EventCancel);
 		}
-		ImGui::SameLine();
-		if (ImGui::Button("일으키기"))
-		{
-			g_PendingEvent = g_EventNames[g_EventPick];
-			Push(WorldAct::EventForce);
-		}
+		if (g_Now.Delayed > 0)
+			ImGui::Text("지연 생성 %d건 (뽑혔고 그 시각에 생긴다)", g_Now.Delayed);
 	}
-	NlUi::Hint("게임의 감독이 보는 '강제 이벤트' 자리에 고른 이벤트의 구조체를 써 둡니다. 감독은 하루 한 번(오후) 이벤트를 뽑을 때 그 자리를 읽어 그것을 고르고 지웁니다"
-		"(research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다). 쿨다운 중인 이벤트도 오는지는 재지 않았습니다. 습격·반란·예언 이벤트도 그대로 옵니다.");
+	NlUi::Hint("일으키기는 게임의 감독이 보는 '강제 이벤트' 자리에 그 이벤트의 구조체를 써 둡니다. 감독은 하루 한 번(오후) 이벤트를 뽑을 때 그 자리를 읽어 그것을 고르고 지웁니다"
+		"(research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다). 예약 취소는 게임의 함수 reset_debug_forced_event() 로 그 자리를 비웁니다(research/29 에서 확인). "
+		"쿨다운 중인 이벤트도 오는지는 재지 않았습니다. 습격·반란·예언 이벤트도 그대로 옵니다.");
+
+	// 표
+	const std::vector<std::string> groups = NlCore::EventGroups();
+	ImGui::SeparatorText(("이벤트 (" + std::to_string(g_Now.Names.size()) + ")").c_str());
+	if (g_GroupPick < 0 || static_cast<size_t>(g_GroupPick) > groups.size())
+		g_GroupPick = 0;
+	ImGui::SetNextItemWidth(150);
+	if (ImGui::BeginCombo("묶음", g_GroupPick == 0 ? "전체" : groups[static_cast<size_t>(g_GroupPick) - 1].c_str()))
+	{
+		if (ImGui::Selectable("전체", g_GroupPick == 0))
+			g_GroupPick = 0;
+		for (size_t i = 0; i < groups.size(); i++)
+			if (ImGui::Selectable(groups[i].c_str(), static_cast<int>(i) + 1 == g_GroupPick))
+				g_GroupPick = static_cast<int>(i) + 1;
+		ImGui::EndCombo();
+	}
+	ImGui::SameLine();
+	ImGui::SetNextItemWidth(160);
+	ImGui::InputText("찾기 (이름, 화면 이름)", g_Filter, sizeof(g_Filter));
+	const std::string group = g_GroupPick == 0 ? std::string() : groups[static_cast<size_t>(g_GroupPick) - 1];
+	if (g_Now.Names.empty())
+		NlUi::Hint("게임 화면에서 이벤트의 이름을 읽습니다.");
+	else if (ImGui::BeginChild("event_rows", ImVec2(0, 300), ImGuiChildFlags_Borders))
+	{
+		if (ImGui::BeginTable("events", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		{
+			ImGui::TableSetupColumn("묶음");
+			ImGui::TableSetupColumn("이름");
+			ImGui::TableSetupColumn("갈래");
+			ImGui::TableSetupColumn("쿨다운");
+			ImGui::TableSetupColumn("묶음 쿨다운");
+			ImGui::TableSetupColumn("");
+			ImGui::TableHeadersRow();
+			for (const std::string& name : g_Now.Names)
+			{
+				const NlCore::EventRow* row = NlCore::FindEvent(name);
+				const std::string rowGroup = row ? row->Group : "?";
+				const std::string label = LabelOf(name);
+				if (!NlCore::EventRowShown(group, g_Filter, rowGroup, name, label))
+					continue;
+				ImGui::TableNextRow();
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(rowGroup.c_str());
+				ImGui::TableNextColumn();
+				if (row)
+				{
+					ImGui::TextUnformatted(label.c_str());
+					if (label != name)
+					{
+						ImGui::SameLine();
+						ImGui::TextDisabled("%s", name.c_str());
+					}
+				}
+				else
+				{
+					ImGui::TextUnformatted(name.c_str());
+					ImGui::SameLine();
+					ImGui::TextDisabled("(표에 없음)");
+				}
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(row ? NlCore::EventTypeWord(row->Type) : "-");
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.Cooldowns, name)).c_str());
+				ImGui::TableNextColumn();
+				ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.GroupCooldowns, rowGroup)).c_str());
+				ImGui::TableNextColumn();
+				if (ImGui::SmallButton(("일으키기##" + name).c_str()))
+				{
+					g_PendingEvent = name;
+					Push(WorldAct::EventForce);
+				}
+			}
+			ImGui::EndTable();
+		}
+		ImGui::EndChild();
+	}
+	else
+		ImGui::EndChild();
+	if (g_Now.MissingFromGame > 0)
+		NlUi::Hint("표의 " + std::to_string(g_Now.MissingFromGame) + "줄이 이 게임에 없습니다 (게임이 갱신됐을 수 있습니다).");
+	NlUi::Hint("이름·묶음·갈래는 게임의 director_params.json 과 런타임에서 본 것입니다. 화면 이름은 게임의 localization\\main.csv 에서 읽고, 열쇠가 없는 이벤트의 이름은 모드가 지은 것(추정)입니다. "
+		"쿨다운은 게임의 감독이 보는 '남은 날'입니다.");
+
+	// 진행 중과 끝내기(확인된 가족만)
+	ImGui::SeparatorText("진행 중");
+	for (const NlCore::EventEndRow& end : NlCore::EventEndTable())
+	{
+		const Status& status = g_Now.Families[static_cast<size_t>(end.Family)];
+		ImGui::Text("%s: %s", NlCore::EventFamilyWord(end.Family), g_Now.Ready ? NlCore::EventStatusText(end.Family, status.Read, status.Present, status.Name).c_str() : "-");
+		ImGui::SameLine();
+		const bool allowed = NlCore::EventEndAllowed(end);
+		ImGui::BeginDisabled(!allowed || !status.Present);
+		if (ImGui::SmallButton((std::string(allowed ? "끝내기" : "끝내기 (확인 전)") + "##" + NlCore::EventFamilyKey(end.Family)).c_str()))
+		{
+			g_EndFamily = end.Family;
+			Push(WorldAct::EventEnd);
+		}
+		ImGui::EndDisabled();
+	}
+	ImGui::Text("반란: %s", NlCore::EventStatusText(NlCore::EventFamily::Rebellion, false, false, std::string()).c_str());
+	NlUi::Hint("끝내기는 게임의 관리자 함수(research/29 의 후보)를 부릅니다. 가족마다 진행 중인 세이브에서 인자와 효과를 본 뒤에만 켭니다. 확인 전인 가족은 단추가 꺼져 있습니다.");
+
 	ImGui::SeparatorText("쿨다운");
 	if (ImGui::Button("이벤트 쿨다운 지우기"))
 		Push(WorldAct::CooldownsClear);
