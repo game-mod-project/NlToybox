@@ -25,4 +25,8 @@ namespace NlEvents
 	std::string Do(NlCore::WorldAct Act);
 	// 이벤트 골라 일으키기(원격 world event name=…). 돌려주는 것: 한 일.
 	std::string ForceEvent(const std::string& Name);
+	// 이벤트의 표(원격 world events [group=] [find=]). 지금 읽어서: 첫 줄 예약, 가족마다 한 줄 상태, 그 뒤 거른 줄들, 끝에 "(N of M)". 게임 화면이 아니면 그 한 줄.
+	std::vector<std::string> List(const std::string& Group, const std::string& Find);
+	// 끝내기(원격 world event_end kind=…). 확인 전인 가족은 부르지 않는다. 돌려주는 것: 한 일.
+	std::string End(NlCore::EventFamily Family);
 }

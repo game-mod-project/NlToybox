@@ -5,13 +5,18 @@
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Guard.hpp"
+#include "core/Localization.hpp"
 #include "core/Text.hpp"
 
 #include <imgui.h>
 
 #include <algorithm>
+#include <array>
 #include <deque>
+#include <fstream>
+#include <iterator>
 #include <mutex>
+#include <unordered_map>
 #include <vector>
 
 using namespace YYTK;
@@ -114,6 +119,167 @@ namespace
 		Log("world: event names: " + std::to_string(g_EventNames.size()));
 	}
 
+	constexpr size_t k_Families = 7;			// EventFamily 의 수(None 포함). 가족을 자리로 쓴다
+	struct Status			// 가족 하나의 진행 중(틱이 읽는다)
+	{
+		bool Read = false, Present = false;
+		std::string Name;		// 그 구조체의 __system_name 이나 __name(글일 때)
+	};
+	struct Snapshot			// 틱이 채우고 Draw 가 읽는다. 글과 수만
+	{
+		bool Ready = false;
+		std::vector<std::string> Names;					// 보일 이름(표의 차례, 그 뒤 표에 없는 것)
+		std::unordered_map<std::string, double> Cooldowns, GroupCooldowns;		// 이름 → 남은 날(없으면 칸이 없다)
+		std::string Forced;								// 예약된 이벤트의 이름(없으면 빈 글)
+		int Delayed = -1;								// 지연 생성의 수(-1: 읽지 못함)
+		size_t MissingFromGame = 0;						// 표에만 있는 이름의 수
+		std::array<Status, k_Families> Families;		// 가족을 자리로(EventFamily 의 수)
+	};
+	Snapshot g_Now;
+	std::unordered_map<std::string, std::string> g_Captions;	// 열쇠 → 화면 이름(main.csv 에서. 표의 열쇠만)
+	double g_NextRead = 0;				// 상태를 다시 읽을 시각(패널이 보일 때 1초)
+	char g_Filter[48] = "";				// 창의 찾기 칸
+	int g_GroupPick = 0;				// 창의 묶음(0 전체, 1.. EventGroups 의 차례)
+	NlCore::EventFamily g_EndFamily = NlCore::EventFamily::None;		// 끝낼 가족(창이 적고 틱이 쓴다)
+
+	std::string LabelOf(const std::string& Name)
+	{
+		const NlCore::EventRow* row = NlCore::FindEvent(Name);
+		return row ? NlCore::EventLabel(*row, g_Captions) : Name;
+	}
+
+	// 구조체 안의 칸 가운데 글인 것 하나(__system_name 이 먼저, 그 다음 __name)를 이름으로.
+	std::string NameInside(const std::string& Path)
+	{
+		std::string text;
+		if (NlAccess::ReadText(Path + ".__system_name", text) && !text.empty())
+			return text;
+		if (NlAccess::ReadText(Path + ".__name", text) && !text.empty())
+			return text;
+		return std::string();
+	}
+
+	// 가족 하나의 진행 중을 읽는다. 자리를 읽지 못하면 Read false. undefined 나 -4 는 없음, 구조체는 진행 중.
+	// 소요(Unrest)의 자리는 불리언들의 구조체다: 참인 칸이 있으면 진행 중이고 그 칸의 이름이 이름(뜻은 추정. research/29).
+	Status ReadStatus(const NlCore::EventEndRow& Row)
+	{
+		Status out;
+		RValue value;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(Row.StatusPath), value, why))
+			return out;
+		out.Read = true;
+		if (!value.IsStruct())
+			return out;		// undefined, -4, 수 → 없음
+		if (Row.Family == NlCore::EventFamily::Unrest)
+		{
+			NlAccess::ForEachChild(value, Holder::Struct, [&](const NlCore::PathStep& step, const RValue& child) {
+				if (NlGame::IsNumber(child) && child.ToDouble() != 0 && out.Name.empty())
+				{
+					out.Present = true;
+					out.Name = step.Name;
+				}
+				return true;
+			});
+			return out;
+		}
+		out.Present = true;
+		out.Name = NameInside(Row.StatusPath);
+		return out;
+	}
+
+	// 쿨다운의 구조체(이름 → 남은 날)를 수의 칸만 받는다.
+	void ReadCooldowns(const std::string& Path, std::unordered_map<std::string, double>& Out)
+	{
+		Out.clear();
+		RValue box;		// 이 함수 안에서만 든다
+		Holder kind = Holder::None;
+		std::string why;
+		if (!NlAccess::Open(NlCore::ParseAskPath(Path), box, kind, why) || kind != Holder::Struct)
+			return;
+		NlAccess::ForEachChild(box, kind, [&](const NlCore::PathStep& step, const RValue& child) {
+			if (NlGame::IsRealNumber(child))
+				Out[step.Name] = child.ToDouble();
+			return true;
+		});
+	}
+
+	std::string ReadForced()
+	{
+		std::string name;
+		return NlAccess::ReadText(std::string(k_EventsData) + ".__debug_forced_event.__system_name", name) ? name : std::string();
+	}
+
+	int ReadDelayed()
+	{
+		RValue list;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(std::string(k_Director) + ".__delayed_events"), list, why) || !list.IsArray())
+			return -1;
+		const double length = NlGame::ArrayLength(list);
+		return length < 0 ? -1 : static_cast<int>(length);
+	}
+
+	// 패널의 스냅샷을 새로 읽는다(게임 화면에서만).
+	void ReadSnapshot()
+	{
+		Snapshot next;
+		const NlCore::EventListing merged = NlCore::MergeEventNames(g_EventNames);
+		next.Names = merged.Known;
+		next.Names.insert(next.Names.end(), merged.Extra.begin(), merged.Extra.end());
+		next.MissingFromGame = merged.MissingFromGame;
+		ReadCooldowns(std::string(k_Director) + ".__events_cooldowns", next.Cooldowns);
+		ReadCooldowns(std::string(k_Director) + ".__events_groups_cooldowns", next.GroupCooldowns);
+		next.Forced = ReadForced();
+		next.Delayed = ReadDelayed();
+		for (const NlCore::EventEndRow& row : NlCore::EventEndTable())
+			next.Families[static_cast<size_t>(row.Family)] = ReadStatus(row);
+		next.Ready = true;
+		g_Now = std::move(next);
+	}
+
+	double CooldownOf(const std::unordered_map<std::string, double>& Map, const std::string& Key)
+	{
+		const auto found = Map.find(Key);
+		return found == Map.end() ? -1 : found->second;
+	}
+
+	// 예약 취소: 예약을 읽고, 있으면 게임의 reset_debug_forced_event()(인자 없음. 게임이 그 꼴로 부른다. research/28·29)를 부르고, 다시 읽어 판정한다.
+	std::string CancelNow()
+	{
+		const std::string before = ReadForced();
+		if (NlCore::ChooseCancelStep(!before.empty()) == NlCore::CancelStep::Nothing)
+			return NlCore::CancelEventReport('n', std::string());
+		RValue result;		// 이 함수 안에서만 든다
+		std::string why;
+		Log("world call reset_debug_forced_event() (forced: " + before + ")");		// 부르기 전에 남긴다
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_EventsData) + ".reset_debug_forced_event"), {}, result, why))
+			return NlCore::CancelEventReport('f', why);
+		const std::string after = ReadForced();
+		Log("world: forced event after reset: " + (after.empty() ? std::string("(none)") : after));
+		return NlCore::CancelEventReport(after.empty() ? 'd' : 'u', before);
+	}
+
+	// 끝내기: 확인된 가족만. 진행 중을 읽고, 표의 꼴(지금은 인자 없음뿐)로 부르고, 다시 읽어 판정한다.
+	std::string EndNow(NlCore::EventFamily Family)
+	{
+		const NlCore::EventEndRow* row = NlCore::FindEventEnd(Family);
+		if (!row || !NlCore::EventEndAllowed(*row))
+			return NlCore::EndEventReport(Family, 'x', std::string());
+		const Status before = ReadStatus(*row);
+		if (!before.Read || !before.Present)
+			return NlCore::EndEventReport(Family, 'n', std::string());
+		if (row->ArgShape[0])		// 본 적 없는 꼴로는 부르지 않는다
+			return NlCore::EndEventReport(Family, 'f', std::string("인자의 꼴(") + row->ArgShape + ")을 아직 부르지 못합니다");
+		RValue result;		// 이 함수 안에서만 든다
+		std::string why;
+		Log(std::string("world call ") + row->EndPath + "() (" + NlCore::EventFamilyKey(Family) + ": " + before.Name + ")");		// 부르기 전에 남긴다
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(row->EndPath), {}, result, why))
+			return NlCore::EndEventReport(Family, 'f', why);
+		const Status after = ReadStatus(*row);
+		return NlCore::EndEventReport(Family, after.Read && !after.Present ? 'd' : 'u', before.Name);
+	}
+
 	std::string DoNow(WorldAct Act)
 	{
 		if (!NlAccess::InGame())
@@ -131,6 +297,10 @@ namespace
 					+ ", groups cleared " + std::to_string(groups.Cleared) + " failed " + std::to_string(groups.Failed));
 			return NlCore::CooldownReport(events, groups);
 		}
+		case WorldAct::EventCancel:
+			return CancelNow();
+		case WorldAct::EventEnd:
+			return EndNow(g_EndFamily);
 		default:
 			return std::string();
 		}
@@ -160,7 +330,24 @@ void NlEvents::Init(LogFn Log_, const std::filesystem::path& GameDir)
 {
 	std::lock_guard lock(g_Mutex);
 	g_Log = std::move(Log_);
-	(void)GameDir;		// Task 4 가 화면 이름을 읽는다
+	// 이벤트의 화면 이름. 게임의 글은 레포에 싣지 않는다: 게임 폴더의 파일에서 표의 열쇠만 읽는다(한 줄짜리 짧은 글만 받는다. 계절과 같다).
+	std::ifstream in(GameDir / "localization" / "main.csv", std::ios::binary);
+	if (in)
+	{
+		const std::string text((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+		std::unordered_map<std::string, std::string> rows;
+		std::string why;
+		if (NlCore::ReadLocalization(text, "", { "Korean", "English" }, rows, why))
+			for (const NlCore::EventRow& row : NlCore::EventTable())
+			{
+				if (!row.CaptionKey[0])
+					continue;
+				const auto found = rows.find(row.CaptionKey);
+				if (found != rows.end() && !found->second.empty() && found->second.size() <= 48 && found->second.find_first_of("\r\n<{") == std::string::npos)
+					g_Captions.emplace(row.CaptionKey, found->second);
+			}
+	}
+	Log("world: " + std::to_string(g_Captions.size()) + " event caption(s) from the game's localization file");
 }
 
 void NlEvents::Tick(double Now, bool Visible)
@@ -168,10 +355,14 @@ void NlEvents::Tick(double Now, bool Visible)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return;
-	(void)Visible;		// Task 4 가 패널이 보일 때 상태를 읽는다
 	const bool names = g_EventNames.empty() && Now >= g_NextNames;
-	if (g_Queue.empty() && !names)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다)
+	const bool read = Visible && Now >= g_NextRead;
+	if (g_Queue.empty() && !names && !read)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다)
+	{
+		if (!Visible && g_Now.Ready)
+			g_Now = Snapshot{};		// 패널을 다시 열면 새로 읽은 것을 보인다
 		return;
+	}
 	const NlCore::ScopedFlag busy(g_Busy);
 	if (names)
 	{
@@ -184,6 +375,14 @@ void NlEvents::Tick(double Now, bool Visible)
 		const WorldAct act = g_Queue.front();
 		g_Queue.pop_front();
 		Remember(act, DoNow(act));
+	}
+	if (read)
+	{
+		g_NextRead = Now + 1;
+		if (NlAccess::InGame())
+			ReadSnapshot();
+		else
+			g_Now = Snapshot{};
 	}
 }
 
@@ -241,4 +440,47 @@ std::string NlEvents::ForceEvent(const std::string& Name)
 	const NlCore::ScopedFlag busy(g_Busy);
 	g_PendingEvent = Name;
 	return Remember(WorldAct::EventForce, DoNow(WorldAct::EventForce));
+}
+
+std::vector<std::string> NlEvents::List(const std::string& Group, const std::string& Find)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const NlCore::ScopedFlag busy(g_Busy);
+	if (!NlAccess::InGame())
+		return { "게임 화면이 아닙니다" };
+	if (g_EventNames.empty())
+		ReadEventNames();
+	ReadSnapshot();
+	std::vector<std::string> lines;
+	lines.push_back("예약: " + (g_Now.Forced.empty() ? std::string("없음") : g_Now.Forced) + " (지연 " + (g_Now.Delayed < 0 ? std::string("?") : std::to_string(g_Now.Delayed)) + ")");
+	for (const NlCore::EventEndRow& row : NlCore::EventEndTable())
+	{
+		const Status& status = g_Now.Families[static_cast<size_t>(row.Family)];
+		lines.push_back(std::string(NlCore::EventFamilyWord(row.Family)) + ": " + NlCore::EventStatusText(row.Family, status.Read, status.Present, status.Name));
+	}
+	size_t shown = 0;
+	for (const std::string& name : g_Now.Names)
+	{
+		const NlCore::EventRow* row = NlCore::FindEvent(name);
+		const std::string group = row ? row->Group : "?";
+		const std::string label = LabelOf(name);
+		if (!NlCore::EventRowShown(Group, Find, group, name, label))
+			continue;
+		shown++;
+		lines.push_back(group + "  " + name + "  " + label + "  " + (row ? NlCore::EventTypeWord(row->Type) : "(표에 없음)") + "  cd " + NlCore::CooldownText(CooldownOf(g_Now.Cooldowns, name)));
+	}
+	lines.push_back("(" + std::to_string(shown) + " of " + std::to_string(g_Now.Names.size()) + ")");
+	return lines;
+}
+
+std::string NlEvents::End(NlCore::EventFamily Family)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return "busy";
+	const NlCore::ScopedFlag busy(g_Busy);
+	g_EndFamily = Family;
+	return Remember(WorldAct::EventEnd, DoNow(WorldAct::EventEnd));
 }

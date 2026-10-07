@@ -450,8 +450,19 @@ namespace
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
 		if (act == NlCore::WorldAct::EventForce)
 			Say("  " + NlEvents::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+		else if (act == NlCore::WorldAct::EventList)
+		{
+			for (const std::string& line : NlEvents::List(C.Options.count("group") ? C.Options.at("group") : std::string(), C.Options.count("find") ? C.Options.at("find") : std::string()))
+				Say("  " + line);
+		}
+		else if (act == NlCore::WorldAct::EventEnd)
+		{
+			NlCore::EventFamily family = NlCore::EventFamily::None;
+			NlCore::ParseEventFamily(C.Options.count("kind") ? C.Options.at("kind") : std::string(), family);		// 줄의 꼴은 ParseRemoteLine 이 이미 봤다
+			Say("  " + NlEvents::End(family));
+		}
 		else
-			Say("  " + NlWorld::Do(act));		// 이벤트의 다른 일은 NlWorld::Do 가 NlEvents 로 넘긴다(Task 4 가 events·event_end 를 더 가른다)
+			Say("  " + NlWorld::Do(act));		// 취소·쿨다운은 NlWorld::Do 가 NlEvents::Do 로 넘긴다
 	}
 
 	// 범죄 패널의 단추와 같은 길(NlCrime::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
