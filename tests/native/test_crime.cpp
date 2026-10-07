@@ -22,7 +22,7 @@ void RunCrimeTests()
 		// 부른 뒤의 판정: 같은 사람이고 깃발을 읽었고 거짓이면 풀렸다. 깃발을 읽지 못했거나 그 자리의 사람이 바뀌었으면 "모른다"(풀렸다고 적지 않는다).
 		CHECK(AfterClear(true, true, 0) == ClearOutcome::Cleared && AfterClear(true, true, 1) == ClearOutcome::Still);
 		CHECK(AfterClear(true, false, 0) == ClearOutcome::Unknown && AfterClear(false, true, 0) == ClearOutcome::Unknown && AfterClear(true, true, std::nan("")) == ClearOutcome::Unknown);
-		// 깡패도 되돌린다(2026-10-07. 게임이 만든 깡패를 실행 3 에서 처음 봤다. research/27): 지정을 푼 뒤 깡패의 깃발(__is_dummy_thug)에 0 을 쓰고 둘을 다시 읽는다.
+		// 깡패도 되돌린다(2026-10-07. 게임이 만든 깡패에게서 확인했다. research/28): 지정을 푼 뒤 깡패의 깃발(__is_dummy_thug)에 0 을 쓰고 둘을 다시 읽는다.
 		// 범죄자의 깃발이 거짓이어도 깡패의 깃발이 남아 있으면 그대로다. 깡패의 깃발을 읽지 못했으면 모른다.
 		CHECK(AfterClear(true, true, 0, true, 0) == ClearOutcome::Cleared && AfterClear(true, true, 0, true, 1) == ClearOutcome::Still);
 		CHECK(AfterClear(true, true, 0, false, 0) == ClearOutcome::Unknown && AfterClear(true, true, 1, true, 0) == ClearOutcome::Still);
@@ -102,10 +102,10 @@ void RunCrimeTests()
 		// 부르고도 확인하지 못한 사람은 "되돌렸다"에 세지 않고 따로 적는다(검토: 깃발을 읽지 못해도 됐다고 적었다).
 		CHECK(ClearReport(3, 1, 0, 2, "") == "부랑자 3명 가운데 1명을 주민으로 되돌렸습니다 (2명은 부른 뒤 확인하지 못함)");
 		CHECK(ClearReport(4, 1, 1, 1, "x") == "부랑자 4명 가운데 1명을 주민으로 되돌렸습니다 (그사이 범죄자가 아니게 됐거나 자리가 바뀐 1명은 건너뜀, 1명은 부른 뒤 확인하지 못함, 1명은 못 함: x)");
-		// 되돌린 사람 가운데 깡패가 있으면 따로 적는다(깡패의 되돌리기는 확인 전이다). 없으면 글이 그대로다.
-		CHECK(ClearReport(3, 3, 0, 0, "", 1) == "부랑자 3명을 주민으로 되돌렸습니다 (그 가운데 깡패 1명. 깡패의 되돌리기는 확인 전입니다)");
+		// 되돌린 사람 가운데 깡패가 있으면 따로 적는다(게임이 만든 깡패에게서 확인했다. research/28). 없으면 글이 그대로다.
+		CHECK(ClearReport(3, 3, 0, 0, "", 1) == "부랑자 3명을 주민으로 되돌렸습니다 (그 가운데 깡패 1명)");
 		CHECK(ClearReport(3, 3, 0, 0, "", 0) == "부랑자 3명을 주민으로 되돌렸습니다");
-		CHECK(ClearReport(3, 2, 1, 0, "", 2) == "부랑자 3명 가운데 2명을 주민으로 되돌렸습니다 (그사이 범죄자가 아니게 됐거나 자리가 바뀐 1명은 건너뜀. 그 가운데 깡패 2명. 깡패의 되돌리기는 확인 전입니다)");
+		CHECK(ClearReport(3, 2, 1, 0, "", 2) == "부랑자 3명 가운데 2명을 주민으로 되돌렸습니다 (그사이 범죄자가 아니게 됐거나 자리가 바뀐 1명은 건너뜀. 그 가운데 깡패 2명)");
 
 		// 죄·혐의 지우기의 결과. 특성을 읽지 못한 영주를 숨기지 않는다(검토: 읽지 못한 영주가 "지울 죄가 없습니다"로 나왔다).
 		CHECK(TraitClearReport(true, 7, 3, 0, 0, "") == "영주 7명에게서 죄 3개를 지웠습니다");

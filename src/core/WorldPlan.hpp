@@ -11,8 +11,18 @@ namespace NlCore
 {
 	// 창의 단추와 원격 `world <낱말>`이 같은 길을 탄다. 불러서 게임이 끝난 것(궁수 매복)은 넣지 않는다.
 	// 계절의 일(research/25): 보기(읽기만), 미루기(시작 시각을 하루 뒤로), 지금 단계 끝내기(남은 시간을 줄인다). 셈은 core/SeasonPlan.
-	enum class WorldAct { CooldownsClear, BishopSend, SeasonShow, SeasonDelay, SeasonEnd };
+	// 지금 저장(save. 게임의 자동 저장 함수 save_game(0, 1). research/28)과 이벤트 골라 일으키기(event. 감독의 __debug_forced_event 에 그 이벤트의 구조체를 쓴다. 이름을 받는다).
+	enum class WorldAct { CooldownsClear, BishopSend, SeasonShow, SeasonDelay, SeasonEnd, SaveNow, EventForce };
 	bool ParseWorldAct(const std::string& Word, WorldAct& Out);
+	// 이름(name=)을 받는 일인가(이벤트 일으키기만).
+	bool WorldActNeedsName(WorldAct Act);
+	// 이벤트의 시스템 이름의 꼴: 비지 않고 글자·숫자·밑줄만(64자 안).
+	bool GoodEventName(const std::string& Name);
+	// 지금 저장의 결과. Outcome: 'd' 게임의 저장이 꺼져 있어 부르지 않았다, 'u' 꺼져 있는지 읽지 못했다, 'f' 함수를 부르지 못했다(Detail 에 까닭),
+	// 'n' 불렀지만 새 파일이 아직 없다, 's' 새 파일이 생겼다(Detail 에 이름).
+	std::string SaveNowReport(char Outcome, const std::string& Detail);
+	// 이벤트 일으키기의 결과. Outcome: 'n' 그 이름의 이벤트가 없다, 'w' 쓰지 못했다(Why), 'd' 써 두었다(감독이 다음에 뽑을 때 고른다. research/28 에서 봤다).
+	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why);
 	const char* WorldActWord(WorldAct Act);
 	// 되는 낱말을 쉼표로 이은 글(틀린 낱말에 답한다).
 	std::string WorldActWords();

@@ -243,6 +243,8 @@ namespace
 	{
 		if (A.IsString() || B.IsString())
 			return A.IsString() && B.IsString() && A.ToString() == B.ToString();
+		if (A.IsStruct() || B.IsStruct())
+			return A.IsStruct() && B.IsStruct() && A.m_Object == B.m_Object;		// 같은 객체인가(강제 이벤트에 구조체를 쓸 때. research/28)
 		return NlGame::IsNumber(A) && NlGame::IsNumber(B) && A.ToDouble() == B.ToDouble();
 	}
 

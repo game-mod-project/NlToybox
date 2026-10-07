@@ -51,3 +51,23 @@
 ## 실행의 판정
 
 - 적재 판정 통과. 게임의 오류 파일: 자동 저장 1건, 경고 1건(`oh no, soul isn't character or die!`. 이번에는 아무도 늙히지 않았다. 뜻은 여전히 모른다). 설정 되돌림 확인.
+
+## 7번째 켜기(묶음 2 의 조사. `verify7.ps1`. `day_8` 아침 자동 저장 = 9일차 06:00)
+
+- **깡패 되돌리기 — 확인**: 게임이 만든 깡패 Ulrich(`__is_dummy_criminal` 1, `__is_dummy_thug` 1, `is_thug()` true, `is_criminal_scum()` 1)에게 `crime clear` → 두 깃발 모두 false, `is_thug()` false, `is_criminal_scum()` false. 목록에서 깡패가 사라졌다.
+- **이벤트 감독의 꼴**: 자료 `o_data.__game_director_events_data`(GameDirectorEventsData)의 함수: `get_debug_forced_event()`·`reset_debug_forced_event()`(인자 없음), `get_event_by_system_name`, `get_available_events_by_type`, `get_events_by_type`, `get_group`·`get_groups`, `__get_event_tickets`·`__get_event_cooldown_days`·`__get_event_min/max_population`.
+  이벤트 이름 61개(`list map:<__events_by_name 의 번호>`): `ai_preach`, `attack_player_village`, `conspiracy`, `dark_actions`, …, `raid_*` 7, `rebellion_*` 4, `reward_*` 9, `u_guest_*` 15, `prophecy_*` 6, `politician_*`·`desire_politician_*` 6. 묶음 11(CAMP, DISTORTION, ECONOMICAL, EPIDEMY, FOREST_BANDIT, GLOBAL_MAP, GUEST, POLITICAL, RAID, REWARD, UPRISING).
+  **감독은 하루 한 번 뽑는다**: 9일차 08:37 → 17:04 사이에 `__try_to_determine_and_start_event(1, undefined, true, struct) -> struct`가 한 번, 그 안에서 `get_debug_forced_event()`와 `reset_debug_forced_event()`가 한 번씩 불렸다(08:37 까지는 0번).
+  `__debug_forced_event`에 글을 쓰는 것은 모듈의 `WriteString`이 거절했다(자리가 undefined 라 "not a string"). 그래서 모듈은 그 이벤트의 **구조체**(ds_map 의 값)를 쓴다(추정. 8번째 켜기에서 본다).
+- **저녁의 자동 저장은 `save_game(0, 2)`** 다(아침은 `(0, 1)`). 둘째 인자가 아침·저녁이고 첫째는 0 이었다(사람의 저장은 보지 못했다). 파일 `아덴_Autosave_Evening_day_9_date_7_10_2026_time_11_31.norland`.
+  모듈의 "지금 저장"은 `save_game(0, 1)`을 부른다(아침의 꼴. 본 적 없는 인자는 쓰지 않는다).
+- 판정: 적재 통과. 오류 파일: 자동 저장 1건, 새 오류 0.
+
+## 8번째 켜기(묶음 2 의 확인. `verify8.ps1`. 같은 `day_8` 세이브)
+
+- **지금 저장 — 확인**: 저장이 꺼진 채 `world save` → "게임의 저장이 꺼져 있어 저장하지 않았습니다". 켜고 부르자 "저장했습니다: 아덴_Autosave_Morning_day_8_date_7_10_2026_time_11_41.norland"(폴더에 그 파일이 생겼다).
+- **이벤트 골라 일으키기 — 확인**: `world event name=u_guest_bard`(쿨다운에 없던 이름) → 모듈은 "쓰지 못했습니다 (did not stick)"라고 했지만 `__debug_forced_event`는 그 구조체(`__system_name "u_guest_bard"`, `__type` 2, `__weight` 100, `__min_population` 10)가 돼 있었다
+  (쓴 뒤 견주는 `Same`이 구조체를 몰랐다. 같은 객체인가로 보게 고쳤다). 9일차 06:00 → 17:56 사이에 감독의 `__try_to_determine_and_start_event(2, undefined, true, struct)`가 **바로 그 구조체를 돌려줬고**
+  `get_debug_forced_event() -> 그 구조체`, `reset_debug_forced_event()`가 불렸다. 그 뒤 `__debug_forced_event`는 undefined, 쿨다운에 `u_guest_bard 16`이 올랐다(그날 뽑혔다). 손님 하나가 왔다(`o_character` 5 → 6).
+  없는 이름은 "게임에 그 이름의 이벤트가 없습니다". 쿨다운 중인 이벤트를 써 두면 오는지는 재지 않았다.
+- 게임의 오류 파일: 경고 `oh no, soul isn't character or die!` 6건(손님 Filid 에게. 손님 이벤트가 오면 나는 경고로 보인다. 모듈의 것이 아니다). 새 오류 0. 적재 통과.

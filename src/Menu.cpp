@@ -304,6 +304,12 @@ void NlMenu::Draw()
 		ImGui::Separator();
 		NlPeople::DrawPeople();
 		break;
+	case Area::Util:
+		NlCheats::DrawArea(page);
+		NlTweaks::DrawArea(page);
+		ImGui::Separator();
+		NlWorld::DrawUtil();
+		break;
 	default:
 		// 표의 항목이 없고 배율만 있는 영역(지식)에서는 "N단계에서 채웁니다"를 적지 않는다.
 		if (NlCheats::HasItems(page) || !NlCore::HasKnobs(page))

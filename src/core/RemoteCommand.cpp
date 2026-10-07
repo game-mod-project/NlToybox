@@ -191,9 +191,20 @@ namespace NlCore
 		{
 			const size_t count = tokens.size();
 			const std::string& verb = command.Verb;
+			// write <path>=<수> 는 수를, write <path>=s:<글> 은 글(낱말 하나. 2026-10-07: 이벤트 감독의 __debug_forced_event 가 글을 받는 것으로 보인다)을 쓴다.
 			const size_t eq = count == 2 ? tokens[1].rfind('=') : std::string::npos;		// 주소의 중괄호 안에 '=' 가 있을 수 있다
-			if (eq == std::string::npos || !ParseNumber(tokens[1].substr(eq + 1), command.Number) || !GoodPath(tokens[1].substr(0, eq), true))
-				return Fail(command, verb + " needs <path>=<number>");
+			if (eq == std::string::npos || !GoodPath(tokens[1].substr(0, eq), true))
+				return Fail(command, verb + " needs <path>=<number> or <path>=s:<text>");
+			const std::string value = tokens[1].substr(eq + 1);
+			if (value.rfind("s:", 0) == 0)
+			{
+				if (value.size() <= 2)
+					return Fail(command, verb + " needs text after s:");
+				command.Options["kind"] = "s";
+				command.Options["text"] = value.substr(2);
+			}
+			else if (!ParseNumber(value, command.Number))
+				return Fail(command, verb + " needs <path>=<number> or <path>=s:<text>");
 			command.Target = tokens[1].substr(0, eq);
 		}
 
@@ -467,10 +478,21 @@ namespace NlCore
 			const size_t count = tokens.size();
 			// world <cooldowns_clear|bishop|season|season_delay|season_end>      한 번 하는 일(core/WorldPlan): 이벤트 쿨다운 지우기, 주교 부르기,
 			// 계절 보기·가혹한 계절 하루 미루기·지금 단계 끝내기
+			// world save 는 지금 저장, world event name=<이벤트의 시스템 이름> 은 그 이벤트를 감독의 강제 이벤트로 써 둔다(2026-10-07. research/28).
 			WorldAct act = WorldAct::CooldownsClear;
-			if (count != 2 || !ParseWorldAct(tokens[1], act))
+			if (count < 2 || !ParseWorldAct(tokens[1], act))
 				return Fail(command, "world needs one of: " + WorldActWords());
 			command.Target = tokens[1];
+			if (!Options(tokens, 2, command))
+				return;
+			const auto name = command.Options.find("name");
+			if (WorldActNeedsName(act))
+			{
+				if (name == command.Options.end() || !GoodEventName(name->second))
+					return Fail(command, "world event needs name=<the event's system name: letters, digits, underscores>");
+			}
+			else if (count != 2)
+				return Fail(command, std::string("world ") + tokens[1] + " takes nothing");
 		}
 
 		void ParseDiplomacyLine(const std::vector<std::string>& tokens, RemoteCommand& command)
