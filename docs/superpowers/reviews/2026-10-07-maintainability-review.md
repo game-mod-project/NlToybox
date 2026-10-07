@@ -209,3 +209,33 @@
 - 둘째 묶음(0.29.0. 켜기 3번을 더 승인받아 7·8번째 확인, 9번째 check-load): **깡패 되돌리기 확인**(게임이 만든 깡패에게서), **지금 저장**(`save_game(0, 1)`. 파일이 생겼다), **이벤트 골라 일으키기**(이벤트의 구조체를 감독의 강제 이벤트에 쓴다. 써 둔 손님 이벤트가 그날 왔다).
   원격 `write`가 글(`s:`)도 쓴다. 남은 것: 쿨다운 중인 이벤트도 강제로 오는가, 사람의 저장(퀵세이브)의 꼴, 설교 시작의 길.
 
+
+## 11. 결과 — 묶음 C (0.29.1, 가지 `chore/refactor-c`, 2026-10-07)
+
+스펙 `docs/superpowers/specs/2026-10-07-refactor-c-design.md`. 동작 불변. 새 파일: `Jobs`, `Buildings`, `Season`, `Mines`, `PeopleAccess`, `TraitText`, `Shield`, `Hold`, `PeopleInternal.hpp`, `PeopleActs`, `PeopleDraw`.
+- R6: `People.cpp` 2,795줄 → `People.cpp` 494줄 + 여덟 조각. R7: `World.cpp` 707줄 → `World`·`Season`·`Mines`. R8: `Production.cpp`는 생산의 셋만. R10: `Game::Resolve` 제거. 건설비는 `Jobs`의 일 하나.
+- 확인(실제로 돌린 것): 코어 시험 118, 안전 29, 파이썬 16+99, `check-load` PASS(124003c 의 DLL), 최종 리뷰의 고침(44f77d8) 뒤의 DLL 로 실행 묶음(`load-save.ps1` 의 적재 판정 PASS, 아덴 4일차 저녁 세이브).
+  켜기 4번: 1 check-load, 2 실행 묶음(계획의 세이브 이름 `time_8_23` 이 없어 메인 메뉴에서 헛돌았다. 세이브 이름은 `Evening_day_4`), 3 실행 묶음(아래의 표), 4 이벤트 조사(`research/29-events.md` 의 입력. 리뷰 고침 1 의 화면도 거기서).
+- 최종 리뷰(fable): Important 4 — (1) 원격 `world season_*` 의 결과가 World 의 "마지막 한 일"에도 적힘 → `NlCore::IsSeasonAct`(시험) 로 `NlWorld::Do` 가 계절을 `NlSeason::Do` 에 바로 넘긴다,
+  (2) Season 에 재진입 가드가 없었다(계절의 읽기는 게임의 함수 셋을 부른다. 스펙 §3 의 근거 문장이 틀렸다) → `g_Busy`, (3) CLAUDE.md 의 여덟 줄이 옛 자리를 가리켰다 → 고쳤다, (4) 이 줄이 돌리지 않은 확인을 적고 있었다 → 돌린 뒤에 다시 썼다.
+  Minor 7 은 미뤘다(PeopleActs·PeopleDraw 의 파일 안 함수가 익명 네임스페이스 없이 외부 연결, TraitText 의 참조 접근자, 안 쓰는 포함 몇, 자르기의 이음새 주석, `build_free` 의 주기 2초, using namespace 둘, 시작 로그의 차례).
+
+| 조각 | 명령(3번째 켜기, `refs/runtime/refactor-c-run2.*`) | 본 것 |
+|---|---|---|
+| People·PeopleAccess·TraitText | `person list`, `person show 25556c3312bce178`, `traits find=brave max=3` | 영주 다섯 줄(36명 가운데); Barra 의 능력치 여덟·욕구 여섯·특성 아홉(화면 이름 붙음: `bruise_light(경미한 타박상)` …); `brave  무모 \| 용기의 한계치가 더 높습니다.` |
+| PeopleActs(역할) | `role name=general` → `role_undo` → `person show` | "능력치 2개를 올리고, 특성 7개를 붙였습니다" → "능력치 2개를 되돌리고, 특성 7개를 뗐습니다" → 능력치·특성 줄이 처음과 같다 |
+| Shield | `cheat ally_power 2`, `records`, `cheat ally_power off` | 기록에 `SoulBasic_14519716125` 의 훅 "x2 … when self is one of the player's souls"; 로그 `people: ally_power x2, enemy_power x1, 29 souls` → `off` |
+| Hold | `cheat needs_full on`, 4초, `person show`, `off` | 욕구 여섯이 67·95·100·97·18·100 → 모두 100.0 |
+| Season·Mines | `world season`, `season_hold`·`mine_stock_hold` on → 4초 → off | "가혹한 계절(가뭄)까지 7일 14시간 (단계 1, 이 단계는 3일 14시간 남음)"; 로그 `season hold keeps phase 0 at 32404 s elapsed` → `season hold off after 0 write(s)`; 오류 없음 |
+| Jobs·Build | `cheat build_free on` 5초 `off` | `construction costs: wrote 160 value(s) to 0, 160 hold it, book 160` → `… to the first values, 160 hold it, book 0` |
+| Jobs·Production | `cheat production_free on` 5초 `off` | `production inputs: wrote 47 value(s) to 0` → `… to the first values` |
+| Jobs·World(종교) | `cheat religion_free on` 5초 `off` | `religion costs: wrote 13 value(s) to 0` → `… to the first values` |
+| Jobs·People(임신) | `no_miscarriage` on → `ask …pregnancy_miscarriage_chance` → off → `ask` | 0 → 0.2 (로그 `miscarriage chance: wrote 1 value(s) to 0` → `first values`) |
+| Jobs·Crime | `thug_days` on(x10) → `ask …dummy_criminal_days_to_thug` → off → `ask` | 20 → 2 (로그 `days to thug: wrote 1 value(s) to x10` → `first values`) |
+| World(이벤트·저장) | `world event name=u_guest_bard`, `world save` | "강제 이벤트로 써 두었습니다 …", "게임의 저장이 꺼져 있어 저장하지 않았습니다 …" |
+| Resolve 제거(Tweaks) | 모듈 로그의 `tweak` 줄 | 게임 안에서 `tweak settings: all 1.00` 하나뿐(실행 묶음은 배율을 치운다). "target not found"는 없다 |
+| Jobs 엔진 | 모듈 로그 | `jobs: … already registered` 없음 |
+| 리뷰 고침 1 | 4번째 켜기: `world season_delay` → `window open`, `page events`, `shot ev-events` | 계절의 결과 글("9시간만 미뤘습니다 …")이 월드 패널의 계절 자리에만 있고 이벤트 패널에는 없다(`refs/ui/ev-events.png`, `ev-world.png`) |
+
+게임의 오류 파일: 새 `ERROR` 없음. 경고 넷은 불러올 때의 게임 자체의 것(`hint_talent_*` 힌트 없음. 사용자의 게임 로그에도 같다).
+`People.cpp` 494줄(2,795 → 494 + PeopleActs 857 + PeopleDraw 713 + PeopleInternal.hpp 109).

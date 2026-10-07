@@ -4,6 +4,9 @@
 
 #include <YYTK_Shared.hpp>
 #include "Build.hpp"
+#include "Jobs.hpp"
+#include "Mines.hpp"
+#include "Season.hpp"
 #include "Production.hpp"
 #include "Dump.hpp"
 #include "Court.hpp"
@@ -11,6 +14,9 @@
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
+#include "PeopleAccess.hpp"
+#include "Shield.hpp"
+#include "TraitText.hpp"
 #include "World.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
@@ -28,7 +34,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.29.0";
+	constexpr const char* k_Version = "0.29.1";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -149,13 +155,19 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlRecorder::Init(Module, [](const std::string& Line) { LogLine(Line); });
 	NlRemote::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	// 게임 폴더: 모듈은 <게임>\mods\Aurie 에 있다. 인물 패널이 게임의 현지화 파일(localization\main.csv)에서 특성의 이름을 읽는다.
+	NlJobs::Init([](const std::string& Line) { LogLine(Line); });
+	NlProduction::Init([](const std::string& Line) { LogLine(Line); });
+	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
+	NlSeason::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 화면 이름을 게임의 localization\main.csv 에서 읽는다
+	NlMines::Init([](const std::string& Line) { LogLine(Line); });
+	NlPeopleAccess::Init([](const std::string& Line) { LogLine(Line); });
+	NlShield::Init([](const std::string& Line) { LogLine(Line); });
+	NlTraitText::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 특성의 글을 게임의 localization 파일에서 읽는다
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
 	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
 	NlCrime::Init([](const std::string& Line) { LogLine(Line); });
-	NlWorld::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 이름도 그 파일에서 읽는다
 	NlDiplomacy::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
-	NlProduction::Init([](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });
 	NlUi::SetContent(NlMenu::Draw);
 

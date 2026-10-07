@@ -28,6 +28,8 @@ namespace NlCore
 	std::string WorldActWords();
 	// 게임의 자료를 바꾸는 일인가. 보기는 읽기만 한다.
 	bool WorldActChanges(WorldAct Act);
+	// 계절의 일인가(보기, 미루기, 끝내기). src/Season 이 하고 제 자리에 결과를 둔다: World 의 "마지막 한 일"에 섞지 않는다.
+	bool IsSeasonAct(WorldAct Act);
 
 	// 이벤트 쿨다운(남은 날)의 한 칸에 0 을 쓸지: 0 보다 큰 수에만 쓴다(수가 아닌 칸과 이미 0 인 칸은 건드리지 않는다).
 	bool ShouldClearCooldown(bool IsNumber, double Value);

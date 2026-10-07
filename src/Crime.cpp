@@ -2,9 +2,11 @@
 
 #include "Access.hpp"
 #include "Game.hpp"
+#include "Jobs.hpp"
 #include "Ui.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
+#include "core/CrimePlan.hpp"
 #include "core/Guard.hpp"
 #include "core/Text.hpp"
 #include "core/PeoplePlan.hpp"
@@ -64,6 +66,12 @@ namespace
 		if (g_Log)
 			g_Log(Line);
 	}
+
+	// 범죄의 게임 변수 넷(research/26. 열쇠는 core/CrimePlan). 써지고 되돌려지는 것까지만 본다. 엔진은 src/Jobs.
+	bool WalkBanditTurn(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::BanditTurnVars(), Why); }
+	bool WalkCrimeMinds(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::CrimeMindVars(), Why); }
+	bool WalkThugDays(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::ThugDaysVars(), Why); }
+	bool WalkTheftAmount(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::TheftAmountVars(), Why); }
 
 	std::string Base(bool Character, int Index)
 	{
@@ -418,6 +426,10 @@ void NlCrime::Init(LogFn Log_)
 {
 	std::lock_guard lock(g_Mutex);
 	g_Log = std::move(Log_);
+	NlJobs::Add({ "no_bandit_turn", "bandit turn chance", true, &WalkBanditTurn, nullptr, 15 });
+	NlJobs::Add({ "crime_minds_off", "crime minds", true, &WalkCrimeMinds, nullptr, 15 });
+	NlJobs::Add({ "thug_days", "days to thug", false, &WalkThugDays, nullptr, 15 });
+	NlJobs::Add({ "theft_none", "storage theft amount", true, &WalkTheftAmount, nullptr, 15 });
 }
 
 void NlCrime::GameTick(double Now, bool Visible)

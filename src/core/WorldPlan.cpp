@@ -111,6 +111,11 @@ namespace NlCore
 		return false;
 	}
 
+	bool IsSeasonAct(WorldAct Act)
+	{
+		return Act == WorldAct::SeasonShow || Act == WorldAct::SeasonDelay || Act == WorldAct::SeasonEnd;
+	}
+
 	const char* WorldActWord(WorldAct Act)
 	{
 		for (const ActInfo& act : k_Acts)

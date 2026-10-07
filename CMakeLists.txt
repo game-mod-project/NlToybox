@@ -77,7 +77,9 @@ add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Access.cpp
   src/Build.cpp
+  src/Buildings.cpp
   src/Production.cpp
+  src/Jobs.cpp
   src/Cheats.cpp
   src/Court.cpp
   src/Crime.cpp
@@ -88,6 +90,12 @@ add_library(nltoybox SHARED
   src/Game.cpp
   src/Menu.cpp
   src/People.cpp
+  src/PeopleAccess.cpp
+  src/TraitText.cpp
+  src/Shield.cpp
+  src/Hold.cpp
+  src/PeopleActs.cpp
+  src/PeopleDraw.cpp
   src/Recorder.cpp
   src/Remote.cpp
   src/Search.cpp
@@ -95,6 +103,8 @@ add_library(nltoybox SHARED
   src/Ui.cpp
   src/Diplomacy.cpp
   src/World.cpp
+  src/Season.cpp
+  src/Mines.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
   "${IMGUI_ROOT}/imgui.cpp"
   "${IMGUI_ROOT}/imgui_draw.cpp"

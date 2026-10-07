@@ -65,9 +65,6 @@ namespace NlGame
 	// 지금 룸의 이름. 못 얻으면 빈 글이다(한 번 실패하면 다시 시도하지 않는다).
 	std::string RoomName();
 
-	// "global.a.b" 를 따라간다. 없으면 거짓.
-	bool Resolve(const std::string& Path, YYTK::RValue& Out);
-
 	// 러너가 말하는 구조체의 멤버 수. 알 수 없으면 -1.
 	int MemberCount(const YYTK::RValue& Struct);
 
