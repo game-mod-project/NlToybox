@@ -153,8 +153,11 @@ namespace NlCore
 					"업그레이드를 누르려면 자원이 있어야 한다. 없으면 비용 없음과 함께 켠다" },
 
 			// 사용자가 플레이에서 봤다(2026-10-05, research/07): 즉시 건설은 된다.
+			// 새 게임의 영주관 배치 때 이 깃발이 1 이면 게임이 끝난다(InspectionManager.check_hall_inspection. 2026-10-07 가르기: 이것만 켜도 끝났고 아무것도 안 켜면 됐다. research/30).
+			// 그래서 영주관(__cached_hall)이 놓인 뒤에만 쓴다(Gate).
 			{ "instant_build", Area::Build, "건물 즉시 건설", "inst:o_debug.is_instant_build_buildings", T, 1, 0, 0, 0, true,
-				"건물을 놓으면 바로 다 지어진다" },
+				"건물을 놓으면 바로 다 지어진다. 새 게임에서는 영주관을 놓은 뒤에 적용된다(그 전에 켜져 있으면 게임이 끝난다)", false,
+				"inst:o_game_map_controller.__province.__cached_hall" },
 			// 사용자가 플레이에서 봤다: 건설 목록은 풀리지만 조건에 걸리는 건물은 여전히 지을 수 없다. 조건까지 푸는 것은 아직 없다.
 			// 사용자가 플레이에서 본 것(위의 줄)이 이 항목의 효과("목록이 모두 보인다")다. 2026-10-07 의 확인 캠페인에서 그 범위로 확인으로 올렸다(research/27).
 			{ "build_all", Area::Build, "건설 목록 모두 열기 (조건은 그대로)", "inst:o_debug.is_can_build_all_buildings", T, 1, 0, 0, 0, true,
@@ -394,6 +397,16 @@ namespace NlCore
 				"인물 위의 이름표를 그리지 않는다" },
 		};
 		return cheats;
+	}
+
+	bool GateWaits(const Cheat& Def, bool Read, bool Present)
+	{
+		return Def.Gate != nullptr && !(Read && Present);
+	}
+
+	const char* GateNote(const Cheat&)
+	{
+		return "영주관이 놓인 뒤에 적용";
 	}
 
 	const Cheat* FindCheat(const std::string& Id)

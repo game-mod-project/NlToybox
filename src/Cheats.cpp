@@ -1,6 +1,7 @@
 #include "Cheats.hpp"
 
 #include "Access.hpp"
+#include "Game.hpp"
 #include "Recorder.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
@@ -179,6 +180,26 @@ namespace
 		{
 			It.Base = current;
 			It.HasBase = true;
+		}
+
+		if (It.On && It.Def->Gate)
+		{
+			// 먼저 있어야 하는 자리(즉시 건설: 영주관). 없으면 쓰지 않고 기다린다 — 새 게임의 영주관 배치 때 켜져 있으면 게임이 끝난다(research/30).
+			YYTK::RValue gate;		// 이 함수 안에서만 든다
+			std::string gate_why;
+			const bool read = NlAccess::Read(NlCore::ParseAskPath(It.Def->Gate), gate, gate_why);
+			const bool present = read && gate.m_Kind != YYTK::VALUE_UNDEFINED && gate.m_Kind != YYTK::VALUE_UNSET && !(NlGame::IsNumber(gate) && gate.ToDouble() < 0);
+			if (NlCore::GateWaits(*It.Def, read, present))
+			{
+				It.Note = NlCore::GateNote(*It.Def);
+				const std::string line = std::string("cheat ") + It.Def->Id + ": waiting for " + It.Def->Gate;
+				if (line != It.Logged)
+				{
+					It.Logged = line;
+					Log(line);
+				}
+				return;
+			}
 		}
 
 		double wanted = current;
