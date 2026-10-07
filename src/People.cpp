@@ -3,6 +3,7 @@
 #include "Access.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "Jobs.hpp"
 #include "Ui.hpp"
 #include "Recorder.hpp"
 #include "core/AskPath.hpp"
@@ -167,6 +168,11 @@ namespace
 		if (g_Log)
 			g_Log(Line);
 	}
+
+	// 임신·출산의 게임 변수 셋(research/24. 열쇠는 core/FamilyPlan). 엔진은 src/Jobs.
+	bool WalkPregnancyChance(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::PregnancyChanceVars(), Why); }
+	bool WalkMiscarriage(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::MiscarriageVars(), Why); }
+	bool WalkChildbirthDeath(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::ChildbirthDeathVars(), Why); }
 
 	const std::string k_NoText;		// 없는 글을 참조로 돌려줄 때(RValue 가 아니라 정적으로 둬도 된다)
 
@@ -2321,6 +2327,9 @@ void NlPeople::Init(LogFn Log_, const std::filesystem::path& GameDir)
 	std::string why;
 	if (!NlCore::CheckRoles(why))
 		Log("people: the role preset table is wrong: " + why);		// 시험이 막는다. 여기까지 오면 로그에 남긴다
+	NlJobs::Add({ "pregnancy_chance", "pregnancy chance", false, &WalkPregnancyChance, nullptr, 15 });
+	NlJobs::Add({ "no_miscarriage", "miscarriage chance", true, &WalkMiscarriage, nullptr, 15 });
+	NlJobs::Add({ "safe_childbirth", "childbirth death chance", true, &WalkChildbirthDeath, nullptr, 15 });
 }
 
 void NlPeople::GameTick(double Now, bool Active)
