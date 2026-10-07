@@ -26,6 +26,7 @@
 
 using namespace YYTK;
 using NlAccess::Holder;
+using NlCore::PathStep;
 using NlCore::WorldAct;
 
 namespace
