@@ -71,6 +71,11 @@
 - `…__province.__inspection_manager`(InspectionManager)의 `step` = 스크립트 `…_485212661`, `check_hall_inspection` = `…_531112662`. 둘 다 **인자 없이 매 프레임** 불린다(90초에 6,692번·6,715번. 모두 `-> undefined`). 그래서 기록으로는 무엇이 undefined 였는지 못 본다.
 - 오류는 `check_hall_inspection` 의 154행에서 정수 인자가 undefined 였다는 것뿐이다. 그때 사용자의 게임에서 모드가 하던 것: 건설비 0, 창고 용량 x10, 생산량 x2, 작업 능률 훅, 건물 지식 훅, 전투력 훅, 욕구·신앙심 채우기, 자원 바닥 +50. 어느 것도 undefined 를 쓰지 않는다. 원인은 못 가렸다(홀의 시찰이 보는 건물·사람이 없어진 상태로 추정만 한다).
 
+## 구현(0.30.0. 이벤트 탭)
+
+- `src/Events.cpp` + `core/EventPlan`. 표 61줄(이름·묶음·갈래·열쇠·지은 이름·가족), 예약과 취소, 묶음·찾기의 표, 가족 다섯의 진행 중, 끝내기(확인 전 다섯은 꺼져 있다), 쿨다운 지우기.
+- 확인(Task 7 의 켜기): (여기에 적는다 — 창의 화면 `refs/ui/events-*.png`, 원격 `world events` 의 답, 표에 없는 이름의 수, `world event_cancel` 의 답, `world event_end kind=raid` 의 'x' 답)
+
 ## 남은 것
 
 - 끝내는 후보 함수의 인자·효과(진행 중인 이벤트가 있는 세이브에서). 반란 안쪽 관리자 넷과 `__random_events_manager`, `__delayed_events` 원소의 꼴.
