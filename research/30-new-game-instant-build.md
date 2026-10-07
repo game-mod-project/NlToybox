@@ -31,7 +31,8 @@ gml_Object_o_game_map_controller_Step_0 (line 18)
 
 - 치트 표의 항목에 **먼저 있어야 하는 자리(`Cheat::Gate`)** 를 두었다. 즉시 건설의 자리는 `inst:o_game_map_controller.__province.__cached_hall`(영주관. research/07). 그 값이 읽히지 않거나 undefined·음수(noone)이면 깃발을 쓰지 않고 기다린다(항목 옆에 "영주관이 놓인 뒤에 적용", 로그 `cheat instant_build: waiting for …__cached_hall` 한 번).
   코어의 판단은 `NlCore::GateWaits`·`GateNote`(시험 `test_cheat`). 세이브를 불러오면 영주관이 있으므로 바로 쓴다.
-- 확인: (여기에 적는다 — 고친 DLL 로 새 게임 → 영주관 배치 → 이어지는가, 배치 뒤 로그에 `cheat instant_build = 1: ok` 가 나는가, 그 뒤 놓은 건물이 바로 지어지는가)
+- **확인**(0.30.1. 사용자의 설정 그대로 켠 실행 묶음. 사용자가 눌렀다): 새 게임 → 영지 → 영주관 배치가 이어졌고, 그 뒤 놓은 건물이 바로 지어졌다(즉시 건설이 영주관 뒤에 듣는다).
+  모듈 로그: `cheat instant_build: waiting for inst:o_game_map_controller.__province.__cached_hall` → (배치 뒤) `cheat instant_build = 1: ok`. 게임의 오류 파일에 새 ERROR 없음.
 
 ## 남은 것
 
