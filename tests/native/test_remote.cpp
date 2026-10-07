@@ -15,7 +15,13 @@ void RunRemoteTests()
 		const RemoteCommand refine = ParseRemoteLine("refine value=2950");
 		CHECK(refine.Error.empty() && refine.Number == 2950);
 		const RemoteCommand write = ParseRemoteLine("write map:1@{a=b}=-4.5");
-		CHECK(write.Error.empty() && write.Target == "map:1@{a=b}" && write.Number == -4.5);
+		CHECK(write.Error.empty() && write.Target == "map:1@{a=b}" && write.Number == -4.5 && !write.Options.count("kind"));
+		// 글도 쓴다(2026-10-07. 이벤트 감독의 __debug_forced_event 는 글을 받는 것으로 보인다): write <path>=s:<글>. 글은 비지 않고 공백이 없다(낱말 하나).
+		const RemoteCommand text = ParseRemoteLine("write inst:o_data.__game_director_events_data.__debug_forced_event=s:u_guest_dog_seller");
+		CHECK(text.Error.empty() && text.Target == "inst:o_data.__game_director_events_data.__debug_forced_event" && text.Options.at("kind") == "s"
+			&& text.Options.at("text") == "u_guest_dog_seller");
+		CHECK(ParseRemoteLine("poke inst:o_debug.x=s:abc").Error.empty() && ParseRemoteLine("poke inst:o_debug.x=s:abc").Options.at("text") == "abc");
+		CHECK(!ParseRemoteLine("write inst:o_debug.x=s:").Error.empty() && !ParseRemoteLine("write inst:o_debug.x=abc").Error.empty());
 		CHECK(ParseRemoteLine("poke inst:o_debug.x=1").Verb == "poke" && ParseRemoteLine("state").Error.empty());
 		CHECK(ParseRemoteLine("record gml_Script_budget_money_get").Target == "gml_Script_budget_money_get");
 		CHECK(ParseRemoteLine("records").Error.empty() && ParseRemoteLine("unrecord all").Target == "all");

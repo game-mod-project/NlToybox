@@ -162,8 +162,32 @@ namespace
 	}
 
 	// write 는 남기고 poke 는 되돌린다.
+	// 글을 쓴다(write <path>=s:<글>). 없던 값(undefined)에도 쓴다: 읽지 못한 옛 값은 "?"로 적고 되돌릴 때는 쓰지 않는다.
+	void DoWriteText(const RemoteCommand& C, bool Restore)
+	{
+		const std::string text = C.Options.at("text");
+		std::string old, read, back, why, why_back;
+		const bool had = NlAccess::ReadText(C.Target, old);
+		Say("  old " + (had ? "\"" + old + "\"" : std::string("?")) + ", writing \"" + text + "\"");		// 쓰다가 죽으면 여기까지 남는다
+		const bool stuck = NlAccess::WriteString(C.Target, text, why);
+		const bool have = NlAccess::ReadText(C.Target, read);
+		std::string line = "  read " + (have ? "\"" + read + "\"" : std::string("?")) + (stuck ? " (stuck)" : " (not stuck: " + why + ")");
+		if (Restore && had)
+		{
+			const bool restored = NlAccess::WriteString(C.Target, old, why_back);
+			const bool have_back = NlAccess::ReadText(C.Target, back);
+			line += "; restored " + (have_back ? "\"" + back + "\"" : std::string("?")) + (restored ? "" : " (restore failed: " + why_back + ")");
+		}
+		else if (Restore)
+			line += "; not restored (the old value was not a text)";
+		Say(line);
+		Log("remote " + C.Verb + " " + C.Target + " = \"" + text + "\"" + (stuck ? "" : ": " + why));
+	}
+
 	void DoWrite(const RemoteCommand& C, bool Restore)
 	{
+		if (C.Options.count("kind") && C.Options.at("kind") == "s")
+			return DoWriteText(C, Restore);
 		double old = 0, read = 0, back = 0;
 		if (!NlAccess::ReadNumber(C.Target, old))
 		{
@@ -423,7 +447,10 @@ namespace
 			return;
 		}
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
-		Say("  " + NlWorld::Do(act));
+		if (act == NlCore::WorldAct::EventForce)
+			Say("  " + NlWorld::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+		else
+			Say("  " + NlWorld::Do(act));
 	}
 
 	// 범죄 패널의 단추와 같은 길(NlCrime::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.

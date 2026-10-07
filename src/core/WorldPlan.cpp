@@ -1,5 +1,6 @@
 #include "WorldPlan.hpp"
 
+#include <cctype>
 #include <cmath>
 #include <string>
 
@@ -19,7 +20,46 @@ namespace NlCore
 			{ WorldAct::SeasonShow, "season", false },
 			{ WorldAct::SeasonDelay, "season_delay", true },
 			{ WorldAct::SeasonEnd, "season_end", true },
+			{ WorldAct::SaveNow, "save", true },
+			{ WorldAct::EventForce, "event", true },
 		};
+	}
+
+	bool WorldActNeedsName(WorldAct Act)
+	{
+		return Act == WorldAct::EventForce;
+	}
+
+	bool GoodEventName(const std::string& Name)
+	{
+		if (Name.empty() || Name.size() > 64)
+			return false;
+		for (const unsigned char c : Name)
+			if (!std::isalnum(c) && c != '_')
+				return false;
+		return true;
+	}
+
+	std::string SaveNowReport(char Outcome, const std::string& Detail)
+	{
+		switch (Outcome)
+		{
+		case 'd': return "게임의 저장이 꺼져 있어 저장하지 않았습니다 (유틸의 '게임의 저장 끄기'를 끈 뒤에)";
+		case 'u': return "게임의 저장이 꺼져 있는지 읽지 못해 저장하지 않았습니다";
+		case 'f': return "게임의 저장 함수를 부르지 못했습니다 (" + Detail + ")";
+		case 's': return "저장했습니다: " + Detail;
+		default: return "게임의 저장 함수를 불렀습니다 (새 파일은 아직 보이지 않습니다)";
+		}
+	}
+
+	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why)
+	{
+		switch (Outcome)
+		{
+		case 'n': return Name + ": 게임에 그 이름의 이벤트가 없습니다";
+		case 'w': return Name + ": 강제 이벤트에 쓰지 못했습니다 (" + Why + ")";
+		default: return Name + ": 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다";
+		}
 	}
 
 	bool ParseWorldAct(const std::string& Word, WorldAct& Out)

@@ -153,8 +153,8 @@ namespace NlCore
 	{
 		if (Asked <= 0)
 			return "되돌릴 부랑자가 없습니다";
-		// 깡패의 되돌리기는 확인 전이다(게임이 만든 깡패에게 해 본 적이 없다): 그 수를 따로 적는다.
-		const std::string thugs = ThugsDone > 0 ? "그 가운데 깡패 " + People(ThugsDone) + ". 깡패의 되돌리기는 확인 전입니다" : std::string();
+		// 되돌린 깡패의 수는 따로 적는다(게임이 만든 깡패에게서 확인했다: 두 깃발과 is_thug()·is_criminal_scum()이 거짓이 됐다. research/28).
+		const std::string thugs = ThugsDone > 0 ? "그 가운데 깡패 " + People(ThugsDone) : std::string();
 		if (Done == Asked)
 			return "부랑자 " + People(Asked) + "을 주민으로 되돌렸습니다" + (thugs.empty() ? "" : " (" + thugs + ")");
 		std::string notes;

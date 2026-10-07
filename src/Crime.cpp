@@ -203,7 +203,7 @@ namespace
 	// 범죄자 지정을 푼다: 게임의 set_criminal_scum(false, true). 게임이 (true, true)와 (true)로 부르는 것을 봤고, (false, true)로 불러 깃발이 거짓이 되는 것을 봤다
 	// (한 사람씩, 그리고 한 틱에 셋을 잇달아. research/26). 깡패도 푼다(2026-10-07): 그 함수는 깡패의 깃발을 건드리지 않으므로(실행 3 에서 본 깡패의 깃발은 따로 참이었다)
 	// 푼 뒤 __is_dummy_thug 에 0 을 쓰고(research/26 에서 0 을 쓰자 게임의 is_thug() 가 거짓이 됐다) 두 깃발을 다시 읽어 판정한다(core 의 AfterClear).
-	// 게임이 만든 깡패에게는 아직 해 보지 않았다: 결과의 글에 "확인 전"으로 적는다(core 의 ClearReport).
+	// 게임이 만든 깡패(Ulrich. research/28)에게서 확인했다: 두 깃발과 is_thug()·is_criminal_scum() 이 거짓이 됐다.
 	std::vector<std::string> Clear(const View& Seen, const std::string& Who)
 	{
 		std::vector<Vagabond> targets;
@@ -461,8 +461,7 @@ void NlCrime::Draw()
 		for (const Vagabond& who : g_View.Vagabonds)
 		{
 			ImGui::PushID(who.Uuid.c_str());
-			// 깡패의 되돌리기는 게임이 만든 깡패에게 해 본 적이 없다(확인 전). 단추에 그렇게 적는다.
-			if (ImGui::SmallButton(who.Thug ? "되돌리기 (깡패. 확인 전)" : "되돌리기"))
+			if (ImGui::SmallButton(who.Thug ? "되돌리기 (깡패)" : "되돌리기"))
 				Push(CrimeAct::Clear, who.Uuid);
 			ImGui::SameLine();
 			ImGui::TextUnformatted(NlCore::VagabondLine(who, g_View.Now).c_str());
@@ -479,7 +478,7 @@ void NlCrime::Draw()
 		NlUi::Hint(g_LastCrime.c_str());
 	NlUi::Hint("게임은 저녁(18:00)에 주민 가운데 몇을 범죄자(부랑자)로 만듭니다(무엇이 그들을 고르는지는 재지 못했습니다). '되돌리기'는 게임의 같은 함수로 그 지정을 풉니다. "
 		"게임이 다시 고를 수 있습니다: 위의 '주민이 부랑자(범죄자)가 되지 않음'을 켠 저녁들에는 게임의 시도 셋이 모두 막혔습니다. "
-		"깡패도 되돌립니다: 지정을 푼 뒤 깡패의 깃발에 0 을 씁니다(게임이 만든 깡패에게는 확인 전입니다). "
+		"깡패도 되돌립니다: 지정을 푼 뒤 깡패의 깃발에 0 을 씁니다(게임이 만든 깡패에게서 확인했습니다: 게임의 is_thug() 가 거짓이 됐습니다). "
 		"'훔친 것 되돌리기'는 훔친 금화가 있는 부랑자의 줄에만 나옵니다: 게임의 함수를 부르는 것까지만 했고 효과는 확인 전입니다. "
 		"범죄자의 지정은 세이브에 들어가는 자료입니다. 되돌리는 단추는 없습니다.");
 

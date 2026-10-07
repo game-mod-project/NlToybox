@@ -14,11 +14,32 @@ void RunWorldTests()
 		CHECK(ParseWorldAct("season_end", act) && act == WorldAct::SeasonEnd);
 		CHECK(std::string(WorldActWord(WorldAct::SeasonShow)) == "season" && std::string(WorldActWord(WorldAct::SeasonEnd)) == "season_end");
 		CHECK(!ParseWorldAct("rain", act) && !ParseWorldAct("season_", act));
+		// 지금 저장(save)과 이벤트 골라 일으키기(event. 이름을 받는다). 2026-10-07, research/28.
+		CHECK(ParseWorldAct("save", act) && act == WorldAct::SaveNow && std::string(WorldActWord(WorldAct::SaveNow)) == "save");
+		CHECK(ParseWorldAct("event", act) && act == WorldAct::EventForce && std::string(WorldActWord(WorldAct::EventForce)) == "event");
+		CHECK(WorldActNeedsName(WorldAct::EventForce) && !WorldActNeedsName(WorldAct::SaveNow) && !WorldActNeedsName(WorldAct::BishopSend));
 		// 낱말의 목록(틀린 낱말에 답할 글)은 표에서 만든다.
-		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end");
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event");
 		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
 		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
-			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend));
+			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend) && WorldActChanges(WorldAct::SaveNow) && WorldActChanges(WorldAct::EventForce));
+		// 이벤트의 이름: 게임의 시스템 이름(글자·숫자·밑줄). 빈 글과 공백·점은 받지 않는다.
+		CHECK(GoodEventName("u_guest_bard") && GoodEventName("raid_bandits") && !GoodEventName("") && !GoodEventName("u guest") && !GoodEventName("a.b") && !GoodEventName("name=x"));
+		// 원격: world save, world event name=<이름>. event 는 이름이 꼭 있어야 하고, 다른 일은 이름을 받지 않는다.
+		CHECK(ParseRemoteLine("world save").Error.empty() && ParseRemoteLine("world save").Target == "save");
+		const RemoteCommand forced = ParseRemoteLine("world event name=u_guest_bard");
+		CHECK(forced.Error.empty() && forced.Target == "event" && forced.Options.at("name") == "u_guest_bard");
+		CHECK(!ParseRemoteLine("world event").Error.empty() && !ParseRemoteLine("world event name=").Error.empty() && !ParseRemoteLine("world bishop name=x").Error.empty());
+		// 지금 저장의 글: 게임의 저장이 꺼져 있으면 부르지 않는다. 불렀으면 새 파일의 이름을 적고, 아직 없으면 그렇게 말한다.
+		CHECK_STR(SaveNowReport('d', ""), "게임의 저장이 꺼져 있어 저장하지 않았습니다 (유틸의 '게임의 저장 끄기'를 끈 뒤에)");
+		CHECK_STR(SaveNowReport('u', ""), "게임의 저장이 꺼져 있는지 읽지 못해 저장하지 않았습니다");
+		CHECK_STR(SaveNowReport('f', "no such script"), "게임의 저장 함수를 부르지 못했습니다 (no such script)");
+		CHECK_STR(SaveNowReport('n', ""), "게임의 저장 함수를 불렀습니다 (새 파일은 아직 보이지 않습니다)");
+		CHECK_STR(SaveNowReport('s', "A_Autosave_Morning_day_8.norland"), "저장했습니다: A_Autosave_Morning_day_8.norland");
+		// 이벤트 일으키기의 글: 없는 이름, 쓰지 못함, 써 둠(감독이 다음에 뽑을 때 고른다. research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다).
+		CHECK_STR(ForceEventReport("u_guest_bard", 'n', ""), "u_guest_bard: 게임에 그 이름의 이벤트가 없습니다");
+		CHECK_STR(ForceEventReport("u_guest_bard", 'w', "why"), "u_guest_bard: 강제 이벤트에 쓰지 못했습니다 (why)");
+		CHECK_STR(ForceEventReport("u_guest_bard", 'd', ""), "u_guest_bard: 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다");
 
 		// 이벤트 쿨다운 한 칸: 0 보다 큰 수에만 0 을 쓴다
 		CHECK(ShouldClearCooldown(true, 19) && ShouldClearCooldown(true, 0.5));

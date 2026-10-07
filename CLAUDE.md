@@ -226,6 +226,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   새 항목이 확인되면 맞는 묶음에 한 줄을 더한다. 원격 `preset <normal|easy|sandbox|god>`, `time pause|resume`.
 - 종교·이벤트 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0),
   주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world cooldowns_clear|bishop`이 같은 길을 탄다.
+  - **이벤트 골라 일으키기**(2026-10-07. `research/28`): 감독의 자료 `inst:o_data.__game_director_events_data`의 `__events_by_name`(ds_map 번호: 이름 → 이벤트 구조체. 61개. `list map:<번호>`로 이름을 본다)에서
+    그 구조체를 얻어 `__debug_forced_event`에 쓴다(글이 아니라 **구조체**다). 감독의 `__try_to_determine_and_start_event`가 하루 한 번(오후) `get_debug_forced_event()`를 읽어 그것을 고르고 `reset_debug_forced_event()`로 지운다
+    (써 둔 `u_guest_bard`가 그날 뽑혀 쿨다운에 올랐다). 원격 `world event name=<시스템 이름>`. 쿨다운 중인 이벤트도 오는지는 재지 않았다.
+  - **지금 저장**(유틸 영역. `NlWorld::DrawUtil`): 게임의 자동 저장 함수 `gml_Script_save_game(0, 1)`(아침의 꼴. 저녁은 `(0, 2)`)을 부른다. `is_save_disabled`가 참이면 부르지 않는다.
+    새 파일의 이름은 세이브 폴더를 앞뒤로 읽어 적는다(읽기만). 원격 `world save`.
   세력의 자료는 `gm.__factions_manager`(`__array_of_factions[57]`, `__player_faction`)에 있고, 게임은 `Faction.get_relation_with(세력) -> 수`, `is_enemy_with(세력) -> 불리언`을 부른다.
 - 외교 패널(`src/Diplomacy.cpp`, `core/DiplomacyPlan`. `research/19`). 왕국 사이의 관계(종류)는 `…__factions_manager.__allies_matrix.__matrix.<A 의 uuid>.<B 의 uuid>`에 있다
   (A 가 B 를 보는 관계. **방향이 있다**). 수의 뜻: 0 allies, 1 enemies, 2 deadly enemies, 3 neutrals, 4 friends, 5 vassal, 6 sir, 7 opponent.
@@ -343,7 +348,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **읽지 못한 것을 "없다"나 "됐다"로 적지 않는다**: 깃발을 읽지 못한 주민과 특성을 읽지 못한 영주는 따로 센다(`CrimeSummary`·`LordsLine`·`TraitClearReport`의 `Unread`).
     지정 풀기는 부른 뒤 그 자리의 uuid 와 깃발을 다시 읽어 판정하고(`NlCore::AfterClear`), 확인하지 못한 사람은 "부른 뒤 확인하지 못함"으로 센다(`ClearReport`의 `Unsure`).
   - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)도 되돌린다**(2026-10-07): `set_criminal_scum(false, true)`는 그 깃발을 건드리지 않으므로 푼 뒤 `__is_dummy_thug`에 0 을 쓰고 두 깃발을 다시 읽어 판정한다
-    (`NlCore::AfterClear`의 넷째·다섯째 인자). 되돌린 깡패의 수는 결과의 글에 따로 적는다(`ClearReport`의 `ThugsDone`. 게임이 만든 깡패에게 해 보기 전까지는 "확인 전").
+    (`NlCore::AfterClear`의 넷째·다섯째 인자). 되돌린 깡패의 수는 결과의 글에 따로 적는다(`ClearReport`의 `ThugsDone`). 게임이 만든 깡패에게서 확인했다(`research/28`: 게임의 `is_thug()`가 거짓이 됐다).
   - 훔친 것 되돌리기(`return_back_stolen_to_player_warehouse()`. 인자 없음)는 사람을 짚어 부르고 훔친 금화(`__stolen_gold`)의 앞뒤를 적는다(`StolenReport`). 창의 단추는 훔친 금화가 있는 줄에만 나온다.
     훔친 것이 있는 사람에게서는 보지 못했다(확인 전).
   - **죄는 특성이다**(이름이 `sin_`으로 시작한다. 열두 가지). 영주의 범죄 혐의도 특성이다(`character_crime`, `…_blamed_by_bishop`, `…_blamed_by_fanatics`).
@@ -363,9 +368,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
-  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
+  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end`, `crime list|clear|return_stolen|absolve|acquit`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`, `crime list|clear|return_stolen|absolve|acquit`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.

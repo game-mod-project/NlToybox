@@ -56,7 +56,7 @@ namespace NlCore
 
 	// 지정 풀기의 결과. Asked: 풀려던 사람, Done: 풀린 사람(깃발이 거짓이 됐다), Skipped: 그사이 범죄자가 아니게 됐거나 자리가 바뀌어 부르지 않은 사람.
 	// Unsure: 부른 뒤 깃발을 읽지 못했거나 그 자리의 사람이 바뀌어 확인하지 못한 사람. 나머지(Asked - Done - Skipped - Unsure)는 부르고도 풀리지 않았거나 부르지 못한 사람이다.
-	// Why: 그 까닭(마지막 것). ThugsDone: 되돌린 사람 가운데 깡패였던 사람의 수(깡패의 되돌리기는 확인 전이라 따로 적는다).
+	// Why: 그 까닭(마지막 것). ThugsDone: 되돌린 사람 가운데 깡패였던 사람의 수(따로 적는다).
 	std::string ClearReport(int Asked, int Done, int Skipped, int Unsure, const std::string& Why, int ThugsDone = 0);
 	// 죄·혐의 지우기의 결과. Lords: 살펴본 영주, Removed: 뗀 특성, Failed: 떼지 못한 특성, Unread: 특성을 읽지 못한 영주.
 	std::string TraitClearReport(bool Sins, int Lords, int Removed, int Failed, int Unread, const std::string& Why);

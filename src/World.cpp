@@ -12,7 +12,10 @@
 
 #include <imgui.h>
 
+#include <algorithm>
+#include <cstdlib>
 #include <deque>
+#include <filesystem>
 #include <fstream>
 #include <iterator>
 #include <map>
@@ -47,6 +50,12 @@ namespace
 	NlWorld::LogFn g_Log;
 	std::deque<WorldAct> g_Queue;		// 창이 쌓고 틱이 한다
 	std::string g_Last;					// 마지막으로 한 일
+	std::string g_UtilLast;				// 유틸(지금 저장)에 마지막으로 한 일
+	std::string g_PendingEvent;			// 일으킬 이벤트의 이름(창이 적고 틱이 쓴다)
+	std::vector<std::string> g_EventNames;	// 게임의 이벤트 이름들(감독의 자료의 ds_map 열쇠. 게임 화면에서 한 번 읽는다)
+	double g_NextNames = 0;				// 이름을 다시 읽어 볼 시각
+	int g_EventPick = 0;				// 창의 선택
+	constexpr const char* k_EventsData = "inst:o_data.__game_director_events_data";
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
 	bool g_BishopCalled = false;		// 이 게임에서 주교를 이미 불렀다(디버그 함수를 되풀이해 부르지 않는다). 게임 화면이 아니게 되면 푼다
 
@@ -358,6 +367,89 @@ namespace
 		return true;
 	}
 
+	// 세이브 폴더(%LOCALAPPDATA%\Strategy\saves). 읽기만 한다(새 파일의 이름을 보려고).
+	std::filesystem::path SavesDir()
+	{
+		char* local = nullptr;
+		size_t length = 0;
+		if (_dupenv_s(&local, &length, "LOCALAPPDATA") != 0 || !local)
+			return std::filesystem::path();
+		const std::filesystem::path dir = std::filesystem::path(local) / "Strategy" / "saves";
+		std::free(local);
+		return dir;
+	}
+
+	std::vector<std::string> ListSaves()
+	{
+		std::vector<std::string> names;
+		std::error_code ec;
+		const std::filesystem::path dir = SavesDir();
+		if (dir.empty() || !std::filesystem::is_directory(dir, ec))
+			return names;
+		for (const auto& entry : std::filesystem::directory_iterator(dir, ec))
+			if (entry.is_regular_file(ec) && entry.path().extension() == ".norland")
+				names.push_back(entry.path().filename().string());
+		return names;
+	}
+
+	// 지금 저장: 게임의 자동 저장 함수 save_game(0, 1)(아침의 자동 저장이 그 꼴로 불렀다. 저녁은 (0, 2). research/28).
+	// 게임의 저장이 꺼져 있으면(유틸의 no_autosave) 부르지 않는다. 새 파일의 이름은 세이브 폴더를 앞뒤로 보고 적는다.
+	std::string SaveNow()
+	{
+		double disabled = 0;
+		if (!NlAccess::ReadNumber("inst:o_debug.is_save_disabled", disabled))
+			return NlCore::SaveNowReport('u', std::string());
+		if (disabled != 0)
+			return NlCore::SaveNowReport('d', std::string());
+		const std::vector<std::string> before = ListSaves();
+		RValue result;		// 이 함수 안에서만 든다
+		Log("world call gml_Script_save_game(0, 1)");		// 부르기 전에 남긴다
+		if (!NlGame::CallScript("gml_Script_save_game", { RValue(0.0), RValue(1.0) }, result))
+			return NlCore::SaveNowReport('f', "스크립트를 부르지 못했습니다");
+		std::string fresh;
+		for (const std::string& name : ListSaves())
+			if (std::find(before.begin(), before.end(), name) == before.end())
+				fresh = name;
+		Log("world: save_game called" + (fresh.empty() ? std::string(" (no new file seen yet)") : ", new file " + fresh));
+		return NlCore::SaveNowReport(fresh.empty() ? 'n' : 's', fresh);
+	}
+
+	// 이벤트 골라 일으키기: 감독의 자료의 __events_by_name(ds_map: 이름 -> 이벤트 구조체)에서 그 구조체를 얻어 __debug_forced_event 에 쓴다.
+	// 게임의 감독은 하루 한 번 이벤트를 뽑을 때 get_debug_forced_event() 를 읽고 reset_debug_forced_event() 로 지운다(research/28 의 기록).
+	// 구조체를 쓰는 것이 맞다(research/28: 감독의 결정 함수가 그 구조체를 돌려주고 그 이벤트가 쿨다운에 올랐다).
+	std::string ForceEventNow(const std::string& Name)
+	{
+		double id = 0;
+		if (!NlAccess::ReadNumber(std::string(k_EventsData) + ".__events_by_name", id))
+			return NlCore::ForceEventReport(Name, 'w', "이벤트 목록(ds_map)의 번호를 읽지 못했습니다");
+		RValue event;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath("map:" + NlCore::Shortest(id) + "@" + Name), event, why) || !event.IsStruct())
+			return NlCore::ForceEventReport(Name, 'n', std::string());
+		Log("world: forced event: writing the struct of " + Name + " to " + std::string(k_EventsData) + ".__debug_forced_event");		// 쓰기 전에 남긴다
+		if (!NlAccess::Write(NlCore::ParseAskPath(std::string(k_EventsData) + ".__debug_forced_event"), event, why))
+			return NlCore::ForceEventReport(Name, 'w', why);
+		return NlCore::ForceEventReport(Name, 'd', std::string());
+	}
+
+	// 이벤트의 이름들(ds_map 의 열쇠)을 한 번 읽는다. 못 읽으면 다음 틱에 다시.
+	void ReadEventNames()
+	{
+		double id = 0;
+		RValue keys;		// 이 함수 안에서만 든다
+		if (!NlAccess::ReadNumber(std::string(k_EventsData) + ".__events_by_name", id) || !NlGame::Call("ds_map_keys_to_array", { RValue(id) }, keys) || !keys.IsArray())
+			return;
+		std::vector<std::string> names;
+		NlAccess::ForEachChild(keys, Holder::Array, [&](const NlCore::PathStep&, const RValue& key) {
+			if (key.IsString())
+				names.push_back(key.ToString());
+			return true;
+		});
+		std::sort(names.begin(), names.end());
+		g_EventNames = std::move(names);
+		Log("world: event names: " + std::to_string(g_EventNames.size()));
+	}
+
 	std::string DoNow(WorldAct Act)
 	{
 		if (!NlAccess::InGame())
@@ -367,6 +459,10 @@ namespace
 		}
 		switch (Act)
 		{
+		case WorldAct::SaveNow:
+			return SaveNow();
+		case WorldAct::EventForce:
+			return ForceEventNow(g_PendingEvent);
 		case WorldAct::CooldownsClear:
 		{
 			const NlCore::ClearResult events = ClearNumbers(std::string(k_Director) + ".__events_cooldowns");
@@ -417,12 +513,17 @@ namespace
 		return Act == WorldAct::SeasonShow || Act == WorldAct::SeasonDelay || Act == WorldAct::SeasonEnd;
 	}
 
-	// 한 일의 글을 그 패널의 자리에 둔다(계절의 것은 월드 패널에, 나머지는 이벤트·종교 패널에).
+	// 한 일의 글을 그 패널의 자리에 둔다(계절의 것은 월드 패널에, 지금 저장은 유틸 패널에, 나머지는 이벤트·종교 패널에).
 	// 읽기만 한 것(계절 보기)은 "한 일"로 남기지 않는다: 패널이 같은 줄을 이미 보이고 있다.
+	std::string& LastOf(WorldAct Act)
+	{
+		return IsSeasonAct(Act) ? g_SeasonLast : Act == WorldAct::SaveNow ? g_UtilLast : g_Last;
+	}
+
 	std::string Remember(WorldAct Act, std::string Text)
 	{
 		if (NlCore::WorldActChanges(Act))
-			(IsSeasonAct(Act) ? g_SeasonLast : g_Last) = Text;
+			LastOf(Act) = Text;
 		return Text;
 	}
 
@@ -439,7 +540,7 @@ namespace
 	{
 		if (g_Queue.size() >= k_MaxQueue)
 		{
-			(IsSeasonAct(Act) ? g_SeasonLast : g_Last) = NlCore::QueueFullText(k_MaxQueue);
+			LastOf(Act) = NlCore::QueueFullText(k_MaxQueue);
 			return;
 		}
 		g_Queue.push_back(Act);
@@ -470,9 +571,16 @@ void NlWorld::GameTick(double Now, bool Visible)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return;
-	if (g_Queue.empty() && Now < g_NextSeason)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다). 치트 표를 읽는 것도 그 뒤에
+	const bool names = g_EventNames.empty() && Now >= g_NextNames;
+	if (g_Queue.empty() && Now < g_NextSeason && !names)		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다). 치트 표를 읽는 것도 그 뒤에
 		return;
 	const NlCore::ScopedFlag busy(g_Busy);
+	if (names)
+	{
+		g_NextNames = Now + 5;
+		if (NlAccess::InGame())
+			ReadEventNames();
+	}
 	if (!g_Queue.empty())
 	{
 		const WorldAct act = g_Queue.front();
@@ -499,6 +607,32 @@ void NlWorld::GameTick(double Now, bool Visible)
 void NlWorld::DrawEvents()
 {
 	std::lock_guard lock(g_Mutex);
+	// 이벤트 골라 일으키기(2026-10-07. research/28): 이름을 고르고 누르면 틱이 그 이벤트의 구조체를 감독의 강제 이벤트에 쓴다.
+	ImGui::SeparatorText("이벤트 골라 일으키기");
+	if (g_EventNames.empty())
+		NlUi::Hint("게임 화면에서 이벤트의 이름을 읽습니다.");
+	else
+	{
+		if (g_EventPick < 0 || static_cast<size_t>(g_EventPick) >= g_EventNames.size())
+			g_EventPick = 0;
+		ImGui::SetNextItemWidth(320);
+		if (ImGui::BeginCombo("##event", g_EventNames[g_EventPick].c_str()))
+		{
+			for (size_t i = 0; i < g_EventNames.size(); i++)
+				if (ImGui::Selectable(g_EventNames[i].c_str(), static_cast<int>(i) == g_EventPick))
+					g_EventPick = static_cast<int>(i);
+			ImGui::EndCombo();
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("일으키기"))
+		{
+			g_PendingEvent = g_EventNames[g_EventPick];
+			Push(WorldAct::EventForce);
+		}
+	}
+	NlUi::Hint("게임의 감독이 보는 '강제 이벤트' 자리에 고른 이벤트의 구조체를 써 둡니다. 감독은 하루 한 번(오후) 이벤트를 뽑을 때 그 자리를 읽어 그것을 고르고 지웁니다"
+		"(research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다). 쿨다운 중인 이벤트도 오는지는 재지 않았습니다. 습격·반란·예언 이벤트도 그대로 옵니다.");
+	ImGui::SeparatorText("쿨다운");
 	if (ImGui::Button("이벤트 쿨다운 지우기"))
 		Push(WorldAct::CooldownsClear);
 	NlUi::Hint("게임이 이벤트를 고를 때 보는 '남은 날'(이벤트마다, 묶음마다)을 0 으로 씁니다. 써지는 것까지 봤고, 이벤트가 더 일찍 오는지는 확인 전입니다. "
@@ -542,6 +676,17 @@ void NlWorld::DrawReligion()
 	DrawLast();
 }
 
+void NlWorld::DrawUtil()
+{
+	std::lock_guard lock(g_Mutex);
+	if (ImGui::Button("지금 저장 (게임의 자동 저장 함수)"))
+		Push(WorldAct::SaveNow);
+	NlUi::Hint("게임의 자동 저장 함수를 아침의 꼴(save_game(0, 1))로 부릅니다: 세이브 폴더에 '…_Autosave_Morning_…' 파일이 하나 생깁니다. "
+		"위의 '게임의 저장 끄기'가 켜져 있으면 부르지 않습니다.");
+	if (!g_UtilLast.empty())
+		NlUi::Hint(g_UtilLast.c_str());
+}
+
 std::string NlWorld::Do(NlCore::WorldAct Act)
 {
 	std::lock_guard lock(g_Mutex);
@@ -549,4 +694,14 @@ std::string NlWorld::Do(NlCore::WorldAct Act)
 		return "busy";
 	const NlCore::ScopedFlag busy(g_Busy);
 	return Remember(Act, DoNow(Act));
+}
+
+std::string NlWorld::ForceEvent(const std::string& Name)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return "busy";
+	const NlCore::ScopedFlag busy(g_Busy);
+	g_PendingEvent = Name;
+	return Remember(WorldAct::EventForce, DoNow(WorldAct::EventForce));
 }
