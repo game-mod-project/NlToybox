@@ -7,6 +7,7 @@
 #include "Game.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/EventPlan.hpp"
 #include "core/Guard.hpp"
 #include "core/Text.hpp"
 

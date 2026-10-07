@@ -182,4 +182,95 @@ namespace NlCore
 		out.Extra.assign(game.begin(), game.end());		// set 이라 이름순
 		return out;
 	}
+
+	namespace
+	{
+		// research/29 의 표. 확인 전(Verified false): 인자의 꼴을 모르고 효과도 못 봤다.
+		const std::vector<EventEndRow> k_Ends = {
+			{ EventFamily::Raid, "inst:o_game_map_controller.__raids_manager.__current_raid", "inst:o_game_map_controller.__raids_manager.try_to_remove_raid", "", false },
+			{ EventFamily::Prophecy, "inst:o_game_map_controller.__province.__prophecy_manager.__current_prophecy", "inst:o_game_map_controller.__province.__prophecy_manager.__reset_prophecy", "", false },
+			{ EventFamily::Conspiracy, "inst:o_game_map_controller.__province.__conspiracy.__current_conspiracy", "inst:o_game_map_controller.__province.__conspiracy.__reset_conspiracy", "", false },
+			{ EventFamily::Guest, "inst:o_game_map_controller.__province.__unique_guests.__current_guest", "inst:o_game_map_controller.__province.__unique_guests.remove_guest_result", "", false },
+			{ EventFamily::Unrest, "inst:o_game_map_controller.__province.__politics_manager.__is_unrest_active_struct", "inst:o_game_map_controller.__province.__politics_manager.__all_unrest_finish", "", false },
+		};
+	}
+
+	const std::vector<EventEndRow>& EventEndTable()
+	{
+		return k_Ends;
+	}
+
+	const EventEndRow* FindEventEnd(EventFamily Family)
+	{
+		for (const EventEndRow& row : k_Ends)
+			if (row.Family == Family)
+				return &row;
+		return nullptr;
+	}
+
+	bool EventEndAllowed(const EventEndRow& Row)
+	{
+		return Row.Verified;
+	}
+
+	bool ParseEventFamily(const std::string& Word, EventFamily& Out)
+	{
+		for (const EventEndRow& row : k_Ends)
+			if (Word == EventFamilyKey(row.Family))
+			{
+				Out = row.Family;
+				return true;
+			}
+		return false;
+	}
+
+	CancelStep ChooseCancelStep(bool HasForced)
+	{
+		return HasForced ? CancelStep::Call : CancelStep::Nothing;
+	}
+
+	std::string EventStatusText(EventFamily Family, bool Read, bool Present, const std::string& Name)
+	{
+		if (Family == EventFamily::Rebellion)
+			return "모름 (읽을 자리를 아직 모른다)";
+		if (!Read)
+			return "읽지 못함";
+		if (!Present)
+			return "없음";
+		return Name.empty() ? "진행 중 (이름을 읽지 못함)" : "진행 중: " + Name;
+	}
+
+	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why)
+	{
+		switch (Outcome)
+		{
+		case 'n': return Name + ": 게임에 그 이름의 이벤트가 없습니다";
+		case 'w': return Name + ": 강제 이벤트에 쓰지 못했습니다 (" + Why + ")";
+		default: return Name + ": 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다";
+		}
+	}
+
+	std::string CancelEventReport(char Outcome, const std::string& Detail)
+	{
+		switch (Outcome)
+		{
+		case 'n': return "예약된 이벤트가 없습니다";
+		case 'f': return "예약을 지우는 함수를 부르지 못했습니다 (" + Detail + ")";
+		case 'u': return "함수를 불렀지만 예약이 남아 있습니다: " + Detail;
+		default: return "예약을 지웠습니다: " + Detail;
+		}
+	}
+
+	std::string EndEventReport(EventFamily Family, char Outcome, const std::string& Detail)
+	{
+		const std::string word = EventFamilyWord(Family);
+		switch (Outcome)
+		{
+		case 'x': return word + " 끝내기는 확인 전이라 부르지 않습니다 (research/29 의 절차로 게임에서 본 뒤에 켭니다)";
+		case 'n': return "진행 중인 " + word + "이 없습니다";
+		case 'f': return word + " 끝내기의 함수를 부르지 못했습니다 (" + Detail + ")";
+		case 'u': return "함수를 불렀지만 " + word + "가 그대로입니다";
+		default: return word + "를 끝냈습니다: " + Detail;
+		}
+	}
 }

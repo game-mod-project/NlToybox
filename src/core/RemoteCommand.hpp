@@ -36,6 +36,8 @@
 //   preset <normal|easy|sandbox|god>                치트 표의 확인된 항목의 묶음을 건다(모드창의 프리셋과 같다)
 //   time <pause|resume>                             게임의 시간을 멈춘다, 다시 흐르게 한다
 //   world <cooldowns_clear|bishop>                  이벤트 쿨다운을 0 으로 쓴다, 주교를 부른다(research/14)
+//   world events [group=<묶음>] [find=<글>],  world event_cancel,  world event_end kind=<raid|prophecy|conspiracy|guest|unrest>
+//                                                   이벤트의 표, 예약 취소, 확인된 가족의 끝내기(research/29)
 //   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
 //   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 게임의 디버그 평판을 하나씩 붙인다(research/19)
 //   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)

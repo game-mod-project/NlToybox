@@ -63,4 +63,64 @@ void RunEventsTests()
 		CHECK(merged.MissingFromGame == 59);
 		CHECK(MergeEventNames({}).Known.empty() && MergeEventNames({}).MissingFromGame == 61);
 	});
+
+	Test("이벤트: 끝내기의 표, 취소의 걸음, 상태와 결과의 글, 원격의 낱말", [] {
+		// 끝내기의 후보 다섯(research/29). 처음에는 모두 확인 전이라 부르지 않는다.
+		const std::vector<EventEndRow>& ends = EventEndTable();
+		CHECK(ends.size() == 5);
+		for (const EventEndRow& row : ends)
+		{
+			CHECK(row.Family != EventFamily::None && row.Family != EventFamily::Rebellion);
+			CHECK(std::string(row.StatusPath).rfind("inst:o_game_map_controller.", 0) == 0 && std::string(row.EndPath).rfind("inst:o_game_map_controller.", 0) == 0);
+			CHECK(!row.Verified && !EventEndAllowed(row));
+		}
+		CHECK_STR(FindEventEnd(EventFamily::Raid)->StatusPath, "inst:o_game_map_controller.__raids_manager.__current_raid");
+		CHECK_STR(FindEventEnd(EventFamily::Raid)->EndPath, "inst:o_game_map_controller.__raids_manager.try_to_remove_raid");
+		CHECK_STR(FindEventEnd(EventFamily::Prophecy)->EndPath, "inst:o_game_map_controller.__province.__prophecy_manager.__reset_prophecy");
+		CHECK_STR(FindEventEnd(EventFamily::Unrest)->StatusPath, "inst:o_game_map_controller.__province.__politics_manager.__is_unrest_active_struct");
+		CHECK(FindEventEnd(EventFamily::Rebellion) == nullptr && FindEventEnd(EventFamily::None) == nullptr);
+		const EventEndRow verified{ EventFamily::Raid, "a", "b", "", true };
+		CHECK(EventEndAllowed(verified));
+		EventFamily family = EventFamily::None;
+		CHECK(ParseEventFamily("raid", family) && family == EventFamily::Raid);
+		CHECK(ParseEventFamily("unrest", family) && family == EventFamily::Unrest);
+		CHECK(!ParseEventFamily("rebellion", family) && !ParseEventFamily("", family) && !ParseEventFamily("RAID", family));
+		// 예약 취소: 예약이 없으면 함수를 부르지 않는다
+		CHECK(ChooseCancelStep(false) == CancelStep::Nothing && ChooseCancelStep(true) == CancelStep::Call);
+		// 상태의 글
+		CHECK_STR(EventStatusText(EventFamily::Raid, true, false, ""), "없음");
+		CHECK_STR(EventStatusText(EventFamily::Raid, true, true, "raid_bandits"), "진행 중: raid_bandits");
+		CHECK_STR(EventStatusText(EventFamily::Raid, true, true, ""), "진행 중 (이름을 읽지 못함)");
+		CHECK_STR(EventStatusText(EventFamily::Raid, false, false, ""), "읽지 못함");
+		CHECK_STR(EventStatusText(EventFamily::Rebellion, false, false, ""), "모름 (읽을 자리를 아직 모른다)");
+		// 결과의 글(일으키기는 WorldPlan 에서 옮겨 왔다)
+		CHECK_STR(ForceEventReport("u_guest_bard", 'n', ""), "u_guest_bard: 게임에 그 이름의 이벤트가 없습니다");
+		CHECK_STR(ForceEventReport("u_guest_bard", 'w', "why"), "u_guest_bard: 강제 이벤트에 쓰지 못했습니다 (why)");
+		CHECK_STR(ForceEventReport("u_guest_bard", 'd', ""), "u_guest_bard: 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다");
+		CHECK_STR(CancelEventReport('n', ""), "예약된 이벤트가 없습니다");
+		CHECK_STR(CancelEventReport('f', "no method"), "예약을 지우는 함수를 부르지 못했습니다 (no method)");
+		CHECK_STR(CancelEventReport('u', "u_guest_joker"), "함수를 불렀지만 예약이 남아 있습니다: u_guest_joker");
+		CHECK_STR(CancelEventReport('d', "u_guest_joker"), "예약을 지웠습니다: u_guest_joker");
+		CHECK_STR(EndEventReport(EventFamily::Raid, 'x', ""), "습격 끝내기는 확인 전이라 부르지 않습니다 (research/29 의 절차로 게임에서 본 뒤에 켭니다)");
+		CHECK_STR(EndEventReport(EventFamily::Prophecy, 'n', ""), "진행 중인 예언이 없습니다");
+		CHECK_STR(EndEventReport(EventFamily::Guest, 'f', "why"), "손님 끝내기의 함수를 부르지 못했습니다 (why)");
+		CHECK_STR(EndEventReport(EventFamily::Conspiracy, 'u', ""), "함수를 불렀지만 음모가 그대로입니다");
+		CHECK_STR(EndEventReport(EventFamily::Unrest, 'd', "x"), "소요를 끝냈습니다: x");
+		// WorldAct 셋과 원격의 낱말
+		WorldAct act = WorldAct::CooldownsClear;
+		CHECK(ParseWorldAct("events", act) && act == WorldAct::EventList && !WorldActChanges(WorldAct::EventList));
+		CHECK(ParseWorldAct("event_cancel", act) && act == WorldAct::EventCancel && WorldActChanges(WorldAct::EventCancel));
+		CHECK(ParseWorldAct("event_end", act) && act == WorldAct::EventEnd && WorldActChanges(WorldAct::EventEnd));
+		CHECK(IsEventAct(WorldAct::EventForce) && IsEventAct(WorldAct::EventCancel) && IsEventAct(WorldAct::EventEnd) && IsEventAct(WorldAct::EventList) && IsEventAct(WorldAct::CooldownsClear));
+		CHECK(!IsEventAct(WorldAct::BishopSend) && !IsEventAct(WorldAct::SaveNow) && !IsEventAct(WorldAct::SeasonShow));
+		CHECK(WorldActNeedsKind(WorldAct::EventEnd) && !WorldActNeedsKind(WorldAct::EventForce) && !WorldActNeedsName(WorldAct::EventEnd));
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end");
+		const RemoteCommand list = ParseRemoteLine("world events group=GUEST find=bard");
+		CHECK(list.Error.empty() && list.Target == "events" && list.Options.at("group") == "GUEST" && list.Options.at("find") == "bard");
+		CHECK(ParseRemoteLine("world events").Error.empty());
+		CHECK(ParseRemoteLine("world event_cancel").Error.empty() && !ParseRemoteLine("world event_cancel name=x").Error.empty());
+		const RemoteCommand end = ParseRemoteLine("world event_end kind=raid");
+		CHECK(end.Error.empty() && end.Target == "event_end" && end.Options.at("kind") == "raid");
+		CHECK(!ParseRemoteLine("world event_end").Error.empty() && !ParseRemoteLine("world event_end kind=x").Error.empty() && !ParseRemoteLine("world event_end kind=rebellion").Error.empty());
+	});
 }

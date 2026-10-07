@@ -22,6 +22,9 @@ namespace NlCore
 			{ WorldAct::SeasonEnd, "season_end", true },
 			{ WorldAct::SaveNow, "save", true },
 			{ WorldAct::EventForce, "event", true },
+			{ WorldAct::EventList, "events", false },
+			{ WorldAct::EventCancel, "event_cancel", true },
+			{ WorldAct::EventEnd, "event_end", true },
 		};
 	}
 
@@ -49,16 +52,6 @@ namespace NlCore
 		case 'f': return "게임의 저장 함수를 부르지 못했습니다 (" + Detail + ")";
 		case 's': return "저장했습니다: " + Detail;
 		default: return "게임의 저장 함수를 불렀습니다 (새 파일은 아직 보이지 않습니다)";
-		}
-	}
-
-	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why)
-	{
-		switch (Outcome)
-		{
-		case 'n': return Name + ": 게임에 그 이름의 이벤트가 없습니다";
-		case 'w': return Name + ": 강제 이벤트에 쓰지 못했습니다 (" + Why + ")";
-		default: return Name + ": 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다";
 		}
 	}
 
@@ -114,6 +107,16 @@ namespace NlCore
 	bool IsSeasonAct(WorldAct Act)
 	{
 		return Act == WorldAct::SeasonShow || Act == WorldAct::SeasonDelay || Act == WorldAct::SeasonEnd;
+	}
+
+	bool IsEventAct(WorldAct Act)
+	{
+		return Act == WorldAct::EventForce || Act == WorldAct::EventList || Act == WorldAct::EventCancel || Act == WorldAct::EventEnd || Act == WorldAct::CooldownsClear;
+	}
+
+	bool WorldActNeedsKind(WorldAct Act)
+	{
+		return Act == WorldAct::EventEnd;
 	}
 
 	const char* WorldActWord(WorldAct Act)

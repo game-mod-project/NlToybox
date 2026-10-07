@@ -1,6 +1,7 @@
 #include "RemoteCommand.hpp"
 
 #include "AskPath.hpp"
+#include "EventPlan.hpp"
 #include "CheatTable.hpp"
 #include "CourtPlan.hpp"
 #include "DiplomacyPlan.hpp"
@@ -479,6 +480,7 @@ namespace NlCore
 			// world <cooldowns_clear|bishop|season|season_delay|season_end>      한 번 하는 일(core/WorldPlan): 이벤트 쿨다운 지우기, 주교 부르기,
 			// 계절 보기·가혹한 계절 하루 미루기·지금 단계 끝내기
 			// world save 는 지금 저장, world event name=<이벤트의 시스템 이름> 은 그 이벤트를 감독의 강제 이벤트로 써 둔다(2026-10-07. research/28).
+			// world events [group=<묶음>] [find=<글>] 은 이벤트의 표, world event_cancel 은 예약 취소, world event_end kind=<raid|prophecy|conspiracy|guest|unrest> 는 끝내기(research/29).
 			WorldAct act = WorldAct::CooldownsClear;
 			if (count < 2 || !ParseWorldAct(tokens[1], act))
 				return Fail(command, "world needs one of: " + WorldActWords());
@@ -486,10 +488,23 @@ namespace NlCore
 			if (!Options(tokens, 2, command))
 				return;
 			const auto name = command.Options.find("name");
+			const auto kind = command.Options.find("kind");
 			if (WorldActNeedsName(act))
 			{
 				if (name == command.Options.end() || !GoodEventName(name->second))
 					return Fail(command, "world event needs name=<the event's system name: letters, digits, underscores>");
+			}
+			else if (WorldActNeedsKind(act))
+			{
+				EventFamily family = EventFamily::None;
+				if (kind == command.Options.end() || !ParseEventFamily(kind->second, family))
+					return Fail(command, "world event_end needs kind=<raid|prophecy|conspiracy|guest|unrest>");
+			}
+			else if (act == WorldAct::EventList)
+			{
+				for (const auto& [key, value] : command.Options)
+					if (key != "group" && key != "find")
+						return Fail(command, "world events takes only group= and find=");
 			}
 			else if (count != 2)
 				return Fail(command, std::string("world ") + tokens[1] + " takes nothing");
