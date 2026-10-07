@@ -90,7 +90,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 모듈을 쓸 때
 
 - **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
-  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 월드는 `World.cpp`(이벤트·주교·지금 저장) + `Season.cpp`(계절) + `Mines.cpp`(광산).
+  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산).
   게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
@@ -227,11 +227,16 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다
   (`CheckPreset`과 시험이 막는다). 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켠다(이미 켜져 있고 배율이 같으면 건드리지 않는다). 탐색기의 잠금과 배율 7개는 건드리지 않는다.
   새 항목이 확인되면 맞는 묶음에 한 줄을 더한다. 원격 `preset <normal|easy|sandbox|god>`, `time pause|resume`.
-- 종교·이벤트 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0),
-  주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world cooldowns_clear|bishop`이 같은 길을 탄다.
+- **이벤트 탭**(`src/Events.cpp`, `core/EventPlan`. `research/29`. 2026-10-07): 게임의 이벤트 61개의 표(이름·묶음·갈래·화면 이름의 열쇠·모드가 지은 이름·가족)가 `core/EventPlan` 에 있다(값은 옮기지 않는다).
+  화면 이름은 모듈이 시작할 때 `main.csv` 에서 표의 열쇠만 읽는다(`guest.`, `raid.`, `prophecy.`, `map.reward_*`, `map.conspiracy`. 열쇠가 없는 것의 이름은 모드가 지은 추정이다).
+  패널: 예약된 강제 이벤트와 **취소**(`reset_debug_forced_event()`. 인자 없음. 확인됨), 묶음·찾기로 거르는 표와 줄마다 일으키기, 가족 다섯(습격·예언·음모·손님·소요)의 진행 중 상태(`__current_raid` 들을 읽기만)와 **끝내기**, 쿨다운 지우기.
+  **끝내기는 표(`EventEndTable`)의 `Verified` 가족만 부른다. 처음에는 다섯 모두 확인 전이다**: 그 이벤트가 진행 중인 세이브에서 후보 함수를 `record` 로 보고, 실행의 맨 마지막에 한 번 불러 상태가 바뀌는 것을 본 뒤에만 `Verified` 를 참으로 바꾸고 `research/29` 에 적는다.
+  원격 `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<raid|prophecy|conspiracy|guest|unrest>`. 이벤트의 일은 `NlWorld::Do` 가 `NlEvents::Do` 로 넘긴다(`NlCore::IsEventAct`. 계절과 같다).
   - **이벤트 골라 일으키기**(2026-10-07. `research/28`): 감독의 자료 `inst:o_data.__game_director_events_data`의 `__events_by_name`(ds_map 번호: 이름 → 이벤트 구조체. 61개. `list map:<번호>`로 이름을 본다)에서
     그 구조체를 얻어 `__debug_forced_event`에 쓴다(글이 아니라 **구조체**다). 감독의 `__try_to_determine_and_start_event`가 하루 한 번(오후) `get_debug_forced_event()`를 읽어 그것을 고르고 `reset_debug_forced_event()`로 지운다
     (써 둔 `u_guest_bard`가 그날 뽑혀 쿨다운에 올랐다). 원격 `world event name=<시스템 이름>`. 쿨다운 중인 이벤트도 오는지는 재지 않았다.
+- 종교 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world bishop`이 같은 길을 탄다.
+  이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0. 원격 `world cooldowns_clear`)는 아래의 이벤트 탭으로 갔다.
   - **지금 저장**(유틸 영역. `NlWorld::DrawUtil`): 게임의 자동 저장 함수 `gml_Script_save_game(0, 1)`(아침의 꼴. 저녁은 `(0, 2)`)을 부른다. `is_save_disabled`가 참이면 부르지 않는다.
     새 파일의 이름은 세이브 폴더를 앞뒤로 읽어 적는다(읽기만). 원격 `world save`.
   세력의 자료는 `gm.__factions_manager`(`__array_of_factions[57]`, `__player_faction`)에 있고, 게임은 `Faction.get_relation_with(세력) -> 수`, `is_enemy_with(세력) -> 불리언`을 부른다.
@@ -373,7 +378,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`, `crime list|clear|return_stolen|absolve|acquit`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`, `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.

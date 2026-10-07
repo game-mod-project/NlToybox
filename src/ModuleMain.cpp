@@ -13,6 +13,7 @@
 #include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
+#include "Events.hpp"
 #include "People.hpp"
 #include "PeopleAccess.hpp"
 #include "Shield.hpp"
@@ -34,7 +35,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.29.1";
+	constexpr const char* k_Version = "0.30.0";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -158,6 +159,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlJobs::Init([](const std::string& Line) { LogLine(Line); });
 	NlProduction::Init([](const std::string& Line) { LogLine(Line); });
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
+	NlEvents::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 이벤트의 화면 이름을 게임의 localization 파일에서 읽는다
 	NlSeason::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 화면 이름을 게임의 localization\main.csv 에서 읽는다
 	NlMines::Init([](const std::string& Line) { LogLine(Line); });
 	NlPeopleAccess::Init([](const std::string& Line) { LogLine(Line); });

@@ -14,6 +14,7 @@
 #include "core/CrimePlan.hpp"
 #include "core/DiplomacyPlan.hpp"
 #include "core/EconomyPlan.hpp"
+#include "core/EventPlan.hpp"
 #include "core/Guard.hpp"
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
@@ -85,3 +86,4 @@ void RunLocalizationTests();
 void RunFamilyTests();
 void RunRoleTests();
 void RunCrimeTests();
+void RunEventsTests();

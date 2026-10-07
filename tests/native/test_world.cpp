@@ -19,7 +19,7 @@ void RunWorldTests()
 		CHECK(ParseWorldAct("event", act) && act == WorldAct::EventForce && std::string(WorldActWord(WorldAct::EventForce)) == "event");
 		CHECK(WorldActNeedsName(WorldAct::EventForce) && !WorldActNeedsName(WorldAct::SaveNow) && !WorldActNeedsName(WorldAct::BishopSend));
 		// 낱말의 목록(틀린 낱말에 답할 글)은 표에서 만든다.
-		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event");
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end");
 		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
 		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
 			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend) && WorldActChanges(WorldAct::SaveNow) && WorldActChanges(WorldAct::EventForce));
@@ -39,10 +39,6 @@ void RunWorldTests()
 		CHECK_STR(SaveNowReport('f', "no such script"), "게임의 저장 함수를 부르지 못했습니다 (no such script)");
 		CHECK_STR(SaveNowReport('n', ""), "게임의 저장 함수를 불렀습니다 (새 파일은 아직 보이지 않습니다)");
 		CHECK_STR(SaveNowReport('s', "A_Autosave_Morning_day_8.norland"), "저장했습니다: A_Autosave_Morning_day_8.norland");
-		// 이벤트 일으키기의 글: 없는 이름, 쓰지 못함, 써 둠(감독이 다음에 뽑을 때 고른다. research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다).
-		CHECK_STR(ForceEventReport("u_guest_bard", 'n', ""), "u_guest_bard: 게임에 그 이름의 이벤트가 없습니다");
-		CHECK_STR(ForceEventReport("u_guest_bard", 'w', "why"), "u_guest_bard: 강제 이벤트에 쓰지 못했습니다 (why)");
-		CHECK_STR(ForceEventReport("u_guest_bard", 'd', ""), "u_guest_bard: 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다");
 
 		// 이벤트 쿨다운 한 칸: 0 보다 큰 수에만 0 을 쓴다
 		CHECK(ShouldClearCooldown(true, 19) && ShouldClearCooldown(true, 0.5));
