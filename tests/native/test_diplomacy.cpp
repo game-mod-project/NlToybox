@@ -335,4 +335,49 @@ void RunDiplomacyTests()
 			"diplomacy 1fa50db321ce450b pact name=peace side=them", "diplomacy 1fa50db321ce450b pact name=peace amount=5" })
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 	});
+
+	Test("외교: 붙인 디버그 평판 떼기(clear)", [] {
+		// 사용자 요청 2026-10-07: 붙인 디버그 평판을 하나씩 뗀다(지금까지는 반대쪽을 붙여 상쇄했다. 50개가 찬 쌍은 풀 길이 없었다).
+		// 게임의 detach_opinion_about_faction(대상 세력, 평판 자료)로 좋은 자료부터, 더 떨어지지 않으면 나쁜 자료로. 뗐는지는 붙이기와 같은 눈(왕의 __opinion_minds 의 수)으로 본다.
+		DiplomacyGoal goal = DiplomacyGoal::Friends;
+		CHECK(ParseDiplomacyGoal("clear", goal) && goal == DiplomacyGoal::Clear);
+		CHECK_STR(DiplomacyGoalWord(DiplomacyGoal::Clear), "clear");
+		CHECK_STR(DiplomacyGoalLabel(DiplomacyGoal::Clear), "평판 떼기");
+		std::string why;
+		const std::string uuid = "0d8e3a894f258750";
+		// 모든 왕국에게도 된다(붙이는 것이 아니라 떼는 것이다). 쪽은 셋 다.
+		CHECK(CheckDiplomacy({ "all", DiplomacyGoal::Clear, 'b', 0 }, why) && why.empty());
+		CHECK(CheckDiplomacy({ uuid, DiplomacyGoal::Clear, 't', 0 }, why) && CheckDiplomacy({ uuid, DiplomacyGoal::Clear, 'u', 0 }, why));
+		CHECK(!CheckDiplomacy({ uuid, DiplomacyGoal::Clear, 'x', 0 }, why));
+		// 일: 양쪽이면 왕국마다 둘('t' 먼저). 한도는 떼기의 것(겹침 한도 50 이 둘, 그리고 여유). 방향은 없다.
+		const std::vector<std::string> kingdoms = { uuid, "b113a12eef97ea23" };
+		std::vector<DiplomacyJob> jobs = PlanJobs({ "all", DiplomacyGoal::Clear, 'b', 0 }, kingdoms);
+		CHECK(jobs.size() == 4 && jobs[0].Side == 't' && jobs[1].Side == 'u' && jobs[0].Left == k_ClearStepsMax && jobs[0].Sign == 0);
+		CHECK(k_ClearStepsMax > 2 * k_OpinionStackLimit);
+		jobs = PlanJobs({ uuid, DiplomacyGoal::Clear, 'u', 0 }, kingdoms);
+		CHECK(jobs.size() == 1 && jobs[0].Uuid == uuid && jobs[0].Side == 'u');
+		// 떼기는 붙이는 걸음이 아니다: 붙이기의 계획은 건드리지 않는다고 답한다.
+		CHECK(StepToward(3, DiplomacyGoal::Clear) == 2 && PlanStep(3, DiplomacyGoal::Clear, 0, 10, 0).Outcome == 'k');
+		// 뗐는가: 떼기 바로 앞뒤의 평판의 수. 하나 줄었으면 'y', 그대로면 'n', 그 밖(세지 못함, 둘 이상 줆, 늚)은 'u'.
+		CHECK(DetachCheck(10, 9) == 'y' && DetachCheck(10, 10) == 'n' && DetachCheck(10, 8) == 'u' && DetachCheck(10, 11) == 'u');
+		CHECK(DetachCheck(-1, 9) == 'u' && DetachCheck(10, -1) == 'u' && DetachCheck(std::numeric_limits<double>::quiet_NaN(), 9) == 'u');
+		// 걸음 뒤의 판단: 'c' 뗐다(센다. 같은 자료로 계속), 'n' 그 자료는 더 없다(다음 자료로. 나쁜 것까지 끝났으면 끝), 'u' 모른다(멈춘다: 세지 못하면 떼지 않는다).
+		CHECK(AfterDetach('y') == 'c' && AfterDetach('n') == 'n' && AfterDetach('u') == 'u' && AfterDetach('?') == 'u');
+		// 결과의 글: 뗀 개수(좋은 것, 나쁜 것)와 관계의 앞뒤. Outcome: 'd' 다 뗐다, 'a' 뗄 것이 없었다, 'l' 한도에 닿았다, 'f' 실패(Why), 'x' 망한 왕국.
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 4, 3, 3, 0, 'd', ""), "크래스터: 그쪽이 우리를 보는 평판에서 좋은 평판 3개를 뗐습니다 (관계는 우호 -> 중립)");
+		CHECK_STR(ClearOpinionReport("크래스터", 'u', 3, 3, 0, 2, 'd', ""), "크래스터: 우리가 그쪽을 보는 평판에서 나쁜 평판 2개를 뗐습니다 (관계는 중립 그대로)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 3, 3, 1, 1, 'd', ""), "크래스터: 그쪽이 우리를 보는 평판에서 좋은 평판 1개, 나쁜 평판 1개를 뗐습니다 (관계는 중립 그대로)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 3, 3, 0, 0, 'a', ""), "크래스터: 그쪽이 우리를 보는 평판에 뗄 디버그 평판이 없습니다 (관계는 중립 그대로)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 3, 3, 0, 0, 'f', "cannot count"), "크래스터: 그쪽이 우리를 보는 평판을 떼지 못했습니다 (cannot count)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 3, 3, 2, 0, 'f', ""), "크래스터: 그쪽이 우리를 보는 평판에서 좋은 평판 2개를 뗐고 그 뒤로는 떼지 못했습니다 (모릅니다. 관계는 중립 그대로)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 4, 3, 120, 0, 'l', ""), "크래스터: 그쪽이 우리를 보는 평판에서 좋은 평판 120개를 뗐습니다. 한도에 닿아 멈췄습니다 (관계는 우호 -> 중립)");
+		CHECK_STR(ClearOpinionReport("크래스터", 't', 3, 3, 0, 0, 'x', ""), "크래스터: 망했거나 왕이 없는 왕국입니다. 건드리지 않습니다");
+		// 원격 명령: diplomacy <uuid|all> clear [side=them|us|both] [queue=1]. 수와 이름은 받지 않는다.
+		RemoteCommand line = ParseRemoteLine("diplomacy all clear");
+		CHECK(line.Error.empty() && line.Target == "all" && line.Options.at("goal") == "clear");
+		line = ParseRemoteLine("diplomacy " + uuid + " clear side=us queue=1");
+		CHECK(line.Error.empty() && line.Options.at("side") == "us");
+		for (const char* bad : { "diplomacy 0d8e3a894f258750 clear amount=3", "diplomacy 0d8e3a894f258750 clear name=x", "diplomacy 0d8e3a894f258750 clear side=me" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
+	});
 }

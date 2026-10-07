@@ -33,6 +33,7 @@ namespace NlCore
 		SkillSet, SkillAdd, SkillsMax, NeedSet, NeedsFill, AgeSet, Happy, Cure, TraitAdd, TraitRemove,
 		KnowledgeAll, KnowledgeAdd, MoneyAdd, ItemAdd, Equip,
 		Role,		// 역할 프리셋을 입힌다(Text 는 프리셋의 Id. core/RolePlan). 한 사람을 짚어서만
+		RoleUndo,	// 이 실행에서 입힌 역할 프리셋을 되돌린다(core/RolePlan 의 RoleMemory). 한 사람을 짚어서만. 받는 것이 없다
 		// 임신·출생·성장(core/FamilyPlan, research/24). PregnancyNext: 임신의 다음 단계. Birth: 출산까지. GrowUp: 아이를 어른으로(나이 18).
 		// Conceive: 임신을 시작한다(Text 는 아버지의 uuid).
 		PregnancyNext, Birth, GrowUp, Conceive,
@@ -48,7 +49,7 @@ namespace NlCore
 	};
 
 	// 원격 명령의 낱말: skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, trait_add, trait_remove,
-	// knowledge_all, knowledge_add, money_add, item_add, equip, role, pregnancy_next, birth, grow_up, conceive.
+	// knowledge_all, knowledge_add, money_add, item_add, equip, role, role_undo, pregnancy_next, birth, grow_up, conceive.
 	bool ParsePersonAct(const std::string& Word, PersonAct& Out);
 	const char* PersonActWord(PersonAct Act);
 	// 그 명령이 번호(능력치·욕구·자원)를, 수를, 글(특성이나 지식의 이름)을 받는가.

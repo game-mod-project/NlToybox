@@ -65,4 +65,24 @@ namespace NlCore
 
 	// 결과의 글. Skills·Added·Removed: 한 것의 수. Failed: 하지 못한 것의 수(Why 에 첫 까닭).
 	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why);
+
+	// 되돌리기(사용자 요청 2026-10-07). 입힐 때 그 사람의 "전"을 기억해 둔다(이 실행 안에서만. 파일에 남기지 않는다): 쓴 능력치의 전 값, 뗀 특성, 붙인 특성.
+	// 실제로 된 것만 넣는다(부르는 쪽이 채운다). 되돌릴 때 능력치는 기억한 전 값으로 쓴다(이때만 내린다).
+	struct RoleMemory
+	{
+		std::vector<std::pair<int, int>> Skills;	// (SkillNames 의 자리, 입히기 전의 수)
+		std::vector<std::string> Removed;			// 뗐던 특성(되돌릴 때 다시 붙인다)
+		std::vector<std::string> Added;				// 붙였던 특성(되돌릴 때 뗀다)
+		bool Empty() const { return Skills.empty() && Removed.empty() && Added.empty(); }
+	};
+	// 되돌릴 할 일: 능력치는 기억한 전 값으로(지금 값을 보지 않는다), 붙였던 것 가운데 지금 있는 것을 떼고, 뗐던 것 가운데 지금 없는 것을 다시 붙인다.
+	// 걸음의 차례는 RoleSteps 가 정한다(능력치, 떼기, 붙이기).
+	RoleTodo PlanRoleUndo(const RoleMemory& Memory, const std::vector<std::string>& TraitsNow);
+	// 두 번 입힌 기억을 합친다: 능력치는 더 앞의 전 값을 지키고(이미 있는 자리는 그대로), 특성은 뒤의 것을 더하되
+	// 서로 지우는 것(붙였던 것을 뒤에 뗐다, 뗐던 것을 뒤에 붙였다)은 양쪽에서 지운다.
+	void MergeRoleMemory(RoleMemory& Into, const RoleMemory& Latest);
+	// 되돌린 결과의 글. Skills·Removed·Added: 한 것의 수(되돌린 능력치, 뗀 특성, 다시 붙인 특성). Failed: 하지 못한 것의 수(Why 에 첫 까닭).
+	std::string RoleUndoReport(const std::string& Name, int Skills, int Removed, int Added, int Failed, const std::string& Why);
+	// 기억이 없는 사람에게 되돌리기를 청했을 때의 글.
+	std::string RoleUndoNoMemory(const std::string& Name);
 }

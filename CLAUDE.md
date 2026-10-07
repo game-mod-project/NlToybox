@@ -76,6 +76,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   아침의 것은 06:00 에 난다(실행 1 에서 06:00:06 에 생겼다. `research/25`).
   **시험 값이 든 채 그 시각을 넘기지 않는다**
   (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
+  자동 저장은 `gml_Script_save_game(0, 1)`을 부른다(아침. `research/28`. 두 인자의 뜻은 모른다: 저녁과 사람의 저장을 더 보기 전에는 부르지 않는다).
+  06:00 의 저장을 기록으로 받으려면 **06:00 앞에서 배속을 4 로 낮춘다**(배속 24 는 한 바퀴에 게임 48분이라 지나친다. 두 번 놓쳤다).
 - 게임이 켜지다 멈추는 일이 있다(지금까지 세 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가 어느 `[trace]` 줄에서 끝난다
   (`Using LEA pattern for RI ending`, `Hooks::InitializeStage2Hooks`). 모듈이 적재되기 전이라 모듈과 무관하다.
   **원인은 Aurie 콘솔 창의 선택(QuickEdit) 모드다**(2026-10-07 실측. `research/06`): 창 제목이 `선택 Aurie Framework Log …`이고, 선택 모드에서는 콘솔에 쓰는 호출이
@@ -242,7 +244,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 협정은 `…__factions_manager.__agreement_matrix.__matrix.<A>.<B>`의 비트다: 평화 4, 교역 협정 8, 방어 동맹 192(게임의 판정 `is_declared_*_with`가 `is_has_agreement`에 넘기는 수).
     협정이 없으면 칸도 없다. `set_agreement(세력, 세력, 비트)`가 양쪽 칸에 쓴다. 이미 든 협정을 지우지 않게 지금의 비트에 더한 수를 넘기고(`NlCore::PactCell`) 쓴 뒤 칸을 다시 읽는다.
     푸는 함수(`reset_agreement`, 인자 5)는 부르지 않았다.
-  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`.
+  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`,
+    `diplomacy <uuid|all> clear [side=]`(붙여 둔 디버그 평판 떼기. 2026-10-07: `detach_opinion_about_faction(대상 세력, 자료)`를 좋은 자료로 세다가 왕의 `__opinion_minds`가 줄지 않으면 나쁜 자료로.
+    세지 못하는 왕에게는 떼지 않는다. 붙은 것이 없을 때 불러도 탈이 없었고(`research/28`: 수가 그대로다), 뗀 뒤의 관계는 게임이 다시 셈한 것이라 붙이기 전과 다를 수 있다(중립 → 대립을 봤다).
+    `DiplomacyGoal::Clear`, `core`의 `DetachCheck`·`AfterDetach`·`ClearOpinionReport`).
     `queue=1`이면 창의 단추와 같은 길(쌓기)을 탄다.
 - 영주의 호감·충성(`src/Court.cpp`, `core/CourtPlan`. `research/20`). 영주 영역의 아래에 그린다.
   - 영주가 다른 영주를 보는 평판은 `inst:o_character:<n>.__soul.__character_soul.__opinions`(OpinionMinds)에 든 평판들의 합이다. **대상을 가리키는 인자는 상대의 `__soul.__character_soul`이다**
@@ -286,6 +291,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 진짜 파일을 코어의 코드로 읽어 보는 선택 시험: `$env:NLTOYBOX_TEST_GAME_DIR = <게임 폴더>`를 주고 `build\nlcore_tests.exe tools\probes`(글은 내지 않고 수만 낸다. 평소 시험은 게임 파일에 기대지 않는다).
   - **긴 글을 표의 좁은 칸에 두지 않는다**(설명 칸이 한 글자 너비가 돼 세로로 흘렀다). 명칭 아래의 줄로 그린다. 창을 고치면 `shot`으로 받아 눈으로 본다.
 - 역할 프리셋(`src/core/RolePlan`, `src/People.cpp`의 `ApplyRole`. `research/22`): 한 사람에게 능력치를 올리고(내리지 않는다), 그 역할에 해로운 특성을 떼고, 재능을 붙인다.
+  - **되돌리기**(2026-10-07): 입힐 때 된 것(능력치의 전 값, 뗀 특성, 붙인 특성)을 그 사람의 uuid 로 기억한다(`RoleMemory`. `g_RoleMemory`. 이 실행 안에서만, 파일에 남기지 않는다. 두 번 입히면 `MergeRoleMemory`가 더 앞의 전 값을 지킨다).
+    `PlanRoleUndo`가 할 일을 내고(능력치는 전 값으로 — 이때만 내린다, 붙였던 것은 떼고, 뗐던 것은 다시 붙인다) 입히기와 같은 걸음(`RunRoleSteps`)으로 한다. 다 되면 기억을 지운다. 원격 `person <uuid> role_undo`.
   인물 탭의 "역할 프리셋"과 원격 `person <uuid> role name=<Id>`가 같은 길을 탄다(한 사람을 짚어서만. `lords`·`people`에게는 가지 않는다).
   - **표(`RolePresets`)는 사용자가 정한 것이다**: 핵심 능력치 20, 보조 15, 올리기만. 고칠 때는 시험의 크기 표(`Size`)와 넣지 않기로 한 이름들도 함께 본다.
     특성의 이름이 게임에 있는지는 게임을 불러올 때의 로그로 본다(`role presets name N trait(s) this game does not have`. 이 빌드에서는 0).
@@ -335,7 +342,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     그래서 누구의 호출이든 바꾼다). 지정은 `set_criminal_scum(false, true)`로 푼다.
   - **읽지 못한 것을 "없다"나 "됐다"로 적지 않는다**: 깃발을 읽지 못한 주민과 특성을 읽지 못한 영주는 따로 센다(`CrimeSummary`·`LordsLine`·`TraitClearReport`의 `Unread`).
     지정 풀기는 부른 뒤 그 자리의 uuid 와 깃발을 다시 읽어 판정하고(`NlCore::AfterClear`), 확인하지 못한 사람은 "부른 뒤 확인하지 못함"으로 센다(`ClearReport`의 `Unsure`).
-  - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)는 되돌리지 않는다**(`NlCore::CanClear`): 게임이 만든 깡패를 본 적이 없어 풀면 어떻게 되는지 재지 못했다.
+  - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)도 되돌린다**(2026-10-07): `set_criminal_scum(false, true)`는 그 깃발을 건드리지 않으므로 푼 뒤 `__is_dummy_thug`에 0 을 쓰고 두 깃발을 다시 읽어 판정한다
+    (`NlCore::AfterClear`의 넷째·다섯째 인자). 되돌린 깡패의 수는 결과의 글에 따로 적는다(`ClearReport`의 `ThugsDone`. 게임이 만든 깡패에게 해 보기 전까지는 "확인 전").
   - 훔친 것 되돌리기(`return_back_stolen_to_player_warehouse()`. 인자 없음)는 사람을 짚어 부르고 훔친 금화(`__stolen_gold`)의 앞뒤를 적는다(`StolenReport`). 창의 단추는 훔친 금화가 있는 줄에만 나온다.
     훔친 것이 있는 사람에게서는 보지 못했다(확인 전).
   - **죄는 특성이다**(이름이 `sin_`으로 시작한다. 열두 가지). 영주의 범죄 혐의도 특성이다(`character_crime`, `…_blamed_by_bishop`, `…_blamed_by_fanatics`).
@@ -358,7 +366,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
   `world cooldowns_clear|bishop|season|season_delay|season_end`, `crime list|clear|return_stolen|absolve|acquit`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
