@@ -180,7 +180,7 @@ namespace NlCore
 			// 인물마다 __soul.__aging.__old.__debug_is_can_die_of_old_age(true)가 있다. 켜면 false 로, 끄면 다시 true 로 써지는 것까지 봤다(손님은 그대로).
 			// 이름에서 읽은 뜻이고, 늙어도 죽지 않는지는 보지 못했다. 세이브에는 남지 않는다(열쇠 0건).
 			{ "no_old_age_death", Area::People, "노화로 죽지 않음", "inst:o_character.__soul.__aging.__old.__debug_is_can_die_of_old_age", C, 1, 0, 0, 0, false,
-				"플레이어의 사람 모두의 '노화로 죽을 수 있다'를 끈다. 끄면 다시 켠다" },
+				"플레이어의 영주(o_character) 모두의 '노화로 죽을 수 있다'를 끈다. 끄면 다시 켠다. research/27: 95세로 만든 영주는 끈 채에도 켠 채에도 4일 동안 죽지 않았다(켠 채에는 게임의 경고 'soul isn't character or die'가 사라졌다). 주민에게는 쓰지 않는다" },
 			// 이주 관리자의 다음 이주 보너스. 3 을 쓰자 그날 저녁 "3명의 이주자가 도착했습니다"가 뜨고 주민이 31 → 34 가 됐다(2026-10-06, 0.9.1).
 			// 게임이 이주 때 이 값을 0 으로 되돌린다. 값을 정해 두면 다시 써 넣으므로 날마다 그만큼 더 온다. 켠 채 저장하면 세이브에 남는다(그 열쇠가 있다).
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
@@ -301,7 +301,7 @@ namespace NlCore
 			{ "preach_conversion", Area::Religion, "설교 전환 배율", "global.__gameplay_vars.church_preach_conversion_factor", CS, 3, 0, 1, 20, false,
 				"이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 게임 변수(원래 1)에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "donation_runes", Area::Religion, "헌금 룬", "inst:o_debug.church_donation_runes", N, 0, 0, 0, 100, false,
-				"교회 헌금으로 내는 룬의 수로 보인다(원래 1)" },
+				"교회 헌금으로 내는 룬의 수로 보인다(원래 1. 3 과 2 의 문턱·광신도 값이 함께 있다). 효과를 보지 못했다: 설교 없이 2일, 직접 건 설교(c_church.set_preach(영혼, 자료))는 08:00 에 지워졌다(research/27)" },
 			{ "donation_runes_fanatic", Area::Religion, "헌금 룬(광신도)", "inst:o_debug.church_donation_runes_fanatic", N, 0, 0, 0, 100, false,
 				"광신도가 헌금으로 내는 룬의 수로 보인다(원래 2)" },
 
@@ -318,7 +318,7 @@ namespace NlCore
 			{ "no_bandit_turn", Area::Crime, "주민이 도적으로 넘어가지 않음", "global.__gameplay_vars.dummy_turn_to_bandit_chance", C, 1, 0, 0, 0, false,
 				"이름으로 보아 주민이 도적이 될 확률인 게임 변수 둘(dummy_turn_to_bandit_chance, 그 _peaceful)을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "thug_days", Area::Crime, "부랑자가 깡패가 되기까지의 날 배율", "global.__gameplay_vars.dummy_criminal_days_to_thug", CS, 10, 0, 1, 100, false,
-				"이름으로 보아 범죄자가 깡패가 되기까지의 날(원래 2)인 게임 변수에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
+				"이름으로 보아 범죄자가 깡패가 되기까지의 날(원래 2)인 게임 변수에 곱한다. 끄면 원래 값으로 되돌린다. 효과를 보지 못했다(research/27: 20 으로 써 둔 채에도 게임이 만든 범죄자가 3일째에 깡패가 됐다. become_thug(true) 3번)" },
 			{ "crime_minds_off", Area::Crime, "범죄로 인한 기분 저하 없음", "global.__gameplay_vars.mind_crime_not_punished_modify", C, 1, 0, 0, 0, false,
 				"이름으로 보아 범죄의 피해와 '범죄자가 벌받지 않음'의 생각의 크기인 게임 변수 둘(mind_crime_not_punished_modify, mind_crime_victim_modify)을 0 으로 쓴다. "
 				"끄면 원래 값으로 되돌린다. 효과는 확인 전" },
@@ -327,8 +327,8 @@ namespace NlCore
 
 			{ "fast_global_tasks", Area::World, "전역 지도의 행동을 빠르게", "inst:o_debug.is_fast_action_task_on_global_map", T, 1, 0, 0, 0, false,
 				"전역 지도에서 하는 행동을 빨리 끝내는 개발자 스위치로 보인다" },
-			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, false,
-				"나무의 성장을 끄는 개발자 스위치로 보인다" },
+			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, true,
+				"켜면 나무 관리자의 성장 시계(__hours_passed)가 선다(research/27: 켠 채 25시간 동안 3 그대로. 끈 채에는 시간마다 1 씩 올라 10시간마다 0 으로). 나무의 수가 느는 것은 두 상태 모두에서 보지 못했다" },
 			// 계절 붙들기(research/25): 게임은 지금 단계의 남은 시간을 시작 시각(__start_phase_time)에서 셈한다(시작을 하루 뒤로 쓰자 남은 시간이 하루 늘었다).
 			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons").
 			// 플레이에서 봤다(실행 2, 0.26.0): 남은 시간을 2시간 반으로 만들고 켠 채 네 시간을 돌리자 남은 시간과 단계가 그대로였고(정각을 네 번 지났다),
@@ -361,7 +361,7 @@ namespace NlCore
 				"세계 지도에서 움직이는 것을 빠르게 하는 개발자 스위치로 보인다" },
 
 			{ "hide_events", Area::Events, "이벤트 표시 끔", "inst:o_debug.is_display_event_disabled", T, 1, 0, 0, 0, false,
-				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다)" },
+				"이벤트 알림을 띄우지 않는 개발자 스위치로 보인다(이벤트 자체를 막는지는 모른다). 켠 채에도 아침 08:00 의 이야기 창(신제국)은 떠서 게임이 멈췄다(research/27)" },
 
 			// 게임의 저장을 끄는 디버그 깃발. 세이브에 그 열쇠는 없다.
 			// 플레이에서 봤다(실행 2): 켠 채 자동 저장의 시각을 세 번(저녁, 아침, 저녁) 넘겼는데 세이브 폴더에 새 파일이 생기지 않았다
