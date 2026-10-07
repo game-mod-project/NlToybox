@@ -209,3 +209,9 @@
 - 둘째 묶음(0.29.0. 켜기 3번을 더 승인받아 7·8번째 확인, 9번째 check-load): **깡패 되돌리기 확인**(게임이 만든 깡패에게서), **지금 저장**(`save_game(0, 1)`. 파일이 생겼다), **이벤트 골라 일으키기**(이벤트의 구조체를 감독의 강제 이벤트에 쓴다. 써 둔 손님 이벤트가 그날 왔다).
   원격 `write`가 글(`s:`)도 쓴다. 남은 것: 쿨다운 중인 이벤트도 강제로 오는가, 사람의 저장(퀵세이브)의 꼴, 설교 시작의 길.
 
+
+## 11. 결과 — 묶음 C (0.29.1, 가지 `chore/refactor-c`, 2026-10-07)
+
+스펙 `docs/superpowers/specs/2026-10-07-refactor-c-design.md`. 동작 불변. 새 파일: `Jobs`, `Buildings`, `Season`, `Mines`, `PeopleAccess`, `TraitText`, `Shield`, `Hold`, `PeopleInternal.hpp`, `PeopleActs`, `PeopleDraw`.
+- R6: `People.cpp` 2,795줄 → `People.cpp` 494줄 + 여덟 조각. R7: `World.cpp` 707줄 → `World`·`Season`·`Mines`. R8: `Production.cpp`는 생산의 셋만. R10: `Game::Resolve` 제거. 건설비는 `Jobs`의 일 하나.
+- 확인: 코어 시험 118, 안전 29, 파이썬 16+99, `check-load` PASS, 실행 묶음에서 옮긴 조각마다 원격으로 본 것(Task 11 의 표).

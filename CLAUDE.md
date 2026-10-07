@@ -89,6 +89,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 
 ## 모듈을 쓸 때
 
+- **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
+  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 월드는 `World.cpp`(이벤트·주교·지금 저장) + `Season.cpp`(계절) + `Mines.cpp`(광산).
+  게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
   (YYToolkit v5.0.0c가 Present 훅을 걸지 않는다. `research/00-game-structure.md` 참고).
@@ -146,9 +149,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 건설 창이 건물을 다루는 길은 `ConstructionManager.get_building_gui_struct(이름)`이다. 사용자가 창을 다루지 않아도 이것을 직접 불러 어떤 판정이 불리는지 볼 수 있다.
 - 건물 종류(171개)는 `gml_Script_get_generic_building(이름)`으로 얻는다(이름은 `gml_Script_building_generic_get_array_of_all_buildings()`). ds_map 에 들어 있어
   전역 탐색으로는 보이지 않는다(`find … in=ds`). 건설비는 `…__construction_cost.levels[등급]`(`money`, `resources.__array_of_resource_quantity[39]`)이고
-  업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`가 0 으로 쓰고 `core/CostBook`의 값으로 되돌린다.
+  업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`의 `WalkCosts`가 자리를 넘기고 `src/Jobs`의 엔진이 0 으로 쓰고 되돌린다.
   함수가 돌려준 구조체 안은 `NlAccess::Follow`로 보고 `NlAccess::SetNumber`로 쓴다(주소의 뿌리가 없다. 쓴 뒤 다시 읽어 확인한다).
-  - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Production.cpp`에 일(`Job`) 하나를 더한다: 대상을 넘기는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목.
+  - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Jobs`의 엔진에 그 영역의 파일이 `NlJobs::Add`로 등록한다(걷는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목).
     한 자리에 쓸 값은 `NlCore::PlanValue`가 정한다(처음 본 값이 바탕. 써 둔 값을 다시 봐도 두 번 곱하지 않는다). 열쇠는 번호가 아니라 이름으로 삼는다.
   - 창고 종류의 용량은 `inst:o_data.__building_warehouse_data.__generic_warehouses.<종류>.__capacity_in_categories.<갈래>.capacity`, 조리법은 건물 종류의
     `__production.__map_of_production`(ds_map: 만드는 자원 → 재료의 배열과 만들어지는 수)이다(`research/10`).
