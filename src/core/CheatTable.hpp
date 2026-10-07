@@ -82,10 +82,17 @@ namespace NlCore
 		bool Verified;			// 플레이에서 효과를 봤는가
 		const char* Help;		// 변수 이름에서 읽은 뜻. Verified 가 아니면 추정이다
 		bool ThisRunOnly = false;	// 켠 채 저장돼 있어도 다음 실행은 꺼진 채로 시작한다(게임의 저장 끄기: 켠 것을 잊으면 잃는 것이 크다)
+		const char* Gate = nullptr;	// 켤 때 먼저 있어야 하는 자리(AskPath). 그 값이 undefined·음수(noone)이면 쓰지 않고 기다린다. 즉시 건설: 영주관(…__province.__cached_hall).
+									// 새 게임의 영주관 배치 때 is_instant_build_buildings 가 1 이면 게임이 끝난다(2026-10-07 의 가르기. research/30)
 	};
 
 	const std::vector<Cheat>& Cheats();
 	const Cheat* FindCheat(const std::string& Id);
+
+	// Gate 가 있는 항목을 켤 때 기다릴지. Read: 그 자리를 읽었다. Present: 값이 있다(undefined·음수가 아니다). Gate 가 없으면 기다리지 않는다.
+	bool GateWaits(const Cheat& Def, bool Read, bool Present);
+	// 기다리는 동안 항목 옆에 보일 글.
+	const char* GateNote(const Cheat& Def);
 
 	// 상태 파일에서 읽은 것을 표에 맞춘다: 표에 없는 Id 와 종류가 다른 Id 를 버리고, 수를 범위 안으로 당긴다. 즐겨찾기와 잠금은 그대로 둔다.
 	// 훅(Hook, HookNumber)과 Custom 은 Verified 인 것만 켠 채로 남긴다(확인 전의 것은 켠 채 저장돼 있어도 꺼진 채로 시작한다).

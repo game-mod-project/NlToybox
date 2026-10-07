@@ -253,6 +253,21 @@ void RunCheatTests()
 		CHECK(FindCheat("cap_food") == nullptr);
 	});
 
+	Test("치트 표: 켤 때 먼저 있어야 하는 자리(Gate) — 즉시 건설은 영주관이 놓인 뒤에만 쓴다", [] {
+		// 새 게임의 영주관 배치 때 is_instant_build_buildings 가 1 이면 게임이 끝난다(InspectionManager.check_hall_inspection. 2026-10-07 가르기: 즉시 건설만 켜도 끝났고, 아무것도 안 켜면 됐다. research/30).
+		const Cheat* instant = FindCheat("instant_build");
+		CHECK(instant && instant->Gate && std::string(instant->Gate) == "inst:o_game_map_controller.__province.__cached_hall");
+		CHECK(GateWaits(*instant, false, false));			// 자리를 읽지 못했다: 기다린다
+		CHECK(GateWaits(*instant, true, false));			// 읽었는데 없다(undefined, noone): 기다린다
+		CHECK(!GateWaits(*instant, true, true));			// 영주관이 있다: 쓴다
+		CHECK_STR(GateNote(*instant), "영주관이 놓인 뒤에 적용");
+		const Cheat* all = FindCheat("build_all");
+		CHECK(all && !all->Gate && !GateWaits(*all, false, false) && !GateWaits(*all, true, false));		// 자리가 없는 항목은 기다리지 않는다
+		for (const Cheat& cheat : Cheats())
+			if (cheat.Gate)
+				CHECK(ParseAskPath(cheat.Gate).Error.empty());
+	});
+
 	Test("치트 표: 영역은 Key 로 찾고 목록의 차례가 열거형과 같다", [] {
 		std::set<std::string> keys;
 		for (const AreaInfo& area : Areas())

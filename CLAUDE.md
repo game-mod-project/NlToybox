@@ -160,6 +160,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다**(`__events_cooldowns` → `"events_cooldowns"`). 밑줄을 떼고 찾는다(`research/14`. 위의 "없었다"는 두 이름 모두로 다시 봤다).
   - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
+- **즉시 건설(`instant_build`)의 깃발은 영주관이 놓인 뒤에만 쓴다**(`Cheat::Gate` = `…__province.__cached_hall`. `NlCore::GateWaits`): 새 게임의 영주관 배치 때 `is_instant_build_buildings` 가 1 이면 게임이 끝난다(2026-10-07 의 가르기. `research/30`).
+  켤 때 먼저 있어야 하는 자리가 있는 항목은 표의 줄 끝에 `Gate` 를 적는다. 기다리는 동안 항목 옆에 "영주관이 놓인 뒤에 적용".
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
   업그레이드 중인 건물에 `c_construction.build_instantly()`(인자 없음)를 부르면 바로 끝난다(`src/Build.cpp`의 `instant_upgrade`. `research/09`). 3 이 아닌 상태에는 부르지 않는다.
 - 인물·영주·인구 패널(`src/People.cpp`, `core/PeoplePlan`. `research/11`). 영주·손님은 `o_character`, 주민·노예는 `o_dummy`이고 값은 `__soul` 아래에 있다.
