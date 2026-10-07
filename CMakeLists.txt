@@ -20,6 +20,7 @@ add_library(nlcore STATIC
   src/core/CrimePlan.cpp
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
+  src/core/EventPlan.cpp
   src/core/JobTally.cpp
   src/core/Knobs.cpp
   src/core/NumberEdit.cpp
@@ -62,6 +63,7 @@ add_executable(nlcore_tests
   tests/native/test_family.cpp
   tests/native/test_role.cpp
   tests/native/test_crime.cpp
+  tests/native/test_events.cpp
 )
 set_target_properties(nlcore_tests PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_include_directories(nlcore_tests PRIVATE src)

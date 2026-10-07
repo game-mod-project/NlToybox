@@ -62,6 +62,7 @@ int main(int argc, char** argv)
 	RunFamilyTests();
 	RunRoleTests();
 	RunCrimeTests();
+	RunEventsTests();
 
 	if (g_Failed)
 	{
