@@ -2,16 +2,16 @@
 
 #include "Access.hpp"
 #include "Cheats.hpp"
+#include "Hold.hpp"
 #include "PeopleAccess.hpp"
+#include "Shield.hpp"
 #include "TraitText.hpp"
 #include "Game.hpp"
 #include "Jobs.hpp"
 #include "Ui.hpp"
-#include "Recorder.hpp"
 #include "core/AskPath.hpp"
 #include "core/Guard.hpp"
 #include "core/Localization.hpp"
-#include "core/BattlePlan.hpp"
 #include "core/EconomyPlan.hpp"
 #include "core/FamilyPlan.hpp"
 #include "core/RolePlan.hpp"
@@ -50,8 +50,6 @@ namespace
 	constexpr const char* k_PreferredData = "inst:o_data.__preferred_equipment_data";
 	// 게임의 디버그 소환기(CreatureSpawner. research/13). __spawn_soldier 같은 메서드는 인자가 없고(기계어) 마우스가 가리키는 지도의 자리에 만든다.
 	constexpr const char* k_Spawner = "inst:o_debug.debug_spawner";
-	// 상처를 입히는 함수(research/13): SoulBasic.take_damage(상처의 이름, 구조체, 불리언) -> true. 생성자의 정적 메서드라 영주 하나의 영혼에서 스크립트를 찾는다.
-	constexpr const char* k_TakeDamage = "inst:o_character.__soul.take_damage";
 	struct Detail			// 고른 사람의 값. RValue 를 담지 않는다
 	{
 		bool Ready = false;
@@ -106,39 +104,10 @@ namespace
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
-	double g_NextShield = 0;			// 전투의 항목들: 영혼의 주소를 다시 모을 시각
-	bool g_BattleOn = false;			// 전투의 항목 가운데 하나라도 걸어 두었다(끌 때 주소 묶음을 비운다)
-
-	struct SideHook			// 영혼의 한 함수에 거는 아군·적 배율
-	{
-		const char* Path;				// 영혼의 메서드(생성자의 정적 메서드라 영주 하나의 영혼에서 스크립트를 찾는다)
-		const char* Ally;				// 아군 배율 항목의 Id
-		const char* Enemy;				// 적 배율 항목의 Id
-		double Cap;						// 올린 값의 위쪽 한도(0 이면 없음)
-		NlCore::SideScale Applied;		// 걸어 둔 것
-		std::string Name;				// 건 스크립트의 이름
-	};
-	SideHook g_SideHooks[] = {
-		// 싸울 때의 전투 기술: () -> 10, 7(research/13. 싸우는 동안 150번). 기술은 0~20 이라 올린 값을 20 에서 멈춘다(표를 번호로 읽는 곳이 있을 수 있다. 추정).
-		{ "inst:o_character.__soul.get_combat_level_in_battle", "ally_power", "enemy_power", 20, {}, {} },
-		// 치명적인 통증의 한도: () -> 40(research/13. 게임이 계속 부른다).
-		{ "inst:o_character.__soul.get_mortal_pain_threshold", "ally_toughness", "enemy_toughness", 0, {}, {} },
-	};
-	bool g_ShieldOn = false;			// 아군 무적의 바꾸기를 이 모듈이 걸었다
-	std::string g_ShieldName;			// 건 스크립트의 이름
 	bool g_BulkKnowledgeArmed = false;	// "영주 전원에게 모든 지식"은 이것을 켠 뒤에만 눌린다(되돌릴 수 없다)
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
 	bool g_Busy = false;				// 틱이나 원격 명령을 하는 중이다. 여기서 부른 게임의 함수가 오브젝트 이벤트를 일으켜 다시 들어오면 안쪽은 아무것도 하지 않는다
-
-	// 표의 항목(플레이어의 사람을 조금씩 돌며 쓴다). 바퀴의 판단은 core/PeoplePlan 의 HoldRound 가 한다.
-	std::vector<PersonRow> g_HoldPeople;
-	NlCore::HoldRound g_Hold;
-	double g_NextHold = 0, g_NextHoldScan = 0, g_NextHappy = 0, g_NextHoldLog = 0;
-	bool g_HappyRound = false;			// 이번 바퀴에서 행복 생각을 본다
-	bool g_HoldNoted = false;			// 항목 옆에 글을 적어 두었다(할 일이 없어지면 한 번 비운다)
-	size_t g_RoundPeople = 0;
-	size_t g_LogNeeds = 0, g_LogHappy = 0, g_LogAge = 0;		// 마지막 로그 줄 뒤로 쓴 수
 
 	void Log(const std::string& Line)
 	{
@@ -150,7 +119,6 @@ namespace
 	bool WalkPregnancyChance(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::PregnancyChanceVars(), Why); }
 	bool WalkMiscarriage(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::MiscarriageVars(), Why); }
 	bool WalkChildbirthDeath(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::ChildbirthDeathVars(), Why); }
-
 
 	// ---- 게임 스레드 ----
 
@@ -1132,7 +1100,7 @@ namespace
 			made++;
 		}
 		const int after = NlAccess::InstanceCount("o_dummy");
-		g_NextShield = 0;		// 새 병사의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
+		NlShield::RefreshSoon();		// 새 병사의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
 		Log("people: spawned " + std::to_string(made) + "/" + std::to_string(count) + " soldier(s), o_dummy " + std::to_string(before) + " -> " + std::to_string(after));
 		return "병사 " + std::to_string(made) + "명을 만들었습니다 (주민과 병사 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
 	}
@@ -1151,167 +1119,10 @@ namespace
 		if (!CallNoArgs(path, result, why))
 			return label + ": 부르지 못했습니다: " + why;
 		const int after = NlAccess::InstanceCount("o_dummy") + NlAccess::InstanceCount("o_character");
-		g_NextShield = 0;		// 새 사람의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
+		NlShield::RefreshSoon();		// 새 사람의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
 		Log("people: spawner " + std::string(NlCore::SpawnWord(Kind)) + ", people " + std::to_string(before) + " -> " + std::to_string(after));
 		return label + (after > before ? " 하나를 만들었습니다" : ": 불렀지만 사람의 수가 그대로입니다")
 			+ " (영주와 주민 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
-	}
-
-	// 아군 무적을 끈다(걸어 둔 것이 있으면).
-	void ShieldOff()
-	{
-		if (!g_ShieldOn)
-			return;
-		g_ShieldOn = false;
-		NlRecorder::Unoverride(g_ShieldName);
-		NlCheats::SetNote("ally_invincible", std::string());
-		Log("people: ally_invincible off");
-	}
-
-	// 한 함수의 아군·적 배율을 끈다(걸어 둔 것이 있으면).
-	void SideOff(SideHook& Hook)
-	{
-		if (!Hook.Applied.On)
-			return;
-		Hook.Applied = NlCore::SideScale();
-		NlRecorder::Unoverride(Hook.Name);
-		NlCheats::SetNote(Hook.Ally, std::string());
-		NlCheats::SetNote(Hook.Enemy, std::string());
-		Log(std::string("people: ") + Hook.Ally + "/" + Hook.Enemy + " off");
-	}
-
-	// 전투의 항목들(아군 무적, 아군·적의 전투력과 맷집): 훅이 self 가 플레이어의 영혼인지로 가린다. 영혼의 주소는 0.5초마다 다시 모은다.
-	// 새로 온 플레이어의 사람(이주민, 태어난 아이)은 다음에 모을 때까지 "그 밖"으로 읽힌다: 0.5초까지 무적이 아니고 적의 배율을 받는다.
-	// 모듈이 만든 사람(병사 추가, 소환)은 만든 바로 다음 틱에 다시 모은다. 사라진 영혼의 주소는 다음에 모을 때 빠진다.
-	void BattleTick(double Now)
-	{
-		if (Now < g_NextShield)
-			return;
-		g_NextShield = Now + 0.5;
-		constexpr const char* id = "ally_invincible";
-		const bool shield = NlCheats::IsOn(id);
-		NlCore::SideScale want[std::size(g_SideHooks)];
-		bool any = shield;
-		for (size_t i = 0; i < std::size(g_SideHooks); i++)
-		{
-			double ally = 0, enemy = 0;
-			const bool ally_on = NlCheats::Factor(g_SideHooks[i].Ally, ally);
-			const bool enemy_on = NlCheats::Factor(g_SideHooks[i].Enemy, enemy);
-			want[i] = NlCore::PlanSides(ally_on, ally, enemy_on, enemy);
-			any = any || want[i].On;
-		}
-		if (!any)
-		{
-			if (g_BattleOn)
-			{
-				g_BattleOn = false;
-				ShieldOff();
-				for (SideHook& hook : g_SideHooks)
-					SideOff(hook);
-				NlRecorder::SetPlayerSelves({});
-			}
-			return;
-		}
-		if (!NlAccess::InGame())
-		{
-			// 지난 게임의 주소가 남지 않게 묶음을 비운다. 배율의 바꾸기도 끈다: 다음 게임에서 "주소부터 넣고 건다"의 차례를 되살린다
-			// (묶음이 빈 채 배율이 걸려 있으면 모두가 적의 배율을 받는다. 훅 쪽도 빈 묶음에는 곱하지 않는다: core 의 HookFactor).
-			for (SideHook& hook : g_SideHooks)
-			{
-				SideOff(hook);
-				if (NlCheats::IsOn(hook.Ally))
-					NlCheats::SetNote(hook.Ally, "게임을 시작하면 적용");
-				if (NlCheats::IsOn(hook.Enemy))
-					NlCheats::SetNote(hook.Enemy, "게임을 시작하면 적용");
-			}
-			NlRecorder::SetPlayerSelves({});
-			if (shield)
-				NlCheats::SetNote(id, "게임을 시작하면 적용");
-			return;
-		}
-		g_BattleOn = true;
-		std::vector<std::uintptr_t> selves;
-		for (const bool character : { true, false })
-		{
-			const int count = NlAccess::InstanceCount(character ? "o_character" : "o_dummy");
-			for (int n = 0; n < count; n++)
-			{
-				PersonRow row;
-				row.Character = character;
-				row.Index = n;
-				RValue soul;
-				std::string faction;
-				if (ReadSoul(row, soul) && soul.IsStruct()
-					&& FollowString(soul, { { '.', "__faction", 0 }, { '.', "__system_name", 0 } }, faction) && faction == "player")
-					selves.push_back(reinterpret_cast<std::uintptr_t>(soul.m_Object));		// 구조체의 주소. 훅의 self 와 견준다
-			}
-		}
-		const size_t count = selves.size();
-		NlRecorder::SetPlayerSelves(std::move(selves));		// 주소부터 넣고 건다
-
-		// 아군·적의 배율: 한 함수에 둘을 함께 건다(바뀌었으면 같은 훅에 다시 건다).
-		for (size_t i = 0; i < std::size(g_SideHooks); i++)
-		{
-			SideHook& hook = g_SideHooks[i];
-			if (!want[i].On)
-			{
-				SideOff(hook);
-				continue;
-			}
-			if (!NlCore::SameSides(hook.Applied, want[i]) || !NlRecorder::Overriding(hook.Name))
-			{
-				NlRecorder::Forced value;
-				value.Kind = 'x';
-				value.Number = want[i].Mine;
-				value.Other = want[i].Other;
-				value.Who = 'p';
-				value.Whole = true;		// 정수로 돌아온 값은 정수로 남기고 양수는 1 아래로 내리지 않는다(본 값은 10, 7, 5, 3, 40 모두 정수다)
-				value.Cap = hook.Cap;
-				std::string name, why;
-				if (!NlRecorder::Override(hook.Path, value, name, why))
-				{
-					NlCheats::SetNote(hook.Ally, NlCheats::IsOn(hook.Ally) ? "걸지 못했습니다: " + why : std::string());
-					NlCheats::SetNote(hook.Enemy, NlCheats::IsOn(hook.Enemy) ? "걸지 못했습니다: " + why : std::string());
-					continue;
-				}
-				hook.Applied = want[i];
-				hook.Name = name;
-				Log(std::string("people: ") + hook.Ally + " x" + Shortest(want[i].Mine) + ", " + hook.Enemy + " x" + Shortest(want[i].Other) + ", " + std::to_string(count) + " souls");
-			}
-			// 곱한 호출의 수를 보인다: 아군의 것은 self 가 플레이어의 영혼이었던 호출, 적의 것은 그 밖의 호출.
-			uint64_t mine = 0, others = 0;
-			NlRecorder::Counts(hook.Name, mine, others);
-			NlCheats::SetNote(hook.Ally, want[i].Mine != 1 ? "아군의 호출 " + std::to_string(mine) + "번에 곱함" : std::string());
-			NlCheats::SetNote(hook.Enemy, want[i].Other != 1 ? "그 밖의 호출 " + std::to_string(others) + "번에 곱함" : std::string());
-		}
-
-		if (!shield)
-		{
-			ShieldOff();
-			return;
-		}
-		if (!g_ShieldOn || !NlRecorder::Overriding(g_ShieldName))
-		{
-			NlRecorder::Forced value;
-			value.Kind = 'b';
-			value.Number = 0;
-			value.Skip = true;		// 들어올 때 Result 가 undefined 인 것을 표본에서 봤다(research/13)
-			value.Who = 'p';
-			std::string name, why;
-			if (!NlRecorder::Override(k_TakeDamage, value, name, why))
-			{
-				NlCheats::SetNote(id, "걸지 못했습니다: " + why);
-				return;
-			}
-			g_ShieldOn = true;
-			g_ShieldName = name;
-			Log("people: ally_invincible on, " + std::to_string(count) + " souls");
-		}
-		// 넣은 주소의 수와, 훅이 실제로 막은 호출·지나가게 둔 호출의 수를 함께 보인다(주소를 넣었다는 것이 막았다는 뜻은 아니다).
-		uint64_t applied = 0, passed = 0;
-		NlRecorder::Counts(g_ShieldName, applied, passed);
-		NlCheats::SetNote(id, "플레이어의 사람 " + std::to_string(count) + "명의 주소를 넣음. 막은 상처 " + std::to_string(applied)
-			+ ", 그대로 둔 상처 " + std::to_string(passed));
 	}
 
 	void RefreshDetail()
@@ -1319,152 +1130,6 @@ namespace
 		const PersonRow* row = g_Selected.empty() ? nullptr : FindRow(g_Selected);
 		if (!row || !ReadDetail(*row, g_Now.One))
 			g_Now.One = Detail();
-	}
-
-	// ---- 표의 항목: 플레이어의 사람을 조금씩 돌며 쓴다 ----
-
-	constexpr const char* k_HoldIds[] = { "no_hunger", "no_tiredness", "needs_full", "piety_full", "always_happy", "no_old_age_death" };
-
-	void HoldNotes(const std::string& Note)
-	{
-		g_HoldNoted = true;
-		for (const char* id : k_HoldIds)
-			NlCheats::SetNote(id, NlCheats::IsOn(id) ? Note : std::string());
-	}
-
-	void ClearHoldNotes()
-	{
-		if (!g_HoldNoted)
-			return;
-		g_HoldNoted = false;
-		for (const char* id : k_HoldIds)
-			NlCheats::SetNote(id, std::string());
-	}
-
-	void HoldTick(double Now)
-	{
-		// 이 함수는 오브젝트 이벤트마다 불린다. 시각부터 본다: 아래의 것들(항목 읽기, 게임 화면인지)은 0.25초에 한 번만 한다.
-		if (Now < g_NextHold)
-			return;
-		g_NextHold = Now + 0.25;
-
-		const bool hunger = NlCheats::IsOn("no_hunger"), tired = NlCheats::IsOn("no_tiredness"), all = NlCheats::IsOn("needs_full");
-		const bool happy = NlCheats::IsOn("always_happy"), ageless = NlCheats::IsOn("no_old_age_death");
-		const std::vector<int> needs = NlCore::NeedsToHold(hunger, tired, all, NlCheats::IsOn("piety_full"));
-		if (needs.empty() && !happy && !ageless && !g_Hold.AgeWritten)
-		{
-			g_Hold.Cursor = 0;
-			ClearHoldNotes();		// 끈 항목 옆에 "적용 중"이 남지 않게
-			return;
-		}
-		if (!NlAccess::InGame())
-		{
-			HoldNotes("게임을 시작하면 적용");
-			g_Hold = NlCore::HoldRound();		// 새로 불러온 게임의 깃발은 처음 값이다(세이브에 남지 않는다)
-			g_HoldPeople.clear();
-			return;
-		}
-
-		const NlCore::HoldPlan plan = NlCore::HoldBegin(g_Hold, !needs.empty(), happy, ageless);
-		if (!plan.Work)
-			return;
-
-		if (g_Hold.Cursor == 0)
-		{
-			// 바퀴의 처음: 사람들을 다시 읽는다(5초에 한 번까지. 되돌리는 바퀴를 시작할 때는 바로).
-			if (plan.Rescan || Now >= g_NextHoldScan || g_HoldPeople.empty())
-			{
-				g_NextHoldScan = Now + 5;
-				if (!Scan())
-					return;
-				g_HoldPeople.clear();
-				for (const size_t at : NlCore::PickTargets(g_Now.People, "people"))
-					g_HoldPeople.push_back(g_Now.People[at]);
-			}
-			// 행복 생각은 60초에 한 바퀴만 본다(사람마다 게임의 함수를 부르고, 붙일 때마다 로그를 남긴다. 생각은 하루 동안 간다).
-			g_HappyRound = happy && Now >= g_NextHappy;
-			if (g_HappyRound)
-				g_NextHappy = Now + 60;
-			g_RoundPeople = 0;
-		}
-
-		const NlCore::PeopleSlice slice = NlCore::NextPeopleSlice(g_HoldPeople.size(), g_Hold.Cursor, 40);
-		for (size_t i = slice.Begin; i < slice.End && i < g_HoldPeople.size(); i++)
-		{
-			const PersonRow row = g_HoldPeople[i];		// 사본(아래의 Scan 이나 게임의 함수가 목록을 바꿔도 흔들리지 않게)
-			RValue soul;
-			if (!StillThere(row, soul))
-			{
-				g_NextHoldScan = 0;		// 사람이 드나들었다. 다음 바퀴에서 다시 읽는다
-				NlCore::HoldTouched(g_Hold, false, true);
-				continue;
-			}
-			g_RoundPeople++;
-			std::string why;
-
-			if (!needs.empty())
-			{
-				RValue values, limits;
-				if (NlAccess::Follow(soul, { { '.', "__motive", 0 }, { '.', "__motive", 0 } }, values, why) && values.IsArray())
-				{
-					const bool have_limits = NlAccess::Follow(soul, { { '.', "__motive", 0 }, { '.', "__motive_limit", 0 } }, limits, why) && limits.IsArray();
-					for (const int need : needs)
-					{
-						const PathStep step{ '[', "", static_cast<double>(need) };
-						double current = 0, limit = NlCore::k_NeedMax, wanted = 0;
-						if (!FollowNumber(values, { step }, current))
-							continue;
-						if (have_limits)
-							FollowNumber(limits, { step }, limit);
-						if (NlCore::ShouldFillNeed(current, limit) && NlCore::NeedValue(NlCore::k_FillAll, limit, wanted) && NlAccess::SetNumber(values, step, wanted, why))
-							g_LogNeeds++;
-					}
-				}
-			}
-
-			bool age_off = false;
-			if (plan.WriteAge)
-			{
-				// __soul.__aging.__old.__debug_is_can_die_of_old_age: 인물마다 true 다. 켜면 false 로, 끄면 다시 true 로 쓴다.
-				RValue old;
-				const PathStep flag{ '.', "__debug_is_can_die_of_old_age", 0 };
-				double current = 0;
-				if (NlAccess::Follow(soul, { { '.', "__aging", 0 }, { '.', "__old", 0 } }, old, why) && old.IsStruct() && FollowNumber(old, { flag }, current))
-				{
-					if (current != plan.AgeValue && NlAccess::SetNumber(old, flag, plan.AgeValue, why))
-					{
-						g_LogAge++;
-						current = plan.AgeValue;
-					}
-					age_off = current == 0;		// 꺼진 깃발이 있다(되돌릴 것이 있다)
-				}
-			}
-			NlCore::HoldTouched(g_Hold, age_off, false);
-
-			if (g_HappyRound && happy)		// 도중에 끄면 남은 사람에게는 붙이지 않는다
-			{
-				PersonCommand command;
-				command.Act = PersonAct::Happy;
-				command.Who = row.Uuid;
-				std::string note;
-				if (One(command, row, note, true) && note.empty())
-					g_LogHappy++;
-			}
-		}
-		NlCore::HoldEnd(g_Hold, slice, ageless);
-
-		if (slice.Wrapped)
-		{
-			HoldNotes(std::to_string(g_RoundPeople) + "명에게 적용 중");
-			// 로그는 쓴 것이 있을 때, 60초에 한 줄까지만 남긴다(욕구는 틱마다 조금씩 줄어 바퀴마다 쓸 것이 생긴다).
-			if ((g_LogNeeds || g_LogHappy || g_LogAge) && Now >= g_NextHoldLog)
-			{
-				g_NextHoldLog = Now + 60;
-				Log("people hold: " + std::to_string(g_RoundPeople) + " people; since the last line " + std::to_string(g_LogNeeds) + " need(s) filled, "
-					+ std::to_string(g_LogHappy) + " happy mind(s), " + std::to_string(g_LogAge) + " old-age flag(s) written");
-				g_LogNeeds = g_LogHappy = g_LogAge = 0;
-			}
-		}
 	}
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
@@ -1902,6 +1567,20 @@ void NlPeople::Init(LogFn Log_, const std::filesystem::path& GameDir)
 	std::string why;
 	if (!NlCore::CheckRoles(why))
 		Log("people: the role preset table is wrong: " + why);		// 시험이 막는다. 여기까지 오면 로그에 남긴다
+	// 인구 바퀴(src/Hold)는 People 의 틱 안에서 돈다: 사람들을 읽는 길과 행복 생각을 붙이는 길을 넘긴다(People 의 잠금 아래에서 불린다).
+	NlHold::Init(g_Log,
+		[](std::vector<PersonRow>& Out) {
+			if (!Scan())
+				return false;
+			Out = g_Now.People;
+			return true;
+		},
+		[](const PersonRow& Row, std::string& Note) {
+			PersonCommand command;
+			command.Act = PersonAct::Happy;
+			command.Who = Row.Uuid;
+			return One(command, Row, Note, true);
+		});
 	NlJobs::Add({ "pregnancy_chance", "pregnancy chance", false, &WalkPregnancyChance, nullptr, 15 });
 	NlJobs::Add({ "no_miscarriage", "miscarriage chance", true, &WalkMiscarriage, nullptr, 15 });
 	NlJobs::Add({ "safe_childbirth", "childbirth death chance", true, &WalkChildbirthDeath, nullptr, 15 });
@@ -1914,8 +1593,8 @@ void NlPeople::GameTick(double Now, bool Active)
 		return;
 	const NlCore::ScopedFlag busy(g_Busy);
 
-	HoldTick(Now);
-	BattleTick(Now);
+	NlHold::Tick(Now);
+	NlShield::Tick(Now);
 
 	if (!g_SpawnKinds.empty())
 	{
