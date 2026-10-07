@@ -2,7 +2,7 @@
 
 #include "Access.hpp"
 #include "Build.hpp"
-#include "Production.hpp"
+#include "Jobs.hpp"
 #include "Cheats.hpp"
 #include "Court.hpp"
 #include "Crime.hpp"
@@ -164,7 +164,7 @@ void NlMenu::GameTick()
 	NlCheats::GameTick(now, visible);
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
-	NlProduction::GameTick(now);
+	NlJobs::GameTick(now);
 	NlWorld::GameTick(now, visible && page == Area::World);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
 	NlCrime::GameTick(now, visible && page == Area::Crime);
