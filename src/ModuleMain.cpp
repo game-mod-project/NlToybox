@@ -14,6 +14,8 @@
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "People.hpp"
+#include "PeopleAccess.hpp"
+#include "TraitText.hpp"
 #include "World.hpp"
 #include "Game.hpp"
 #include "Menu.hpp"
@@ -157,6 +159,8 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
 	NlSeason::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 화면 이름을 게임의 localization\main.csv 에서 읽는다
 	NlMines::Init([](const std::string& Line) { LogLine(Line); });
+	NlPeopleAccess::Init([](const std::string& Line) { LogLine(Line); });
+	NlTraitText::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 특성의 글을 게임의 localization 파일에서 읽는다
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
 	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
 	NlCrime::Init([](const std::string& Line) { LogLine(Line); });

@@ -90,6 +90,8 @@ add_library(nltoybox SHARED
   src/Game.cpp
   src/Menu.cpp
   src/People.cpp
+  src/PeopleAccess.cpp
+  src/TraitText.cpp
   src/Recorder.cpp
   src/Remote.cpp
   src/Search.cpp
