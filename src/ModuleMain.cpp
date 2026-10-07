@@ -5,6 +5,8 @@
 #include <YYTK_Shared.hpp>
 #include "Build.hpp"
 #include "Jobs.hpp"
+#include "Mines.hpp"
+#include "Season.hpp"
 #include "Production.hpp"
 #include "Dump.hpp"
 #include "Court.hpp"
@@ -152,7 +154,9 @@ EXPORTED AurieStatus ModuleInitialize(
 	// 게임 폴더: 모듈은 <게임>\mods\Aurie 에 있다. 인물 패널이 게임의 현지화 파일(localization\main.csv)에서 특성의 이름을 읽는다.
 	NlJobs::Init([](const std::string& Line) { LogLine(Line); });
 	NlProduction::Init([](const std::string& Line) { LogLine(Line); });
-	NlWorld::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 이름도 그 파일에서 읽는다
+	NlWorld::Init([](const std::string& Line) { LogLine(Line); });
+	NlSeason::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());		// 가혹한 계절의 화면 이름을 게임의 localization\main.csv 에서 읽는다
+	NlMines::Init([](const std::string& Line) { LogLine(Line); });
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
 	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
 	NlCrime::Init([](const std::string& Line) { LogLine(Line); });

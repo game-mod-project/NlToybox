@@ -3,6 +3,8 @@
 #include "Access.hpp"
 #include "Build.hpp"
 #include "Jobs.hpp"
+#include "Mines.hpp"
+#include "Season.hpp"
 #include "Cheats.hpp"
 #include "Court.hpp"
 #include "Crime.hpp"
@@ -165,7 +167,9 @@ void NlMenu::GameTick()
 	NlEconomy::GameTick(now, visible && page == Area::Economy);
 	NlBuild::GameTick(now);
 	NlJobs::GameTick(now);
-	NlWorld::GameTick(now, visible && page == Area::World);
+	NlWorld::GameTick(now);
+	NlSeason::Tick(now, visible && page == Area::World);
+	NlMines::Tick(now);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
 	NlCrime::GameTick(now, visible && page == Area::Crime);
 	NlCourt::GameTick(now, visible && (page == Area::Lord || page == Area::Religion));		// 종교 패널의 주교와의 평판도 같은 모듈이 한다
