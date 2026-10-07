@@ -429,62 +429,58 @@ void NlEvents::Draw()
 	const std::string group = g_GroupPick == 0 ? std::string() : groups[static_cast<size_t>(g_GroupPick) - 1];
 	if (g_Now.Names.empty())
 		NlUi::Hint("게임 화면에서 이벤트의 이름을 읽습니다.");
-	else if (ImGui::BeginChild("event_rows", ImVec2(0, 300), ImGuiChildFlags_Borders))
+	else if (ImGui::BeginTable("events", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit | ImGuiTableFlags_ScrollX | ImGuiTableFlags_ScrollY | ImGuiTableFlags_BordersOuter, ImVec2(0, 300)))
 	{
-		if (ImGui::BeginTable("events", 6, ImGuiTableFlags_RowBg | ImGuiTableFlags_SizingFixedFit))
+		// 단추 칸을 맨 앞에 둔다: 이름이 길어 표가 패널 너비를 넘어도 단추는 보인다(게임 확인에서 끝의 칸들이 잘렸다. research/29). 머리 줄과 첫 칸은 스크롤해도 남는다.
+		ImGui::TableSetupScrollFreeze(1, 1);
+		ImGui::TableSetupColumn("");
+		ImGui::TableSetupColumn("묶음");
+		ImGui::TableSetupColumn("이름");
+		ImGui::TableSetupColumn("갈래");
+		ImGui::TableSetupColumn("쿨다운");
+		ImGui::TableSetupColumn("묶음 쿨다운");
+		ImGui::TableHeadersRow();
+		for (const std::string& name : g_Now.Names)
 		{
-			ImGui::TableSetupColumn("묶음");
-			ImGui::TableSetupColumn("이름");
-			ImGui::TableSetupColumn("갈래");
-			ImGui::TableSetupColumn("쿨다운");
-			ImGui::TableSetupColumn("묶음 쿨다운");
-			ImGui::TableSetupColumn("");
-			ImGui::TableHeadersRow();
-			for (const std::string& name : g_Now.Names)
+			const NlCore::EventRow* row = NlCore::FindEvent(name);
+			const std::string rowGroup = row ? row->Group : "?";
+			const std::string label = LabelOf(name);
+			if (!NlCore::EventRowShown(group, g_Filter, rowGroup, name, label))
+				continue;
+			ImGui::TableNextRow();
+			ImGui::TableNextColumn();
+			if (ImGui::SmallButton(("일으키기##" + name).c_str()))
 			{
-				const NlCore::EventRow* row = NlCore::FindEvent(name);
-				const std::string rowGroup = row ? row->Group : "?";
-				const std::string label = LabelOf(name);
-				if (!NlCore::EventRowShown(group, g_Filter, rowGroup, name, label))
-					continue;
-				ImGui::TableNextRow();
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(rowGroup.c_str());
-				ImGui::TableNextColumn();
-				if (row)
+				g_PendingEvent = name;
+				Push(WorldAct::EventForce);
+			}
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(rowGroup.c_str());
+			ImGui::TableNextColumn();
+			if (row)
+			{
+				ImGui::TextUnformatted(label.c_str());
+				if (label != name)
 				{
-					ImGui::TextUnformatted(label.c_str());
-					if (label != name)
-					{
-						ImGui::SameLine();
-						ImGui::TextDisabled("%s", name.c_str());
-					}
-				}
-				else
-				{
-					ImGui::TextUnformatted(name.c_str());
 					ImGui::SameLine();
-					ImGui::TextDisabled("(표에 없음)");
-				}
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(row ? NlCore::EventTypeWord(row->Type) : "-");
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.Cooldowns, name)).c_str());
-				ImGui::TableNextColumn();
-				ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.GroupCooldowns, rowGroup)).c_str());
-				ImGui::TableNextColumn();
-				if (ImGui::SmallButton(("일으키기##" + name).c_str()))
-				{
-					g_PendingEvent = name;
-					Push(WorldAct::EventForce);
+					ImGui::TextDisabled("%s", name.c_str());
 				}
 			}
-			ImGui::EndTable();
+			else
+			{
+				ImGui::TextUnformatted(name.c_str());
+				ImGui::SameLine();
+				ImGui::TextDisabled("(표에 없음)");
+			}
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(row ? NlCore::EventTypeWord(row->Type) : "-");
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.Cooldowns, name)).c_str());
+			ImGui::TableNextColumn();
+			ImGui::TextUnformatted(NlCore::CooldownText(CooldownOf(g_Now.GroupCooldowns, rowGroup)).c_str());
 		}
-		ImGui::EndChild();
+		ImGui::EndTable();
 	}
-	else
-		ImGui::EndChild();
 	if (g_Now.MissingFromGame > 0)
 		NlUi::Hint("표의 " + std::to_string(g_Now.MissingFromGame) + "줄이 이 게임에 없습니다 (게임이 갱신됐을 수 있습니다).");
 	NlUi::Hint("이름·묶음·갈래는 게임의 director_params.json 과 런타임에서 본 것입니다. 화면 이름은 게임의 localization\\main.csv 에서 읽고, 열쇠가 없는 이벤트의 이름은 모드가 지은 것(추정)입니다. "

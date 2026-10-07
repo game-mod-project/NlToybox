@@ -74,7 +74,12 @@
 ## 구현(0.30.0. 이벤트 탭)
 
 - `src/Events.cpp` + `core/EventPlan`. 표 61줄(이름·묶음·갈래·열쇠·지은 이름·가족), 예약과 취소, 묶음·찾기의 표, 가족 다섯의 진행 중, 끝내기(확인 전 다섯은 꺼져 있다), 쿨다운 지우기.
-- 확인(Task 7 의 켜기): (여기에 적는다 — 창의 화면 `refs/ui/events-*.png`, 원격 `world events` 의 답, 표에 없는 이름의 수, `world event_cancel` 의 답, `world event_end kind=raid` 의 'x' 답)
+- 확인(Task 7 의 켜기. `refs/runtime/events-tab-run1.*`, `refs/ui/events-forced.png`·`events-after.png`·`events-world.png`. 아덴 4일차 저녁, 적재 판정 PASS):
+  `world events` 가 61 of 61(표에 없는 게임의 이름 0, 게임에 없는 표의 줄 0). 파일에서 읽은 화면 이름 29개(손님 11, 습격 7, 예언 6, 보상 4, 음모 1), 손님 15줄 모두 한국어(익명 넷은 지은 이름).
+  `world events group=GUEST find=bard` → `GUEST  u_guest_bard  음유시인  보통  cd -` 한 줄(1 of 61). `world event name=u_guest_joker` → 예약 `u_guest_joker (지연 0)`, 창에 "예약된 이벤트: 어릿광대 (u_guest_joker)"와 [예약 취소].
+  `world event_cancel` → "예약을 지웠습니다: u_guest_joker"(로그 `world call reset_debug_forced_event() (forced: u_guest_joker)` → `forced event after reset: (none)`), 다시 → "예약된 이벤트가 없습니다"(함수를 부르지 않았다: 로그에 그 줄이 한 번뿐).
+  `world event_end kind=raid` → "습격 끝내기는 확인 전이라 부르지 않습니다 …", `kind=rebellion` → `world event_end needs kind=<…>`. `world cooldowns_clear` → "이벤트 쿨다운 1개와 묶음 쿨다운 1개를 0 으로 썼습니다". 월드 패널에 이벤트의 글이 섞이지 않았다. 게임의 오류 파일에 새 ERROR 없음.
+  **본 문제**: 표가 패널의 너비를 넘어 "묶음 쿨다운" 칸이 잘리고 "일으키기" 단추가 보이지 않았다(`events-forced.png`). 단추 칸을 맨 앞으로 옮기고 표에 가로·세로 스크롤을 주었다(고친 화면은 다음 켜기에서 본다).
 
 ## 남은 것
 
