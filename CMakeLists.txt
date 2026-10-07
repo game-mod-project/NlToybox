@@ -105,6 +105,7 @@ add_library(nltoybox SHARED
   src/Ui.cpp
   src/Diplomacy.cpp
   src/World.cpp
+  src/Events.cpp
   src/Season.cpp
   src/Mines.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"

@@ -6,6 +6,7 @@
 #include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
+#include "Events.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Game.hpp"
@@ -437,7 +438,7 @@ namespace
 		Say("  " + NlEconomy::Do(command));
 	}
 
-	// 종교·이벤트 패널의 단추와 같은 길(NlWorld::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	// 종교·유틸·이벤트 패널의 단추와 같은 길(NlWorld::Do, NlEvents). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoWorld(const RemoteCommand& C)
 	{
 		NlCore::WorldAct act = NlCore::WorldAct::CooldownsClear;
@@ -448,9 +449,9 @@ namespace
 		}
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
 		if (act == NlCore::WorldAct::EventForce)
-			Say("  " + NlWorld::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+			Say("  " + NlEvents::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
 		else
-			Say("  " + NlWorld::Do(act));
+			Say("  " + NlWorld::Do(act));		// 이벤트의 다른 일은 NlWorld::Do 가 NlEvents 로 넘긴다(Task 4 가 events·event_end 를 더 가른다)
 	}
 
 	// 범죄 패널의 단추와 같은 길(NlCrime::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.

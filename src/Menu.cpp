@@ -10,6 +10,7 @@
 #include "Crime.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
+#include "Events.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Explorer.hpp"
@@ -168,6 +169,7 @@ void NlMenu::GameTick()
 	NlBuild::GameTick(now);
 	NlJobs::GameTick(now);
 	NlWorld::GameTick(now);
+	NlEvents::Tick(now, visible && page == Area::Events);
 	NlSeason::Tick(now, visible && page == Area::World);
 	NlMines::Tick(now);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
@@ -280,7 +282,7 @@ void NlMenu::Draw()
 		NlCheats::DrawArea(page);
 		NlTweaks::DrawArea(page);
 		ImGui::Separator();
-		NlWorld::DrawEvents();
+		NlEvents::Draw();
 		break;
 	case Area::Religion:
 		NlCheats::DrawArea(page);
