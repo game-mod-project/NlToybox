@@ -50,7 +50,9 @@ namespace
 		NlCore::DiplomacyJob Plan;		// 누구의 어느 쪽, 붙여도 되는 수, 방향(core 의 PlanJobs 가 정한다)
 		DiplomacyGoal Goal = DiplomacyGoal::Neutral;
 		NlCore::DiplomacyPact Pact = NlCore::DiplomacyPact::Peace;		// Goal 이 Pact 일 때
-		int Done = 0;				// 붙인 평판의 수(부호가 방향)
+		int Done = 0;				// 붙인 평판의 수(부호가 방향). 떼기(Clear)에서는 뗀 수
+		int Good = 0, Bad = 0;		// 떼기: 뗀 좋은·나쁜 평판의 수
+		int Phase = 0;				// 떼기: 0 좋은 자료를 떼는 중, 1 나쁜 자료를 떼는 중(좋은 것이 더 떨어지지 않으면 넘어간다)
 		double Before = -1;			// 시작할 때의 관계
 		bool Started = false;
 		bool Checked = false;		// 그 왕국이 살아 있고 양쪽에 왕이 있는지 봤다
@@ -305,6 +307,87 @@ namespace
 		return 'd';
 	}
 
+	// 떼기(Clear)의 한 걸음: 붙여 둔 디버그 평판을 하나 뗀다. Faction.detach_opinion_about_faction(대상 세력, 평판 자료)(research/19 에서 이름과 인자를 봤다.
+	// 하나를 뗀다). 좋은 자료부터 떼고, 뗀 뒤 그 왕의 평판의 수가 줄지 않으면 나쁜 자료로, 그것도 줄지 않으면 끝(core 의 DetachCheck·AfterDetach).
+	// 평판의 수를 세지 못하는 왕에게는 떼지 않는다(언제 멈출지 모른다). 붙은 것이 없을 때 그 함수를 불러도 탈이 없었다(research/28: 수가 그대로라 그것으로 끝을 안다).
+	// 돌려주는 값: 0 이면 더 한다, 아니면 끝났다(core 의 ClearOpinionReport 의 Outcome). Why 에 실패의 까닭.
+	char ClearStep(Job& It, const std::string& Faction, std::string& Why)
+	{
+		const double kind = It.Plan.Side == 't' ? Relation(It.Plan.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Plan.Uuid);
+		if (kind < 0)
+		{
+			Why = "관계를 읽지 못했습니다";
+			return 'f';
+		}
+		if (!It.Started)
+		{
+			It.Before = kind;
+			It.Started = true;
+		}
+		if (It.Plan.Left <= 0)
+			return 'l';
+		const std::string holder = It.Plan.Side == 't' ? Faction : k_Player;
+		const std::string about_path = It.Plan.Side == 't' ? k_Player : Faction;
+		const std::string generic_path = It.Phase == 0 ? k_Good : k_Bad;
+		RValue about, generic, result, updated, king;		// 이 함수 안에서만 든다
+		if (!NlAccess::Read(NlCore::ParseAskPath(generic_path), generic, Why) || !generic.IsStruct())
+		{
+			Why = "게임의 디버그 평판 자료를 읽지 못했습니다";
+			return 'f';
+		}
+		if (!NlAccess::Read(NlCore::ParseAskPath(about_path), about, Why) || !about.IsStruct())
+		{
+			Why = "세력의 구조체를 읽지 못했습니다";
+			return 'f';
+		}
+		int place = -1;
+		std::string count_why;
+		if (!KingMinds(holder, king, place, count_why))
+		{
+			Why = "평판의 수를 세지 못해 떼지 않습니다 (" + count_why + ")";
+			return 'f';
+		}
+		const double minds_before = MindsAt(king, place);
+		if (!It.CountLogged)
+		{
+			Log("diplomacy: counting the opinion minds of " + holder + " at place " + std::to_string(place) + ": " + NlCore::Shortest(minds_before));
+			It.CountLogged = true;
+			It.MindsFirst = minds_before;
+		}
+		Log("diplomacy call " + holder + ".detach_opinion_about_faction(" + about_path + ", " + (It.Phase == 0 ? "debug_positive" : "debug_negative") + ")");		// 부르기 전에 남긴다
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(holder + ".detach_opinion_about_faction"), { about, generic }, result, Why))
+			return 'f';
+		const double minds_after = MindsAt(king, place);
+		if (minds_after >= 0)
+			It.MindsLast = minds_after;
+		switch (NlCore::AfterDetach(NlCore::DetachCheck(minds_before, minds_after)))
+		{
+		case 'c':
+			(It.Phase == 0 ? It.Good : It.Bad)++;
+			It.Done++;
+			It.Plan.Left--;
+			break;
+		case 'n':
+			if (It.Phase == 0)
+			{
+				It.Phase = 1;		// 좋은 것은 더 없다: 나쁜 것으로
+				return 0;
+			}
+			return It.Good + It.Bad == 0 ? 'a' : 'd';
+		default:
+			Why = "뗀 뒤의 평판의 수가 하나 줄지 않았습니다 (앞 " + NlCore::Shortest(minds_before) + ", 뒤 " + NlCore::Shortest(minds_after) + ")";
+			return 'f';
+		}
+		// Faction.__update_relations(세력) -> undefined. 관계의 종류를 평판에서 다시 셈해 행렬에 쓴다(붙일 때와 같다).
+		Log("diplomacy call " + holder + ".__update_relations(" + about_path + ")");
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(holder + ".__update_relations"), { about }, updated, Why))
+		{
+			Why = "평판은 뗐지만 관계를 다시 셈하게 하지 못했습니다 (" + Why + ")";
+			return 'f';
+		}
+		return 0;
+	}
+
 	// 일의 한 걸음. 돌려주는 값: 0 이면 더 한다, 아니면 끝났다(core 의 DiplomacyReport 의 Outcome). Why 에 실패의 까닭.
 	char StepJob(Job& It, std::string& Why)
 	{
@@ -326,6 +409,8 @@ namespace
 		}
 		if (It.Goal == DiplomacyGoal::Pact)
 			return MakePact(It, faction, Why);
+		if (It.Goal == DiplomacyGoal::Clear)
+			return ClearStep(It, faction, Why);
 
 		const double kind = It.Plan.Side == 't' ? Relation(It.Plan.Uuid, g_PlayerUuid) : Relation(g_PlayerUuid, It.Plan.Uuid);
 		if (kind < 0)
@@ -425,6 +510,7 @@ namespace
 		const double before = It.Started ? It.Before : after;
 		// 망한 왕국('x')과 묻지 못한 것('f', 관계를 읽기 전)은 어느 일이든 같은 글이다. 협정은 제 글, 평판의 수를 다 붙인 것은 붙인 개수와 관계를 따로 적는다.
 		std::string line = It.Goal == DiplomacyGoal::Pact && outcome != 'x' ? NlCore::PactReport(name, It.Pact, outcome, why)
+			: It.Goal == DiplomacyGoal::Clear ? NlCore::ClearOpinionReport(name, It.Plan.Side, before, after, It.Good, It.Bad, outcome, why)
 			: It.Goal == DiplomacyGoal::Opinion && ((outcome == 'd' && It.Done != 0) || outcome == 's')
 				? NlCore::OpinionReport(name, It.Plan.Side, before, after, It.Done, outcome == 's')
 			: NlCore::DiplomacyReport(name, It.Plan.Side, before, after, It.Done, outcome, why);
@@ -559,7 +645,7 @@ std::vector<std::string> NlDiplomacy::Do(const DiplomacyCommand& Command)
 		return { "그 왕국이 없습니다" };
 	tally.Expect(static_cast<int>(jobs.size()));
 	for (Job& job : jobs)
-		RunJob(job, NlCore::k_OpinionStepsMax + 2, tally);		// 끝까지: 한도만큼 붙이고 한 걸음 더 보면 끝난다
+		RunJob(job, NlCore::k_ClearStepsMax + 3, tally);		// 끝까지: 한도만큼 붙이거나 떼고 한두 걸음 더 보면 끝난다(떼기의 한도가 더 크다)
 	ReadKinds();
 	std::vector<std::string> lines = tally.Lines();
 	lines.push_back(tally.Summary());
@@ -627,7 +713,12 @@ void NlDiplomacy::Draw()
 	ImGui::SameLine();
 	if (ImGui::Button("모든 왕국과 중립으로"))
 		Push("all", DiplomacyGoal::Neutral, 0);
-	NlUi::Hint("게임의 디버그용 평판을 왕에게 붙여 관계를 움직이고, 게임의 협정 함수로 협정을 맺습니다. 떼거나 푸는 단추는 없습니다.");
+	ImGui::SameLine();
+	if (ImGui::Button("모든 왕국의 평판 떼기"))
+		Push("all", DiplomacyGoal::Clear, 0);
+	if (ImGui::IsItemHovered())
+		ImGui::SetTooltip("여기서 붙인 디버그 평판을 하나씩 뗍니다 (고른 쪽마다. 좋은 것부터, 그다음 나쁜 것). 게임의 함수를 부르고 왕의 평판의 수가 줄었는지로 봅니다");
+	NlUi::Hint("게임의 디버그용 평판을 왕에게 붙여 관계를 움직이고, 게임의 협정 함수로 협정을 맺습니다. '떼기'는 붙인 디버그 평판을 뗍니다(research/28: 붙인 3개와 2개가 그대로 떨어졌다. 뗀 뒤의 관계는 게임이 다시 셈한 것이라 붙이기 전과 다를 수 있다). 협정을 푸는 단추는 없습니다.");
 	// 긴 설명은 접어 둔다(펼쳐 두면 왕국의 표가 창 아래로 밀린다).
 	if (ImGui::CollapsingHeader("설명"))
 		NlUi::Hint("왕국 사이의 관계는 게임이 왕끼리의 평판에서 셈합니다. 여기서는 게임의 디버그용 평판(좋은 것, 나쁜 것)을 게임의 함수로 하나씩 붙이고 관계를 다시 셈하게 합니다. "
@@ -685,6 +776,11 @@ void NlDiplomacy::Draw()
 				Push(kingdom.Uuid, DiplomacyGoal::Opinion, -1);
 			if (ImGui::IsItemHovered())
 				ImGui::SetTooltip("나쁜 평판 하나를 붙입니다 (위에서 고른 쪽마다)");
+			ImGui::SameLine();
+			if (ImGui::SmallButton("떼기"))
+				Push(kingdom.Uuid, DiplomacyGoal::Clear, 0);
+			if (ImGui::IsItemHovered())
+				ImGui::SetTooltip("여기서 붙인 디버그 평판을 모두 뗍니다 (위에서 고른 쪽마다)");
 			ImGui::TableNextColumn();
 			// 협정: 이미 맺은 것은 글자로, 아직 없는 것은 단추로. "방어"는 방어 동맹(협정)이다. 관계의 종류 "동맹"과 다른 것이라 낱말을 가른다.
 			static const struct

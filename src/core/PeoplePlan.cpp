@@ -25,6 +25,7 @@ namespace NlCore
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
 			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
 			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" }, { PersonAct::Role, "role" },
+			{ PersonAct::RoleUndo, "role_undo" },
 			{ PersonAct::PregnancyNext, "pregnancy_next" }, { PersonAct::Birth, "birth" }, { PersonAct::GrowUp, "grow_up" }, { PersonAct::Conceive, "conceive" },
 		};
 

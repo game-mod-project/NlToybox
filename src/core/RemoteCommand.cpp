@@ -388,7 +388,7 @@ namespace NlCore
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
 				return Fail(command, "person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, "
-					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role, pregnancy_next, birth, grow_up, conceive)");
+					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role, role_undo, pregnancy_next, birth, grow_up, conceive)");
 			command.Target = tokens[1];
 			if (!Options(tokens, 3, command))
 				return;
@@ -480,6 +480,7 @@ namespace NlCore
 			// diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]  바라는 관계가 될 때까지 평판을 붙인다(core/DiplomacyPlan)
 			// diplomacy <uuid> opinion amount=<개수> [side=them|us|both]       디버그 평판을 그 개수만큼 붙인다(-40 ~ 40)
 			// diplomacy <uuid> pact name=<peace|trade|defence>                 그 왕국과 협정을 맺는다
+			// diplomacy <uuid|all> clear [side=them|us|both]                   붙여 둔 디버그 평판을 뗀다(좋은 것부터, 그다음 나쁜 것)
 			if (count >= 2 && tokens[1] == "list")
 			{
 				if (count != 2)
@@ -489,7 +490,7 @@ namespace NlCore
 			}
 			DiplomacyCommand diplomacy;
 			if (count < 3 || !GoodFactionWho(tokens[1]) || !ParseDiplomacyGoal(tokens[2], diplomacy.Goal))
-				return Fail(command, "diplomacy needs list, or who (a faction uuid or all) and friends, neutral, hostile, opinion or pact");
+				return Fail(command, "diplomacy needs list, or who (a faction uuid or all) and friends, neutral, hostile, opinion, pact or clear");
 			command.Target = tokens[1];
 			if (!Options(tokens, 3, command))
 				return;
@@ -525,6 +526,8 @@ namespace NlCore
 			}
 			else if (amount != command.Options.end())
 				return Fail(command, std::string("diplomacy ") + tokens[2] + " takes no amount");
+			else if (command.Options.count("name"))
+				return Fail(command, std::string("diplomacy ") + tokens[2] + " takes no name= (only pact does)");
 			std::string why;
 			if (!CheckDiplomacy(diplomacy, why))
 				return Fail(command, "diplomacy all takes only friends or neutral (name one kingdom for hostile and opinion)");

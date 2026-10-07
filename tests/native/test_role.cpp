@@ -192,4 +192,71 @@ void RunRoleTests()
 		CHECK(!ParseRemoteLine("person lords role name=general").Error.empty() && !ParseRemoteLine("person 25556c3312bce178 role name=nope").Error.empty()
 			&& !ParseRemoteLine("person 25556c3312bce178 role").Error.empty());
 	});
+
+	Test("인물의 역할 프리셋 되돌리기: 기억, 할 일, 보고, 명령", [] {
+		// 사용자 요청 2026-10-07: 입힐 때 그 사람의 "전"을 기억해 두고(이 실행 안에서만) 한 단추로 되돌린다.
+		const std::vector<NamedKey>& skills = SkillNames();
+		const auto at = [&](const char* key) {
+			for (size_t i = 0; i < skills.size(); i++)
+				if (std::string(skills[i].Key) == key)
+					return static_cast<int>(i);
+			return -1;
+		};
+		// 기억: 쓴 능력치의 전 값, 뗀 특성, 붙인 특성(실제로 된 것만. 부르는 쪽이 채운다).
+		RoleMemory memory;
+		CHECK(memory.Empty());
+		memory.Skills = { { at("combat"), 5 }, { at("command"), 3 } };
+		memory.Removed = { "coward" };
+		memory.Added = { "leader", "fearless" };
+		CHECK(!memory.Empty());
+		// 되돌릴 할 일: 능력치는 기억한 전 값으로(지금 값을 보지 않는다. 이때만 내린다), 붙였던 것 가운데 지금 있는 것을 떼고, 뗐던 것 가운데 지금 없는 것을 다시 붙인다.
+		RoleTodo todo = PlanRoleUndo(memory, { "human", "leader", "coward" });		// fearless 는 이미 없고 coward 는 이미 돌아와 있다
+		CHECK(todo.Skills.size() == 2 && todo.Skills[0].first == at("combat") && todo.Skills[0].second == 5 && todo.Skills[1].second == 3);
+		CHECK(todo.Remove == (std::vector<std::string>{ "leader" }) && todo.Add.empty());
+		todo = PlanRoleUndo(memory, { "human", "leader", "fearless" });
+		CHECK(todo.Remove == (std::vector<std::string>{ "leader", "fearless" }) && todo.Add == (std::vector<std::string>{ "coward" }));
+		CHECK(PlanRoleUndo(RoleMemory(), { "human" }).Empty());
+		// 걸음의 차례는 입힐 때와 같다(RoleSteps): 능력치, 떼기, 붙이기.
+		std::string kinds;
+		for (const RoleStep& step : RoleSteps(todo))
+			kinds += step.Kind;
+		CHECK_STR(kinds, "ssrra");
+		// 두 번 입힌 기억을 합친다: 능력치는 더 앞의 전 값을 지키고(이미 있는 자리는 그대로), 특성은 뒤의 것을 더하되
+		// 서로 지우는 것(붙였던 것을 뒤에 뗐다, 뗐던 것을 뒤에 붙였다)은 양쪽에서 지운다(그 특성은 처음 상태 그대로다).
+		{
+			RoleMemory first, second;
+			first.Skills = { { 0, 5 } };
+			first.Added = { "leader" };
+			first.Removed = { "coward" };
+			second.Skills = { { 0, 20 }, { 1, 3 } };
+			second.Added = { "coward", "bookworm" };
+			second.Removed = { "leader" };
+			MergeRoleMemory(first, second);
+			CHECK(first.Skills == (std::vector<std::pair<int, int>>{ { 0, 5 }, { 1, 3 } }));
+			CHECK(first.Added == (std::vector<std::string>{ "bookworm" }) && first.Removed.empty());
+			RoleMemory empty;
+			MergeRoleMemory(empty, second);
+			CHECK(empty.Skills == second.Skills && empty.Added == second.Added && empty.Removed == second.Removed);
+		}
+		// 보고의 글: 한 것의 수(능력치, 뗀 것, 다시 붙인 것)와 하지 못한 것.
+		CHECK_STR(RoleUndoReport("Barra", 2, 2, 1, 0, ""), "Barra: 역할 프리셋 되돌리기 - 능력치 2개를 되돌리고, 특성 2개를 떼고, 1개를 다시 붙였습니다");
+		CHECK_STR(RoleUndoReport("Barra", 0, 0, 0, 0, ""), "Barra: 역할 프리셋 되돌리기 - 이미 그대로입니다 (바꾼 것이 없습니다)");
+		CHECK_STR(RoleUndoReport("Barra", 1, 0, 0, 1, "x"), "Barra: 역할 프리셋 되돌리기 - 능력치 1개를 되돌렸습니다. 하지 못한 것 1개 (x)");
+		CHECK_STR(RoleUndoReport("Barra", 0, 0, 2, 0, ""), "Barra: 역할 프리셋 되돌리기 - 특성 2개를 다시 붙였습니다");
+		CHECK_STR(RoleUndoReport("Barra", 0, 0, 0, 2, ""), "Barra: 역할 프리셋 되돌리기 - 하지 못했습니다: 2개");
+		CHECK_STR(RoleUndoNoMemory("Barra"), "Barra: 되돌릴 역할 프리셋의 기억이 없습니다 (이 실행에서 입힌 것만 되돌립니다)");
+		// 명령: role_undo 는 한 사람을 짚어서만. 글·수·번호를 받지 않는다.
+		PersonAct act = PersonAct::SkillSet;
+		CHECK(ParsePersonAct("role_undo", act) && act == PersonAct::RoleUndo && std::string(PersonActWord(PersonAct::RoleUndo)) == "role_undo");
+		CHECK(!NeedsText(PersonAct::RoleUndo) && !NeedsAmount(PersonAct::RoleUndo) && !NeedsIndex(PersonAct::RoleUndo));
+		std::string why;
+		PersonCommand c;
+		c.Act = PersonAct::RoleUndo;
+		c.Who = "25556c3312bce178";
+		CHECK(CheckPersonCommand(c, why) && why.empty());
+		CHECK(!BulkAllowed("lords", PersonAct::RoleUndo) && !BulkAllowed("people", PersonAct::RoleUndo) && BulkAllowed("25556c3312bce178", PersonAct::RoleUndo));
+		const RemoteCommand line = ParseRemoteLine("person 25556c3312bce178 role_undo");
+		CHECK(line.Error.empty() && line.Options.at("act") == "role_undo");
+		CHECK(!ParseRemoteLine("person lords role_undo").Error.empty());
+	});
 }
