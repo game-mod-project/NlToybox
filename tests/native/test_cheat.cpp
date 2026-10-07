@@ -246,7 +246,8 @@ void RunCheatTests()
 		CHECK(FindCheat("instant_upgrade") && FindCheat("instant_upgrade")->Kind == CheatKind::Custom && FindCheat("instant_upgrade")->Where == Area::Build);
 		CHECK(FindCheat("instant_upgrade")->Verified);
 		// 사용자가 플레이에서 본 것(research/07): 즉시 건설은 된다. 자원 편집 모드는 쓸 수 없어 표에서 뺐다(경제 패널이 맡는다).
-		CHECK(FindCheat("instant_build")->Verified && !FindCheat("build_all")->Verified);
+		// 건설 목록 모두 열기도 사용자가 본 것이다(목록은 풀리고 조건은 그대로). 2026-10-07 의 확인 캠페인에서 그 범위로 확인으로 올렸다(research/27).
+		CHECK(FindCheat("instant_build")->Verified && FindCheat("build_all")->Verified);
 		CHECK(FindCheat("resources_edit_mode") == nullptr);
 		// 창고 용량은 넣지 않는다: 게임이 다시 채우는 캐시라 "원래대로"가 낡은 값을 써 넣는다. 자리를 잰 뒤(3나-2)에 넣는다.
 		CHECK(FindCheat("cap_food") == nullptr);
