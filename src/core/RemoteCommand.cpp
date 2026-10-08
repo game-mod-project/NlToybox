@@ -422,7 +422,7 @@ namespace NlCore
 				person.Text = name->second;
 			if (NeedsIndex(person.Act) && (person.Index < 0 || person.Index >= IndexLimit(person.Act)))
 				return Fail(command, std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(IndexLimit(person.Act) - 1) + ">");
-			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
+			if (NeedsText(person.Act) && !GoodPersonText(person.Act, person.Text))
 				return Fail(command, std::string("person ") + tokens[2] + " needs name=<name>");
 			const bool trait = person.Act == PersonAct::TraitAdd || person.Act == PersonAct::TraitRemove;
 			if (trait && IsProtectedTrait(person.Text))
