@@ -31,4 +31,9 @@ namespace NlCore
 	{
 		return InGame || (AnyScreen && DataReady);
 	}
+
+	bool WalkFoundNothing(bool Restoring, size_t Held, size_t Failed)
+	{
+		return !Restoring && Held == 0 && Failed == 0;
+	}
 }

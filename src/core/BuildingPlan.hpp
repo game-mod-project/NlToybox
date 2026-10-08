@@ -2,6 +2,7 @@
 // 건물 종류(GenericBuilding)의 자료를 돌며 배율을 쓰는 일의 판단. 러너에 기대지 않는다. 걷는 것은 src/Build.cpp, 쓰는 것은 src/Jobs 의 엔진이다.
 // 거주 칸: 건물 종류.__number_of_living_places. 효과의 범위: 건물 종류.__effect.__range. research/32.
 
+#include <cstddef>
 #include <map>
 #include <string>
 
@@ -30,4 +31,8 @@ namespace NlCore
 	// 자료를 돌며 값을 쓰는 일(src/Jobs)을 지금 해도 되는가. 게임 화면에서는 언제나 한다. 게임 화면이 아니면(부팅 중, 메인 메뉴) 메뉴에서도 쓰는 일(AnyScreen)이고
 	// 게임이 건물 자료를 올린 뒤(DataReady)일 때만 한다: 부팅 중에는 건물 종류를 얻는 스크립트가 읽는 전역이 아직 없어서, 부르는 것만으로 게임이 GML 오류로 끝난다(research/34).
 	bool JobMayRun(bool InGame, bool AnyScreen, bool DataReady);
+
+	// 걸었는데 쓸 자리가 하나도 없었는가(되돌리는 중이 아닐 때). 게임이 그 자료를 아직 다 올리지 않은 것이다: 건물의 저장소는 전역이 먼저 생기고 파일을 하나씩 읽어 채워진다.
+	// 그런 걷기는 "다 썼다"로 치지 않고 곧 다시 걷는다(주기를 기다리지 않는다). Held: 바라는 값을 가진 자리의 수, Failed: 써지지 않은 자리의 수(실패는 따로 다룬다).
+	bool WalkFoundNothing(bool Restoring, size_t Held, size_t Failed);
 }

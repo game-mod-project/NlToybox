@@ -51,4 +51,15 @@ void RunBuildingTests()
 		// ("I32 argument is unset": 스크립트가 읽는 global.__building_storage 가 아직 없었다. 2026-10-08. research/34).
 		CHECK(!JobMayRun(false, true, false));
 	});
+
+	Test("건물 자료의 일: 걸었는데 쓸 자리가 하나도 없으면 다 쓴 것이 아니다", [] {
+		// WalkFoundNothing(되돌리는 중인가, 바라는 값을 가진 자리의 수, 써지지 않은 자리의 수)
+		// 부팅 중에 건물의 저장소(global.__building_storage)는 생겼는데 종류가 아직 채워지지 않은 때가 있었다: 첫 걷기가 효과 0개를 찾았고
+		// 15초 뒤의 걷기가 8칸을 썼다(2026-10-08. research/34). 그 첫 걷기를 "다 썼다"로 치지 않고 곧 다시 걷는다.
+		CHECK(WalkFoundNothing(false, 0, 0));
+		// 쓴 자리가 있으면 다 쓴 것이다. 써지지 않은 자리가 있으면 그것은 실패로 따로 다룬다.
+		CHECK(!WalkFoundNothing(false, 8, 0) && !WalkFoundNothing(false, 0, 2) && !WalkFoundNothing(false, 3, 1));
+		// 되돌리는 중에는 자리가 없어도 된다(되돌릴 것이 없다).
+		CHECK(!WalkFoundNothing(true, 0, 0) && !WalkFoundNothing(true, 5, 0));
+	});
 }

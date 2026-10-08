@@ -111,6 +111,17 @@ namespace
 			return;
 		}
 
+		if (NlCore::WalkFoundNothing(restoring, held, failed))
+		{
+			// 걸었지만 쓸 자리가 하나도 없었다: 게임이 그 자료를 아직 다 올리지 않았다(부팅 중의 건물 저장소: 전역이 먼저 생기고 종류는 나중에 채워진다. research/34).
+			// 다 썼다고 치지 않는다. 주기(Period)를 기다리지 않고 곧 다시 걷는다(간격은 Retry 가 늘린다).
+			LogOnce(J, std::string(J.Def.What) + ": nothing to write yet; walking again soon");
+			J.Retry.Failed(Now);
+			J.Settled = false;
+			J.Note = "쓸 자리를 아직 찾지 못했습니다 (다시 해 봅니다)";
+			return;
+		}
+
 		if (restoring)
 			J.Book.Forget(restored);
 		const std::string target = restoring ? "the first values" : J.Def.Zero ? "0" : "x" + Shortest(J.Target);

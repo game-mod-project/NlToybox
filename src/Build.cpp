@@ -120,7 +120,6 @@ namespace
 	{
 		if (g_EffectsLogged)
 			return;
-		g_EffectsLogged = true;
 		std::map<std::string, std::pair<std::string, std::set<const void*>>> seen;
 		std::string why;
 		NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
@@ -133,6 +132,9 @@ namespace
 			entry.second.insert(effect.m_Pointer);
 			return true;
 		}, why);
+		if (seen.empty())
+			return;		// 게임이 건물을 아직 다 올리지 않았다(부팅 중에 0개로 적은 적이 있다. research/34). 효과가 보이는 걷기에서 한 번 적는다
+		g_EffectsLogged = true;
 		Log("build: " + std::to_string(seen.size()) + " building effect(s) before any write" + (why.empty() ? "" : " (" + why + ")"));
 		for (const auto& [what, entry] : seen)
 			Log("build: effect " + what + " in " + std::to_string(entry.second.size()) + " struct(s):" + entry.first);
