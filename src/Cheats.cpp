@@ -538,8 +538,9 @@ void NlCheats::DrawPresets()
 		if (ImGui::Button(preset.Label, ImVec2(150, 0)))
 			ApplyPresetLocked(preset);
 		ImGui::SameLine();
-		ImGui::TextUnformatted(preset.Help);
+		// 설명은 창의 너비에서 줄을 바꾼다(한 줄로 그리자 '신'의 설명이 창의 오른쪽에서 잘렸다. research/32 의 화면). 이어지는 줄은 단추의 오른쪽에서 시작한다.
 		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted(preset.Help);
 		ImGui::TextDisabled("%s", PresetList(preset).c_str());
 		ImGui::PopTextWrapPos();
 		ImGui::Spacing();
