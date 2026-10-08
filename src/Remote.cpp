@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Court.hpp"
 #include "Crime.hpp"
+#include "Library.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "Events.hpp"
@@ -486,6 +487,28 @@ namespace
 			Say("  " + line);
 	}
 
+	// 지식 탭의 "도서관의 책"과 같은 길(NlLibrary::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoLibrary(const RemoteCommand& C)
+	{
+		std::vector<std::string> words = { C.Target };
+		for (const char* key : { "name", "find" })
+		{
+			const auto given = C.Options.find(key);
+			if (given != C.Options.end())
+				words.push_back(std::string(key) + "=" + given->second);
+		}
+		NlCore::LibraryCommand command;
+		std::string why;
+		if (!NlCore::ParseLibraryCommand(words, command, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		Say("  running library " + C.Target + (command.Name.empty() ? "" : " " + command.Name));		// 죽으면 여기까지 남는다
+		for (const std::string& line : NlLibrary::Do(command))
+			Say("  " + line);
+	}
+
 	// 외교 패널과 같은 일을 한다: 지금 끝까지(NlDiplomacy::Do), 또는 queue=1 이면 단추처럼 쌓기만(NlDiplomacy::Queue). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoDiplomacy(const RemoteCommand& C)
 	{
@@ -729,7 +752,7 @@ namespace
 		{ "find", DoFind }, { "refine", DoRefine }, { "write", DoWriteOrPoke }, { "poke", DoWriteOrPoke },
 		{ "record", DoRecord }, { "unrecord", DoUnrecord }, { "records", DoRecords },
 		{ "call", DoCall }, { "method", DoMethod }, { "treecall", DoTreeCall }, { "override", DoOverride }, { "unoverride", DoUnoverride },
-		{ "economy", DoEconomy }, { "person", DoPerson }, { "crime", DoCrime }, { "world", DoWorld }, { "diplomacy", DoDiplomacy }, { "court", DoCourt }, { "traits", DoTraits },
+		{ "economy", DoEconomy }, { "person", DoPerson }, { "crime", DoCrime }, { "library", DoLibrary }, { "world", DoWorld }, { "diplomacy", DoDiplomacy }, { "court", DoCourt }, { "traits", DoTraits },
 		{ "preset", DoPreset }, { "time", DoTime }, { "cheat", DoCheat }, { "page", DoPage },
 		{ "state", DoStateLine }, { "shot", DoShot }, { "window", DoWindow }, { "ui", DoUi },
 	};

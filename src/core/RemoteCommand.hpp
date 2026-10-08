@@ -40,6 +40,9 @@
 //                                                   이벤트의 표, 예약 취소, 확인된 가족의 끝내기(research/29)
 //   world event name=<이름>,  world event_now name=<이름>
 //                                                   그 이벤트를 예약한다(감독이 뽑는 날에 온다), 바로 일으킨다(게임의 조건 함수가 참일 때만. research/32)
+//   library list [find=<글>]                        도서관의 책(요약과 있는 책들. find 를 주면 그 글이 든 지식 모두. research/33)
+//   library add name=<지식>,  library add_all,  library remove name=<지식>,  library undo
+//                                                   책 한 권을 넣는다, 없는 책을 모두 넣는다, 한 권을 뺀다, 이 실행에서 모듈이 넣은 책을 뺀다(게임의 change_books)
 //   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
 //   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 게임의 디버그 평판을 하나씩 붙인다(research/19)
 //   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)

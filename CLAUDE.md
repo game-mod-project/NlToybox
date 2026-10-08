@@ -90,7 +90,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 모듈을 쓸 때
 
 - **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
-  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산).
+  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 도서관의 책은 `Library.cpp`(지식 탭의 둘째 탭). 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산).
   게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비·거주 칸·건물의 효과 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
@@ -134,6 +134,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **창의 입력 칸은 글자를 쳐 넣어 확인한다**: 원격 `ui click x= y=`, `ui type text=`, `ui key name=<enter|tab|escape|backspace>`가 Dear ImGui 의 입력 큐에만 넣는다
     (게임 창과 진짜 마우스·키보드는 건드리지 않는다. 자리는 `shot`으로 본다. Tab 은 다음 입력 칸으로 옮기며 그 칸을 보이는 데로 끌어온다). 원격 명령만으로 확인한 칸은 확인한 것이 아니다.
     `ui type`은 글자·숫자·`.`·`-`·`_`만 받는다(콜론이 든 주소는 치지 못한다: 탐색기는 뿌리 목록의 줄을 눌러 들어간다). 값을 써 넣으면 결과 줄이 생겨 아래 줄들이 내려간다. 다음 자리는 `shot`을 다시 떠서 본다.
+    **탭(`BeginTabItem`)은 같은 자리를 두 번 누른다**: Dear ImGui 의 탭은 앞 프레임에 마우스가 올라와 있어야 눌리는 항목(`AllowOverlap`)이라 첫 누름은 올려놓기만 한다(`research/33`의 끝. 단추와 입력 칸은 한 번이면 된다).
 - 게임의 판정을 바꿀 때는 그 함수가 돌려주는 값을 훅으로 바꾼다(`NlRecorder::Override`. 스펙 §3 의 수단 D. `research/09`).
   - 바꾸기 전에 `statics <주소>`로 이름을 찾고 `record`로 그 함수가 무엇을 받고 무엇을 돌려주는지 본다. 불리언·수를 돌려주는 함수만 바꾼다
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.
@@ -204,6 +205,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     "REAL argument incorrect type undefined"로 죽었다(`research/14`). 게임이 스스로 부르지 않는 함수를 처음 부를 때는 **실행의 맨 마지막에, 그 뒤에 할 일을 남기지 않고** 하나만 부르고,
     사용자에게 오류 창이 뜰 수 있다고 먼저 알린다. 불러서 된 것: `debug_force_send_bishop()`, 디버그 소환기의 `__spawn_*()`, `rebellion_debug_spawn_player_soldier()`,
     `debug_pregnancy_next_stage()`. **불러서 게임이 끝난 것**(다시 부르지 않는다): `get_summary_army_loyalty()`, `debug_start_ambush_archers()`, `start_ambush_wolves()`, `begin_pregnant()`.
+- **도서관의 책**(`src/Library.cpp`, `core/LibraryPlan`. `research/33`. 2026-10-08): 지식 영역은 탭 둘이다("영주의 지식", "도서관의 책"). 영주의 지식 패널은 남은 높이를 다 쓰는 자식 창이라 그 아래에 더 그리지 않는다.
+  - 도서관 관리자 `inst:o_game_map_controller.__library_manager`의 `__books` 는 ds_map 의 번호다: **지식 구조체 → 권수**. 열쇠는 게임의 지식 목록(`inst:o_data.__knowledge_data.__knowledge_list[n]`. 121개)의 구조체다.
+    읽을 때는 ds_map 인지와 크기를 먼저 보고(빈 도서관과 읽지 못한 것을 가른다) 열쇠의 배열에서 얻은 열쇠로 이름(`__name`)과 권수를 읽는다. 게임의 `get_books_count()`(인자 없음)는 **종류**를 센다.
+  - 넣기·빼기는 게임의 `change_books(지식 구조체, 1 | -1)`(게임이 책 사본이 만들어질 때 `(구조체, 1)`로 부른다. `-1`을 두 번 불러 칸이 없어지는 것까지 봤다). **1 과 -1 로만 부른다**(다른 수는 불러 보지 않았다).
+    함수는 `undefined`를 주므로 **권수를 앞뒤로 읽어** 정확히 1 만큼 달라졌을 때만 됐다고 적는다(`NlCore::AfterBookChange`). 한 틱에 100권 넘게 잇달아 불러도 탈이 없었다.
+  - **되돌리기는 모듈이 넣은 책만 뺀다**(`NlCore::LibraryMemory`. 이 실행 안에서만, 파일에 남기지 않는다. 그 자리의 것: `core/PlaceKey`). 읽을 때마다 기억을 지금의 권수에 맞춘다(`Clamp`).
+    모듈이 넣은 책을 게임이 한 권 더 만든 뒤에 되돌리자 모듈의 것만 빠지고 게임의 것이 남았다.
+  - 지식의 이름 둘에는 느낌표가 있다(`41!building_wooden_wall_section`, `42!building_fortification_tower`). 지식의 이름 검사는 `GoodKnowledgeName`이고 영주에게 지식 하나를 주는 일도 그것을 쓴다(`GoodPersonText`).
+    0.31.3 전에는 특성의 검사(`GoodTraitName`. 느낌표를 받지 않는다)를 써서 그 둘은 "하나 주기"가 "지식 이름이 아닙니다"로 거절됐다.
+  - **넣은 책으로 영주가 배우는 것은 보지 못했다**: 학습을 정하는 것은 게임의 도서관 창이고(`set_interaction`. 꼴을 모른다) 하루 동안 한 번도 불리지 않았다. 지식을 어떻게 얻었는지는 인물 기록의 틀로 가린다
+    (`…__character_soul.__logs_new.__logs_per_years[해][줄].__template`: `got_knowledge_from_book`, `got_knowledge_from_insight`). 지식의 수만 보고 "책으로 배웠다"고 적지 않는다(통찰이었다).
+    넣은 책이 세이브에 남는지도 저장해 보지 않았다(세이브의 도서관 자료에 `books`: 이름과 권수가 있다는 것까지).
+  - 원격 `library list [find=<글>]`(찾는 글이 없으면 도서관에 있는 책만), `library add name=<지식>`, `library add_all`, `library remove name=<지식>`, `library undo`.
 - 군대(`research/13`). 병사는 `o_dummy`이고 갈래(`__soul.__social_strata`)가 2 다. 병영의 목록은 `…__soldiers_barracks_manager.get_array_of_soldiers()`.
   - 병사 추가: `gml_Script_rebellion_debug_spawn_player_soldier()`(인자 없음). 지도 가장자리에 생겨 걸어온다. 한 틱에 20번까지 불러 봤다(`NlCore::SoldierBatch`).
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
@@ -401,7 +415,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`, `library list|add|add_all|remove|undo`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
