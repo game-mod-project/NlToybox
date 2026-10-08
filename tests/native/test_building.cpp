@@ -38,4 +38,17 @@ void RunBuildingTests()
 		CHECK(sides.Of("statue_1", 5) == EffectSide::Good);		// 나중에 값이 보이면 그때 기억한다
 		CHECK(sides.Of("statue_1", -5) == EffectSide::Good);
 	});
+
+	Test("건물 자료의 일: 게임 화면 밖에서는 게임이 자료를 올린 뒤에만 한다", [] {
+		// JobMayRun(게임 화면인가, 메뉴에서도 쓰는 일인가, 게임이 건물 자료를 올렸는가)
+		// 게임 화면에서는 언제나 한다.
+		CHECK(JobMayRun(true, false, true) && JobMayRun(true, true, true) && JobMayRun(true, false, false));
+		// 게임 화면이 아니면 보통의 일은 하지 않는다(자료가 있어도).
+		CHECK(!JobMayRun(false, false, true) && !JobMayRun(false, false, false));
+		// 메뉴에서도 쓰는 일(좋은 효과의 범위): 메인 메뉴에서는 한다. 게임이 건물 자료를 올린 뒤다.
+		CHECK(JobMayRun(false, true, true));
+		// 부팅 중에는 하지 않는다. 그 항목을 켠 채 저장해 두고 게임을 켜자 첫 틱에 건물 종류를 얻는 스크립트를 불러 게임이 끝났다
+		// ("I32 argument is unset": 스크립트가 읽는 global.__building_storage 가 아직 없었다. 2026-10-08. research/34).
+		CHECK(!JobMayRun(false, true, false));
+	});
 }

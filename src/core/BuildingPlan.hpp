@@ -26,4 +26,8 @@ namespace NlCore
 	// 병영인가. 병영과 그 밖의 거주 건물(오두막, 영주 저택, 영주관)은 배율을 따로 건다.
 	// 건물 종류의 이름이 "barrack_" 로 시작한다(barrack_10x6, barrack_6x10_grade_3). 노예 막사(slaves_barrack_*)는 병영이 아니다.
 	bool IsBarracksName(const std::string& BuildingName);
+
+	// 자료를 돌며 값을 쓰는 일(src/Jobs)을 지금 해도 되는가. 게임 화면에서는 언제나 한다. 게임 화면이 아니면(부팅 중, 메인 메뉴) 메뉴에서도 쓰는 일(AnyScreen)이고
+	// 게임이 건물 자료를 올린 뒤(DataReady)일 때만 한다: 부팅 중에는 건물 종류를 얻는 스크립트가 읽는 전역이 아직 없어서, 부르는 것만으로 게임이 GML 오류로 끝난다(research/34).
+	bool JobMayRun(bool InGame, bool AnyScreen, bool DataReady);
 }
