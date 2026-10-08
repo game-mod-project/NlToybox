@@ -94,10 +94,12 @@ void RunCheatTests()
 			CHECK(FindCheat(id) && FindCheat(id)->Min == 1 && FindCheat(id)->On == 2);
 		// 정원의 둘은 플레이에서 봤다(research/32): 집의 창이 "거주민(6 / 12)"를 보였고 오두막 셋과 병영 셋이 12명까지 찼다(원래 6).
 		CHECK(FindCheat("housing_capacity")->Verified && FindCheat("barrack_capacity")->Verified);
-		// 효과는 좋은 것(범위 배율)과 나쁜 것(없애기: 값을 0 으로)으로 나눈다. 둘 다 플레이에서 보기 전이다.
+		// 효과는 좋은 것(범위 배율)과 나쁜 것(없애기: 값을 0 으로)으로 나눈다.
+		// 좋은 효과의 범위는 플레이에서 봤다(메뉴에서 켜고 불러온 세이브에서 교회의 사각형이 넓어지고 집 일곱 채의 안락도가 올랐다).
+		// 나쁜 효과 없애기는 값이 써지고 되돌려지는 것까지다(나쁜 효과를 받는 집이 있는 세이브에서 보지 못했다).
 		CHECK(FindCheat("bad_effects_off") && FindCheat("bad_effects_off")->Kind == CheatKind::Custom && FindCheat("bad_effects_off")->Where == Area::Build);
-		for (const char* id : { "effect_range", "bad_effects_off" })
-			CHECK(FindCheat(id) && !FindCheat(id)->Verified);
+		CHECK(FindCheat("effect_range")->Verified);
+		CHECK(FindCheat("bad_effects_off") && !FindCheat("bad_effects_off")->Verified);
 		// 범죄(research/26). 주민이 범죄자가 되기 직전에 게임이 그 사람의 is_criminal_immunity()(불리언)를 묻는다. 참을 돌려주게 한 저녁에는 두 번의 시도에도
 		// 범죄자가 생기지 않았고, 그러지 않은 두 저녁에는 다섯 번·한 번의 시도에 다섯·한 명이 생겼다. 주소는 o_character 의 것으로 삼는다(게임 화면에는 o_character 가 언제나 있다).
 		CHECK(FindCheat("no_new_criminals") && FindCheat("no_new_criminals")->Kind == CheatKind::Hook && FindCheat("no_new_criminals")->On == 1
