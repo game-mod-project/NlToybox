@@ -152,6 +152,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   전역 탐색으로는 보이지 않는다(`find … in=ds`). 건설비는 `…__construction_cost.levels[등급]`(`money`, `resources.__array_of_resource_quantity[39]`)이고
   업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`의 `WalkCosts`가 자리를 넘기고 `src/Jobs`의 엔진이 0 으로 쓰고 되돌린다.
   함수가 돌려준 구조체 안은 `NlAccess::Follow`로 보고 `NlAccess::SetNumber`로 쓴다(주소의 뿌리가 없다. 쓴 뒤 다시 읽어 확인한다).
+  - **이름을 얻는 스크립트는 `return global.__building_storage.get_all_names();` 한 줄이다**(`research/34`). 그 전역(구조체 `BuildingStorage`, 칸 `__map`)은 부팅 중에는 없고,
+    없을 때 부르면 게임이 "I32 argument is unset"로 끝난다. `NlBuildings::ForEachType`은 `NlBuildings::Ready()`가 거짓이면 부르지 않는다. 전역이 생긴 뒤에도 종류는 파일을 읽으며 채워진다
+    (그 사이의 걷기는 0개를 찾는다: 엔진은 그것을 "다 썼다"로 치지 않고 곧 다시 걷는다. `NlCore::WalkFoundNothing`).
   - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Jobs`의 엔진에 그 영역의 파일이 `NlJobs::Add`로 등록한다(걷는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목).
     한 자리에 쓸 값은 `NlCore::PlanValue`가 정한다(처음 본 값이 바탕. 써 둔 값을 다시 봐도 두 번 곱하지 않는다). 열쇠는 번호가 아니라 이름으로 삼는다.
   - 창고 종류의 용량은 `inst:o_data.__building_warehouse_data.__generic_warehouses.<종류>.__capacity_in_categories.<갈래>.capacity`, 조리법은 건물 종류의
@@ -172,7 +175,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - **건물의 효과**(`src/Build.cpp`의 `WalkEffects`·`RefreshEffects`, `core/BuildingPlan`. `research/32`): 건물 종류의 `__effect` = `{ __name, __effect(주변 건물의 안락도에 더하는 수), __range(칸), __type }`. 효과를 가진 종류는 14개다
   (좋은 것: 제단·작은 교회·교회, 시장·교수대·선술집·영주관·`drug_deg`. 나쁜 것: 대장간·갑옷 대장간·용광로·숯가마·벌목장, 훈련장). 좋고 나쁨은 값의 부호다(`NlCore::EffectSideOf`).
   - **효과를 내는 건물은 만들어질 때 범위를 칸의 사각형으로 굳힌다**(`c_effect.__effect_current`의 `__x1..__y2`. 받는 건물은 `c_effect.__applied_effects`의 목록과 합 `__applied_effects_value` = 집의 창의 "안락도").
-    게임 안에서 종류의 `__range`를 바꿔도 이미 있는 건물은 그대로다. 그래서 좋은 효과의 범위(`effect_range`)는 **메인 메뉴에서도 쓴다**(`JobDef::AnyScreen`. 건물 종류는 메뉴에서도 얻어진다):
+    게임 안에서 종류의 `__range`를 바꿔도 이미 있는 건물은 그대로다. 그래서 좋은 효과의 범위(`effect_range`)는 **메인 메뉴에서도 쓴다**(`JobDef::AnyScreen`. 건물 종류는 메뉴에서도 얻어진다.
+    게임 화면 밖에서는 게임이 건물 자료를 올린 뒤에만 한다: `NlCore::JobMayRun`. 0.31.3 까지는 켠 채로 게임을 켜면 부팅 중에 스크립트를 불러 게임이 끝났다. `research/34`):
     켠 채로 세이브를 불러오면 그 세이브의 건물이 넓은 사각형으로 만들어진다(교회 6..39 → 0..51, 집 일곱 채의 안락도가 올랐다). 게임 안에서 끄면 종류의 값만 돌아온다.
   - 나쁜 효과 없애기(`bad_effects_off`)는 값(`__effect.__effect`)을 0 으로 쓰고 건물마다 `c_effect.__update_applied_effects()`를 부른다(합을 목록의 값으로 다시 낸다. 범위에 드는 건물을 다시 찾지는 않는다).
     **값을 0 으로 쓰면 부호가 사라지므로 처음 본 부호를 기억한다**(`NlCore::EffectSides`): 0 으로 써 둔 자리를 되돌릴 때 다시 찾으려고. 나쁜 효과를 받는 집이 있는 세이브에서는 보지 못했다(확인 전).
@@ -443,6 +447,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
 - **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.
+- **인자가 맞아도 때가 틀리면 끝난다**(`research/34`): 게임 화면 밖(부팅 중, 메인 메뉴, 불러오는 중)에서 게임 스크립트를 부르는 길을 만들 때는 그 스크립트가 읽는 전역이 있는지부터 본다.
+  무엇을 읽는지는 기계어로 본다: YYC 의 본문이 읽는 변수 번호의 자리(`mov edx,dword ptr [X]`)의 8바이트 앞에 그 이름을 가리키는 포인터가 있다(exe 의 `{ 이름, 번호 }` 표).
+- **켠 것이 파일에 저장되는 기능은 켠 채로 부팅해 확인한다**: `pwsh -File tools/session.ps1 -Action start -KeepSettings`(사용자의 설정을 치우지 않고 켠다. 쓰기 전에 설정 파일의 해시를 적어 두고 끝난 뒤 견준다).
+  실행 묶음은 보통 설정을 치우고 켜므로, 메뉴에서 켜 보는 것만으로는 첫 틱의 길을 밟지 않는다(그래서 위의 끝남을 놓쳤다).
 - `gameplay_variables.json`의 값은 런타임에서 `global.__gameplay_vars.<키 경로를 _ 로 이은 이름>`에 앉는다
   (`research/01-data-overlay.md`).
 - 데이터 파일의 값은 게임을 켤 때 ds_map으로 읽히고, 게임을 시작하면 일부가 `o_debug`와 `o_province_controller`의

@@ -26,4 +26,14 @@ namespace NlCore
 	{
 		return BuildingName.rfind("barrack_", 0) == 0;
 	}
+
+	bool JobMayRun(bool InGame, bool AnyScreen, bool DataReady)
+	{
+		return InGame || (AnyScreen && DataReady);
+	}
+
+	bool WalkFoundNothing(bool Restoring, size_t Held, size_t Failed)
+	{
+		return !Restoring && Held == 0 && Failed == 0;
+	}
 }

@@ -205,6 +205,7 @@ Norland용 네이티브 코드 모드 작업 공간. Aurie + YYToolkit 위에 C+
 - `research/31-map-generator.md` — 지도 생성기: 새 게임의 영지 지도를 정하는 값과 다시 생성하는 길(스파이크)
 - `research/32-living-effects-instant-events.md` — 주택·병영의 거주 칸(정원), 건물의 효과와 범위(만들어질 때 사각형으로 굳는다), 이벤트를 바로 일으키는 게임의 함수
 - `research/33-library-books.md` — 도서관의 책: 지식마다의 권수가 있는 자리, 책을 넣고 빼는 게임의 함수, 모드가 넣은 책만 되돌리기, 보지 못한 것(책으로 배우기, 세이브)
+- `research/34-boot-crash-effect-range.md` — "좋은 효과의 범위 배율"을 켠 채로 게임을 켜면 부팅 중에 끝나던 것: 건물 종류를 얻는 스크립트가 읽는 전역, 고침, 켠 채로 부팅하는 확인
 - `CLAUDE.md` — 레포 규칙
 
 ## 라이선스
