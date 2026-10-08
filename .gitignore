@@ -17,3 +17,4 @@ __pycache__/
 **/.omc/
 .superpowers/
 .semgrep/
+.claude/worktrees/

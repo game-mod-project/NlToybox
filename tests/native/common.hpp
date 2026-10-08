@@ -6,6 +6,7 @@
 #include "core/JobTally.hpp"
 #include "core/BattlePlan.hpp"
 #include "core/Binding.hpp"
+#include "core/BuildingPlan.hpp"
 #include "core/CallLog.hpp"
 #include "core/CheatState.hpp"
 #include "core/CheatTable.hpp"
@@ -74,6 +75,7 @@ void RunKnobsTests();
 void RunEconomyTests();
 void RunCheatTests();
 void RunCostBookTests();
+void RunBuildingTests();
 void RunHooksTests();
 void RunRateTests();
 void RunRemoteTests();

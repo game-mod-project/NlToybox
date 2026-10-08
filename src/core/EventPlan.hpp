@@ -72,6 +72,12 @@ namespace NlCore
 	std::string ForcedEventText(bool Read, bool Present, const std::string& Name);
 	// 일으키기의 결과. Outcome: 'n' 그 이름의 이벤트가 없다, 'w' 쓰지 못했다(Why), 'd' 써 두었다(감독이 다음에 뽑을 때 고른다. research/28).
 	std::string ForceEventReport(const std::string& Name, char Outcome, const std::string& Why);
+	// 바로 일으키기(research/32). 게임은 이벤트를 뽑을 때 그 이벤트의 __is_available() 을 묻고, 생길 시각에 __spawn_method() 를 인자 없이 부른다.
+	// 조건의 답이 참일 때만 일으킨다. IsNumber: 답이 수(불리언 포함)다. Value: 그 수. 거짓과 undefined(손님이 이미 와 있을 때의 손님 이벤트)는 아니다.
+	bool EventAvailable(bool IsNumber, double Value);
+	// 바로 일으키기의 결과. 'n' 그 이름의 이벤트가 없다, 'm' 조건 함수를 부르지 못했다(Detail), 'a' 조건이 맞지 않는다(Detail 에 답),
+	// 'f' 만드는 함수를 부르지 못했다(Detail), 'd' 일으켰고 쿨다운에 올랐다(Detail 에 남은 날), 'c' 일으켰지만 쿨다운은 올리지 못했다(Detail).
+	std::string InstantEventReport(const std::string& Name, char Outcome, const std::string& Detail);
 	// 취소의 결과. 'n' 예약이 없었다, 'f' 함수를 부르지 못했다(Detail 에 까닭), 'u' 부른 뒤에도 남아 있다(Detail 에 이름), 'd' 지웠다(Detail 에 이름).
 	std::string CancelEventReport(char Outcome, const std::string& Detail);
 	// 끝내기의 결과. 'x' 확인 전, 'n' 진행 중이 아니다, 'f' 부르지 못했다(Detail), 'u' 부른 뒤에도 그대로다, 'd' 끝냈다(Detail 에 이름).
