@@ -1,8 +1,10 @@
 #include "Jobs.hpp"
 
 #include "Access.hpp"
+#include "Buildings.hpp"
 #include "Cheats.hpp"
 #include "Game.hpp"
+#include "core/BuildingPlan.hpp"
 #include "core/CostBook.hpp"
 #include "core/Knobs.hpp"
 #include "core/Retry.hpp"
@@ -109,6 +111,17 @@ namespace
 			return;
 		}
 
+		if (NlCore::WalkFoundNothing(restoring, held, failed))
+		{
+			// 걸었지만 쓸 자리가 하나도 없었다: 게임이 그 자료를 아직 다 올리지 않았다(부팅 중의 건물 저장소: 전역이 먼저 생기고 종류는 나중에 채워진다. research/34).
+			// 다 썼다고 치지 않는다. 주기(Period)를 기다리지 않고 곧 다시 걷는다(간격은 Retry 가 늘린다).
+			LogOnce(J, std::string(J.Def.What) + ": nothing to write yet; walking again soon");
+			J.Retry.Failed(Now);
+			J.Settled = false;
+			J.Note = "쓸 자리를 아직 찾지 못했습니다 (다시 해 봅니다)";
+			return;
+		}
+
 		if (restoring)
 			J.Book.Forget(restored);
 		const std::string target = restoring ? "the first values" : J.Def.Zero ? "0" : "x" + Shortest(J.Target);
@@ -160,10 +173,15 @@ namespace
 		}
 		if (!want && J.Book.Empty())
 			return;						// 되돌릴 것이 없다
-		if (!J.Def.AnyScreen && !NlAccess::InGame())
+		// 게임 화면 밖(부팅 중, 메인 메뉴)에서는 메뉴에서도 쓰는 일만, 그것도 게임이 건물 자료를 올린 뒤에만 한다(core 의 JobMayRun).
+		// 켠 채 저장된 항목은 첫 틱부터 여기에 온다: 부팅 중에 건물 종류를 얻는 스크립트를 부르면 게임이 끝난다(research/34). 기다리는 동안은 실패로 세지 않는다(1초마다 다시 본다).
+		const bool in_game = NlAccess::InGame();
+		if (!NlCore::JobMayRun(in_game, J.Def.AnyScreen, !in_game && J.Def.AnyScreen && NlBuildings::Ready()))
 		{
 			if (want)
-				NlCheats::SetNote(J.Def.Cheat, "게임을 시작하면 적용");
+				NlCheats::SetNote(J.Def.Cheat, J.Def.AnyScreen ? "게임이 자료를 읽은 뒤에 적용" : "게임을 시작하면 적용");
+			if (want && J.Def.AnyScreen)
+				LogOnce(J, std::string(J.Def.What) + ": waiting until the game has loaded its buildings");		// 부팅 중에 기다렸다는 것이 로그에 남는다
 			return;
 		}
 		if (!J.Retry.Due(Now) || (J.Settled && Now < J.NextPass))
