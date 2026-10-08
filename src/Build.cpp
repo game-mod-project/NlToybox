@@ -6,10 +6,13 @@
 #include "Jobs.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/BuildingPlan.hpp"
 #include "core/Retry.hpp"
 #include "core/Text.hpp"
 
 #include <algorithm>
+#include <map>
+#include <set>
 
 using namespace YYTK;
 using NlAccess::Holder;
@@ -61,6 +64,77 @@ namespace
 				});
 				return true;
 			});
+			return true;
+		}, Why);
+	}
+
+	// ---- 거주 칸과 효과의 범위 (research/32) ----
+
+	// 거주 칸(치트 표의 housing_capacity·barrack_capacity): 건물 종류의 __number_of_living_places 를 엔진에 넘긴다. Key 는 건물 종류의 이름.
+	// 병영(core/BuildingPlan 의 IsBarracksName)과 그 밖을 따로 걷는다. 0 인 칸은 엔진의 장부가 받지 않는다(거주 건물이 아니다).
+	bool WalkLiving(const NlJobs::Visit& V, bool Barracks, std::string& Why)
+	{
+		const PathStep step{ '.', "__number_of_living_places", 0 };
+		return NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
+			RValue places;
+			std::string ignored;
+			if (NlCore::IsBarracksName(building) == Barracks && NlAccess::Follow(generic, { step }, places, ignored))
+				V(generic, step, building, 0, -1, places);
+			return true;
+		}, Why);
+	}
+
+	bool WalkHousing(const NlJobs::Visit& V, std::string& Why) { return WalkLiving(V, false, Why); }
+	bool WalkBarracks(const NlJobs::Visit& V, std::string& Why) { return WalkLiving(V, true, Why); }
+
+	bool g_EffectsLogged = false;		// 효과의 목록은 한 실행에 한 번만 적는다
+
+	// 구조체의 멤버 하나를 로그에 적을 글로(글은 그대로, 수는 가장 짧게, 그 밖과 없는 것은 "?").
+	std::string Brief(const RValue& In, const char* Member)
+	{
+		RValue value;
+		std::string ignored;
+		if (!NlAccess::Follow(In, { { '.', Member, 0 } }, value, ignored))
+			return "?";
+		return value.IsString() ? value.ToString() : NlGame::IsNumber(value) ? NlCore::Shortest(value.ToDouble()) : "?";
+	}
+
+	// 건물 종류마다의 효과를 로그에 적는다(쓰기 전의 값으로): 효과(이름, 범위, 크기, 종류)마다 그것을 가진 건물 종류들과 구조체의 수.
+	// 어느 건물이 어떤 효과를 갖는지, 건물 종류들이 한 구조체를 함께 쓰는지를 이 빌드에서 보려고 둔다.
+	void LogEffects()
+	{
+		std::map<std::string, std::pair<std::string, std::set<const void*>>> seen;
+		std::string why;
+		NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
+			RValue effect;
+			std::string ignored;
+			if (!NlAccess::Follow(generic, { { '.', "__effect", 0 } }, effect, ignored) || !effect.IsStruct())
+				return true;
+			auto& entry = seen[Brief(effect, "__name") + " range " + Brief(effect, "__range") + " effect " + Brief(effect, "__effect") + " type " + Brief(effect, "__type")];
+			entry.first += " " + building;
+			entry.second.insert(effect.m_Pointer);
+			return true;
+		}, why);
+		Log("build: " + std::to_string(seen.size()) + " building effect(s) before any write" + (why.empty() ? "" : " (" + why + ")"));
+		for (const auto& [what, entry] : seen)
+			Log("build: effect " + what + " in " + std::to_string(entry.second.size()) + " struct(s):" + entry.first);
+	}
+
+	// 건물 효과의 범위(치트 표의 effect_range): 건물 종류의 __effect.__range 를 엔진에 넘긴다. Key 는 건물 종류의 이름.
+	// 건물 종류들이 한 구조체를 함께 쓰면 엔진이 그 자리를 한 번만 다룬다(같은 훑기에서 같은 자리는 건너뛴다).
+	bool WalkEffectRanges(const NlJobs::Visit& V, std::string& Why)
+	{
+		if (!g_EffectsLogged)
+		{
+			g_EffectsLogged = true;
+			LogEffects();
+		}
+		const PathStep step{ '.', "__range", 0 };
+		return NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
+			RValue effect, range;
+			std::string ignored;
+			if (NlAccess::Follow(generic, { { '.', "__effect", 0 } }, effect, ignored) && effect.IsStruct() && NlAccess::Follow(effect, { step }, range, ignored))
+				V(effect, step, building, 0, -1, range);
 			return true;
 		}, Why);
 	}
@@ -134,6 +208,10 @@ void NlBuild::Init(LogFn Log_)
 	g_Log = std::move(Log_);
 	// 주기 2초: 앞의 Retry(2초부터 두 배씩)가 "아직 0 인가"를 다시 보던 것과 같은 뜻이다. 엔진은 다 쓴 뒤 주기마다 훑어 바뀐 것만 쓴다.
 	NlJobs::Add({ "build_free", "construction costs", true, &WalkCosts, nullptr, 2 });
+	// 건물 종류의 자료는 게임이 켜질 때 만들어진다. 15초마다 다시 훑어 게임이 다시 만들었으면 다시 쓴다(조리법과 같다).
+	NlJobs::Add({ "housing_capacity", "living places (housing)", false, &WalkHousing, nullptr, 15 });
+	NlJobs::Add({ "barrack_capacity", "living places (barracks)", false, &WalkBarracks, nullptr, 15 });
+	NlJobs::Add({ "effect_range", "effect ranges", false, &WalkEffectRanges, nullptr, 15 });
 }
 
 void NlBuild::GameTick(double Now)

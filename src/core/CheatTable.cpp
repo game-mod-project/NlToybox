@@ -164,6 +164,12 @@ namespace NlCore
 				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
+			// 건물 효과의 범위(research/32). 건물 종류의 __effect 구조체에 __name·__effect·__range·__type 이 있다(castle: public_place_nearby, 범위 8).
+			// 게임의 현지화 파일에 효과의 이름이 여섯 있다(no_church, public_place_nearby, water_nearby, living_zone, quality_work, burned).
+			// src/Build.cpp 가 건물 종류를 돌며 __range 에 배율을 쓰고, 처음 걸을 때 종류마다의 효과를 로그에 적는다.
+			// 어느 건물이 어떤 효과와 범위를 갖는지, 게임이 그 수를 언제 읽는지는 재지 않았다.
+			{ "effect_range", Area::Build, "건물 효과의 범위 배율", "inst:o_building.generic.__effect.__range", CS, 2, 0, 1, 10, false,
+				"건물 종류마다의 효과(공공장소 근처, 교회 없음, 물 근처 …)가 미치는 범위에 곱한다. 끄면 원래 범위로 되돌린다. 효과는 확인 전" },
 
 			// 인구·욕구(research/11). 욕구는 __soul.__motive.__motive[6](0 수면, 1 음식, 2 휴식, 3 신앙심, 4 성관계, 5 돌봄)에 있다.
 			// 모듈(src/People.cpp)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다.
@@ -188,6 +194,12 @@ namespace NlCore
 			// 게임이 이주 때 이 값을 0 으로 되돌린다. 값을 정해 두면 다시 써 넣으므로 날마다 그만큼 더 온다. 켠 채 저장하면 세이브에 남는다(그 열쇠가 있다).
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
 				N, 0, 0, 0, 50, true, "다음 이주 때(하루에 한 번, 저녁) 이 수만큼 더 온다. 값을 정해 두면 날마다 그만큼 더 온다" },
+			// 거주 칸(research/32). 건물 종류(GenericBuilding)마다 __number_of_living_places 가 있다(castle 에서 2 를 봤다).
+			// 게임의 건물 자료에서 0 보다 큰 것은 오두막·영주 저택·영주관·병영이다. src/Build.cpp 가 건물 종류를 돌며 그 칸에 배율을 쓴다
+			// (src/Jobs 의 엔진: 처음 본 값이 바탕, 끄면 되돌린다. 정수는 정수로 남는다). 병영은 군대 영역의 barrack_capacity 가 따로 한다.
+			// 세이브에 그 열쇠는 없다(거주자의 목록은 있다). 이미 지은 집이 따르는지, 끈 뒤 정원을 넘는 거주자를 게임이 어떻게 다루는지는 재지 않았다.
+			{ "housing_capacity", Area::People, "주택 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, false,
+				"병영을 뺀 거주 건물(오두막, 영주 저택, 영주관)의 종류마다 거주 칸의 수에 곱한다. 끄면 원래 수로 되돌린다. 효과는 확인 전" },
 
 			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/Production.cpp 의 WalkVars. 열쇠는 core/FamilyPlan).
 			// global.__gameplay_vars 에 pregnancy_chance, pregnancy_from_dummy_chance, pregnancy_miscarriage_chance, pregnancy_mother_die, trait_death_in_childbirth 가 있다.
@@ -221,6 +233,9 @@ namespace NlCore
 			{ "hire_cost", Area::Army, "병사 고용 값 배율",
 				"gml_Script_anon_SoulBasic_gml_GlobalScript_SoulBasic_11987516072_SoulBasic_gml_GlobalScript_SoulBasic",
 				HS, 0.1, 1, 0.01, 1, true, "병사를 고용할 때 내는 금화에 곱한다(0.1 이면 10분의 1). 고용 창을 다시 열면 보인다" },
+			// 병영의 거주 칸(research/32). 주택 정원 배율(housing_capacity)과 같은 칸이고 건물 종류의 이름이 barrack_ 로 시작하는 것만 한다(core/BuildingPlan).
+			{ "barrack_capacity", Area::Army, "병영 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, false,
+				"병영의 종류마다 거주 칸의 수에 곱한다. 끄면 원래 수로 되돌린다. 효과는 확인 전" },
 
 			// 아군 무적(research/13). 상처는 SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true 가 입힌다. 그 함수를 모두에게 건너뛰게 하자
 			// 도적 무리와 6,371번 맞는 동안(치명상 포함) 새 상처가 하나도 생기지 않았다. 이 항목은 self 가 플레이어의 영혼일 때만 건너뛴다
