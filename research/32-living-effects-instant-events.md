@@ -88,7 +88,11 @@
 - `core/BuildingPlan`(`IsBarracksName`, `EffectSideOf`, `EffectSides`), `src/Build.cpp`(`WalkLiving`, `WalkEffects`, `RefreshEffects`, 효과의 목록을 로그에), `src/Jobs`(`JobDef::AnyScreen`).
   치트 표: `housing_capacity`(인구), `barrack_capacity`(군대), `effect_range`(건설. 좋은 효과의 범위 배율), `bad_effects_off`(건설. 확인 전).
 - `core/EventPlan`(`EventAvailable`, `InstantEventReport`), `core/WorldPlan`(`WorldAct::EventNow`, 낱말 `event_now`), `src/Events.cpp`(`SpawnEventNow`, 줄의 "지금"·"예약" 단추, 청을 이름과 함께 쌓는다).
-- 화면에서 본 것: 건설·인구·군대 패널의 새 항목과 상태 줄, 이벤트 패널의 "지금"·"예약" 단추와 찾기. **결과의 줄을 표의 위로 옮긴 것은 둘째 실행 뒤의 고침이라 화면으로 보지 못했다.**
+- 화면에서 본 것: 건설·인구·군대 패널의 새 항목과 상태 줄, 이벤트 패널의 "지금"·"예약" 단추와 찾기.
+- 셋째 켜기(마지막 빌드 `559da9f` 의 적재 판정. `refs/runtime/living-range-events-run3.*`, `refs/ui/events-result-top.png`·`build-final.png`): 적재 판정 PASS, 모듈 로그에 오류 줄 없음, 게임의 오류 파일에 새 ERROR 없음.
+  둘째 켜기에서 결과의 줄이 패널의 맨 아래에 있어 거절한 까닭이 스크롤해야 보였다. 표의 위로 옮긴 뒤 `world event_now name=raid_bandits` 의 답
+  "마지막 한 일: raid_bandits: 게임의 조건이 지금 맞지 않아 일으키지 않았습니다 (__is_available 의 답: false)"가 "예약된 이벤트" 바로 아래에 보였다.
+  건설 패널의 "좋은 효과의 범위 배율"에는 확인 전 표시가 없고 "나쁜 효과 없애기"에는 있다.
 
 ## 남은 것
 
