@@ -99,6 +99,12 @@
 - 확인된 셋(`housing_capacity`, `barrack_capacity`, `effect_range`)을 샌드박스와 신 묶음에 잰 배율 x2 로 넣었다(2026-10-08 에 사용자가 넣기로 했다. 다른 배율은 재지 않았다). 쉬움에는 넣지 않았다.
   `bad_effects_off` 는 확인 전이라 어느 묶음에도 없다(`CheckPreset` 이 막는다).
 - 범위 배율은 건물이 만들어질 때 먹으므로 묶음을 건 뒤 세이브를 다시 불러와야 이미 지은 건물에 보인다(프리셋 패널의 위쪽 글에 적었다).
+- 확인(켜기 1번. `refs/runtime/presets-capacity-range-run1.*`, `refs/ui/presets-sandbox.png`·`presets-god.png`. 적재 판정 PASS, 모듈 로그에 오류 줄 없음, 새 세이브 파일 없음):
+  - **메인 메뉴에서** `preset sandbox` → "12개를 켜 두고 …"(끝의 셋이 주택 정원 배율 x2, 병영 정원 배율 x2, 좋은 효과의 범위 배율 x2). 메뉴에서 `good effect ranges: wrote 8 value(s) to x2`.
+  - 세이브를 불러오자 `living places (housing): wrote 25 … x2`, `(barracks): wrote 6 … x2`. 정원 6·6·2 → 12·12·4(오두막, 병영, 영주 저택), 교회의 사각형 0..51 × 52..111, 안락도 12·12·12·20 → 19·19·19·23(b5, b6, b9, b46).
+  - `preset god` → 17개. 정원과 범위는 그대로 12·12·24(두 번 곱하지 않았다). `preset normal` → 0개, 정원 6·6 과 종류의 범위 12 로 돌아왔다(일곱 일이 모두 `to the first values`).
+  - 프리셋 패널: 샌드박스와 신의 목록에 셋이 보이고 위쪽 글에 범위 배율의 안내가 보인다. 불러온 뒤의 "지금 표의 상태"는 "어느 묶음과도 다릅니다 (켠 항목 13개)"였다(`load-save.ps1` 이 켠 `no_autosave` 하나가 더 있다).
+  - **본 것**: 신의 단추 옆 설명이 창의 오른쪽에서 잘린다("… 싸울 때 아군의 전"에서. 이 변경 전부터 있던 글이다). 고치지 않았다.
 
 ## 남은 것
 
