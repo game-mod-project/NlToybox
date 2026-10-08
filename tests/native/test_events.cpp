@@ -120,7 +120,7 @@ void RunEventsTests()
 		CHECK(IsEventAct(WorldAct::EventForce) && IsEventAct(WorldAct::EventCancel) && IsEventAct(WorldAct::EventEnd) && IsEventAct(WorldAct::EventList) && IsEventAct(WorldAct::CooldownsClear));
 		CHECK(!IsEventAct(WorldAct::BishopSend) && !IsEventAct(WorldAct::SaveNow) && !IsEventAct(WorldAct::SeasonShow));
 		CHECK(WorldActNeedsKind(WorldAct::EventEnd) && !WorldActNeedsKind(WorldAct::EventForce) && !WorldActNeedsName(WorldAct::EventEnd));
-		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end");
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end, event_now");
 		const RemoteCommand list = ParseRemoteLine("world events group=GUEST find=bard");
 		CHECK(list.Error.empty() && list.Target == "events" && list.Options.at("group") == "GUEST" && list.Options.at("find") == "bard");
 		CHECK(ParseRemoteLine("world events").Error.empty());
@@ -128,5 +128,34 @@ void RunEventsTests()
 		const RemoteCommand end = ParseRemoteLine("world event_end kind=raid");
 		CHECK(end.Error.empty() && end.Target == "event_end" && end.Options.at("kind") == "raid");
 		CHECK(!ParseRemoteLine("world event_end").Error.empty() && !ParseRemoteLine("world event_end kind=x").Error.empty() && !ParseRemoteLine("world event_end kind=rebellion").Error.empty());
+	});
+
+	Test("이벤트: 바로 일으키기의 낱말과 원격의 줄", [] {
+		WorldAct act = WorldAct::CooldownsClear;
+		CHECK(ParseWorldAct("event_now", act) && act == WorldAct::EventNow && std::string(WorldActWord(WorldAct::EventNow)) == "event_now");
+		CHECK(WorldActChanges(WorldAct::EventNow) && IsEventAct(WorldAct::EventNow) && WorldActNeedsName(WorldAct::EventNow) && !WorldActNeedsKind(WorldAct::EventNow));
+		const RemoteCommand now = ParseRemoteLine("world event_now name=reward_rich_migrants");
+		CHECK(now.Error.empty() && now.Target == "event_now" && now.Options.at("name") == "reward_rich_migrants");
+		// 이름이 없거나 꼴이 틀리면 받지 않는다(예약과 같다)
+		CHECK(!ParseRemoteLine("world event_now").Error.empty() && !ParseRemoteLine("world event_now name=").Error.empty() && !ParseRemoteLine("world event_now name=a-b").Error.empty());
+	});
+
+	Test("이벤트: 게임의 조건 함수가 참이라고 답할 때만 바로 일으킨다", [] {
+		// __is_available() 의 답(research/32): 보상·늑대 예언은 true, 습격·반란·음모는 false, 손님이 이미 와 있을 때의 손님 이벤트는 undefined.
+		CHECK(EventAvailable(true, 1));
+		CHECK(!EventAvailable(true, 0));		// false
+		CHECK(!EventAvailable(false, 0));		// undefined 나 수가 아닌 값
+		CHECK(!EventAvailable(false, 1));
+		CHECK(!EventAvailable(true, std::numeric_limits<double>::quiet_NaN()));
+	});
+
+	Test("이벤트: 바로 일으키기의 결과의 글", [] {
+		CHECK_STR(InstantEventReport("u_guest_bard", 'n', ""), "u_guest_bard: 게임에 그 이름의 이벤트가 없습니다");
+		CHECK_STR(InstantEventReport("raid_bandits", 'm', "why"), "raid_bandits: 게임의 조건 함수(__is_available)를 부르지 못해 일으키지 않았습니다 (why)");
+		CHECK_STR(InstantEventReport("raid_bandits", 'a', "false"), "raid_bandits: 게임의 조건이 지금 맞지 않아 일으키지 않았습니다 (__is_available 의 답: false)");
+		CHECK_STR(InstantEventReport("raid_bandits", 'f', "why"), "raid_bandits: 이벤트를 만드는 함수(__spawn_method)를 부르지 못했습니다 (why)");
+		CHECK_STR(InstantEventReport("reward_rich_migrants", 'd', "14"), "reward_rich_migrants: 바로 일으켰습니다 (쿨다운 14일)");
+		// 생성은 불렀지만 쿨다운에 오르지 않았다: 일으킨 것까지만 말한다
+		CHECK_STR(InstantEventReport("reward_rich_migrants", 'c', "why"), "reward_rich_migrants: 바로 일으켰습니다. 쿨다운은 올리지 못했습니다 (why)");
 	});
 }

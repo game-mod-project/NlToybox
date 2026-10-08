@@ -50,6 +50,7 @@ int main(int argc, char** argv)
 	RunEconomyTests();
 	RunCheatTests();
 	RunCostBookTests();
+	RunBuildingTests();
 	RunHooksTests();
 	RunRateTests();
 	RunRemoteTests();

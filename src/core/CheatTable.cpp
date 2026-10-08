@@ -10,20 +10,20 @@ namespace NlCore
 			{ Area::Explorer, "explorer", "탐색기", 2, true },
 			{ Area::Economy, "economy", "경제", 3, true },
 			{ Area::Build, "build", "건설·생산", 3 },
-			// 인물·영주·인구는 제 패널(src/People.cpp)이 있다.
+			// 인물·영주·인구는 제 패널(src/PeopleDraw.cpp)이 있다.
 			{ Area::Person, "person", "인물", 4, true },
 			{ Area::Lord, "lord", "영주", 4, true },
 			{ Area::People, "people", "인구·욕구", 4, true },
-			// 지식·아이템도 제 패널(src/People.cpp)이 있다.
+			// 지식·아이템도 제 패널(src/PeopleDraw.cpp)이 있다.
 			{ Area::Knowledge, "knowledge", "지식", 5, true },
 			{ Area::Items, "items", "아이템", 5, true },
-			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/People.cpp)
+			{ Area::Army, "army", "군대·전투", 5, true },		// 병사를 만드는 단추(src/PeopleDraw.cpp)
 			{ Area::Crime, "crime", "범죄", 7, true },				// 부랑자와 영주의 죄(src/Crime.cpp. research/26)
 			{ Area::Diplomacy, "diplomacy", "외교", 6, true },		// 왕국과의 관계(src/Diplomacy.cpp)
 			{ Area::Religion, "religion", "종교", 6, true },		// 주교 부르기(src/World.cpp)
 			{ Area::Time, "time", "시간", 2, true },
 			{ Area::World, "world", "월드", 6 },
-			{ Area::Events, "events", "이벤트", 6, true },			// 이벤트 쿨다운 지우기(src/World.cpp)
+			{ Area::Events, "events", "이벤트", 6, true },			// 이벤트의 표, 바로 일으키기·예약, 쿨다운 지우기(src/Events.cpp)
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7, true },		// 확인된 항목의 묶음(core/Presets, src/Cheats.cpp)
 		};
@@ -164,9 +164,29 @@ namespace NlCore
 				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
+			// 건물의 효과(research/32). 건물 종류의 __effect 구조체에 __name·__effect(주변 건물의 안락도에 더하는 수)·__range(칸)·__type 이 있다.
+			// 이 빌드에서 효과를 가진 종류는 14개다. 좋은 효과: religious_nearby(제단 +3, 작은 교회 +5, 교회 +7. 범위 12),
+			// public_place_nearby(시장·교수대·선술집·영주관·drug_deg +3. 범위 8). 나쁜 효과: 대장간·갑옷 대장간·용광로·숯가마·벌목장 -4(범위 6), 훈련장 -8(범위 8).
+			// 효과를 내는 건물은 지어질 때 범위를 칸의 사각형(c_effect.__effect_current 의 __x1..__y2)으로 굳혀 두고, 받는 건물은 그 목록과 합
+			// (c_effect.__applied_effects, __applied_effects_value = 집의 창의 "안락도")을 들고 있다.
+			// 그래서 게임 안에서 종류의 __range 를 바꿔도 이미 지은 건물의 사각형은 그대로였다(두 배로 써 둔 아홉 시간 반 동안 집 28채의 안락도가 그대로).
+			// 건물 종류는 메인 메뉴에서도 얻어진다(171개). 그래서 이 일은 메뉴에서도 쓴다(src/Build.cpp 의 AnyScreen): 세이브를 불러오기 전에 써 두면 그 세이브의 건물이 넓은 사각형으로 만들어진다.
+			// 플레이에서 봤다(2026-10-08, 0.31.0. research/32): 메뉴에서 2 를 걸자 좋은 8종에 써졌고(나쁜 6종은 그대로), 불러온 세이브에서 교회의 사각형이
+			// 6..39 x 64..99 -> 0..51 x 52..111, 집 일곱 채의 안락도가 올랐다(오두막 다섯 12 -> 19, 병영 둘 20 -> 23). 용광로·훈련장의 사각형은 그대로였다.
+			// 게임 안에서 끄면 종류의 값은 돌아오지만 이미 넓게 만들어진 건물은 그대로다(다음에 불러올 때 원래대로). 켠 뒤에 새로 짓는 건물은 재지 않았다.
+			// 이미 지은 건물에 바로 먹이는 길(BuildingEffectsManager 의 register_building·update_buildings_for_effect)은 게임이 부르는 꼴을 못 봤다.
+			{ "effect_range", Area::Build, "좋은 효과의 범위 배율", "inst:o_building.generic.__effect.__range", CS, 2, 0, 1, 10, true,
+				"안락도를 올리는 효과(교회·제단, 시장·선술집·영주관 같은 공공장소)가 미치는 범위에 곱한다. 끄면 원래 범위로 되돌린다.\n"
+				"건물은 만들어질 때 범위를 굳힌다: 켠 채로 세이브를 불러오면 그 세이브의 건물에 먹는다(이미 불러온 게임의 건물은 다음에 불러올 때부터)" },
+			// 나쁜 효과 없애기: 값(__effect.__effect)을 0 으로 쓰고 건물마다 게임의 c_effect.__update_applied_effects()(인자 없음. 본문이 argc 를 읽지 않는다)로 합을 다시 내게 한다.
+			// 교회로 길을 봤다: 종류의 값 7 을 0 으로 쓰고 그 함수를 부르자 그 교회의 효과를 받던 집의 안락도가 19 -> 12, 되돌리고 부르자 19.
+			// 켜자 나쁜 6종의 값이 0 이 되고(용광로 -4, 훈련장 -8 -> 0. 교회 7·선술집 3 은 그대로) 건물 58채에 그 함수를 불렀고, 끄자 원래 값으로 돌아왔다.
+			// 나쁜 효과를 받는 집이 있는 세이브에서는 보지 못했다(아덴 세이브의 용광로·훈련장 범위에는 집이 없다).
+			{ "bad_effects_off", Area::Build, "나쁜 효과 없애기", "inst:o_building.generic.__effect.__effect", C, 1, 0, 0, 0, false,
+				"안락도를 깎는 효과(대장간·용광로·숯가마·벌목장, 훈련장)의 크기를 0 으로 쓰고 집들의 안락도를 다시 셈하게 한다. 끄면 원래 크기로 되돌린다. 효과는 확인 전" },
 
 			// 인구·욕구(research/11). 욕구는 __soul.__motive.__motive[6](0 수면, 1 음식, 2 휴식, 3 신앙심, 4 성관계, 5 돌봄)에 있다.
-			// 모듈(src/People.cpp)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다.
+			// 모듈(src/Hold.cpp 의 바퀴)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다.
 			// 플레이에서 봤다(2026-10-06, 0.10.0): 켜자 플레이어의 사람 29명의 칸이 100 으로 유지됐고 손님은 그대로였다. "배고픔 없음"은 음식 칸만,
 			// "피로 없음"은 수면·휴식 칸만 채웠다. 끄자 그때부터 평소대로 줄었다. 켜 둔 채 식량이 줄지 않는지는 하루를 돌려 보지 못했다.
 			{ "no_hunger", Area::People, "배고픔 없음", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
@@ -188,8 +208,17 @@ namespace NlCore
 			// 게임이 이주 때 이 값을 0 으로 되돌린다. 값을 정해 두면 다시 써 넣으므로 날마다 그만큼 더 온다. 켠 채 저장하면 세이브에 남는다(그 열쇠가 있다).
 			{ "daily_migrants", Area::People, "날마다 추가 이주민", "inst:o_game_map_controller.__province.__migration_manager.__next_day_migrants_bonus",
 				N, 0, 0, 0, 50, true, "다음 이주 때(하루에 한 번, 저녁) 이 수만큼 더 온다. 값을 정해 두면 날마다 그만큼 더 온다" },
+			// 거주 칸(research/32). 건물 종류(GenericBuilding)마다 __number_of_living_places 가 있다(castle 에서 2 를 봤다).
+			// 게임의 건물 자료에서 0 보다 큰 것은 오두막·영주 저택·영주관·병영이다. src/Build.cpp 가 건물 종류를 돌며 그 칸에 배율을 쓴다
+			// (src/Jobs 의 엔진: 처음 본 값이 바탕, 끄면 되돌린다. 정수는 정수로 남는다). 병영은 군대 영역의 barrack_capacity 가 따로 한다.
+			// 세이브에 그 열쇠는 없다(거주자의 목록은 있다).
+			// 플레이에서 봤다(2026-10-08, 0.31.0. research/32): 2 를 걸자 25종에 써졌고 건물의 get_number_of_living_places() 가 6 -> 12(오두막, 노예 막사), 2 -> 4(영주 저택, 영주관)가 됐다.
+			// 집의 창이 "거주민(6 / 12)"를 보였고, 이주민과 만든 농민이 들어와 오두막 셋이 12명이 됐다(원래 6).
+			{ "housing_capacity", Area::People, "주택 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, true,
+				"병영을 뺀 거주 건물(오두막, 영주 저택, 영주관, 노예 막사)의 종류마다 거주 칸의 수에 곱한다. 이미 지은 집도 바로 따른다.\n"
+				"끄면 원래 수로 되돌린다(이미 들어와 사는 사람은 남는 것으로 보인다: 병영에서 아홉 시간 동안 그랬다)" },
 
-			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/Production.cpp 의 WalkVars. 열쇠는 core/FamilyPlan).
+			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/People.cpp 가 src/Jobs 의 엔진에 등록한다(NlJobs::WalkVars). 열쇠는 core/FamilyPlan).
 			// global.__gameplay_vars 에 pregnancy_chance, pregnancy_from_dummy_chance, pregnancy_miscarriage_chance, pregnancy_mother_die, trait_death_in_childbirth 가 있다.
 			// 켜면 값이 써지고 끄면 되돌려지는 것을 봤다(실행 2: 0.5·0.3 → 1·0.6, 0.2 → 0, 0.1·0.1 → 0).
 			// 유산 없음은 게임이 따른다(실행 3: 켠 채 임신 25번에 유산 0, 끈 채 27번에 유산 5. 유산 확률이 0.2 일 때 25번에 한 번도 없을 확률은 0.4% 다).
@@ -221,10 +250,15 @@ namespace NlCore
 			{ "hire_cost", Area::Army, "병사 고용 값 배율",
 				"gml_Script_anon_SoulBasic_gml_GlobalScript_SoulBasic_11987516072_SoulBasic_gml_GlobalScript_SoulBasic",
 				HS, 0.1, 1, 0.01, 1, true, "병사를 고용할 때 내는 금화에 곱한다(0.1 이면 10분의 1). 고용 창을 다시 열면 보인다" },
+			// 병영의 거주 칸(research/32). 주택 정원 배율(housing_capacity)과 같은 칸이고 건물 종류의 이름이 barrack_ 로 시작하는 것만 한다(core/BuildingPlan).
+			// 플레이에서 봤다(2026-10-08, 0.31.0. research/32): 2 를 걸고 병사 20명을 만들자(게임이 add_resident_with_priority 를 20번 불렀다) 병영 넷이 12·12·12·10명이 됐다
+			// (원래 6. 병영의 거주자 합 26 -> 48, 원래 정원의 합은 36). 끄자 정원은 6 으로 돌아왔고 넘친 거주자는 아홉 시간 뒤에도 그대로였다.
+			{ "barrack_capacity", Area::Army, "병영 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, true,
+				"병영의 종류마다 거주 칸의 수에 곱한다. 이미 지은 병영도 바로 따른다. 끄면 원래 수로 되돌린다(이미 들어와 사는 병사는 남았다: 아홉 시간 동안 봤다)" },
 
 			// 아군 무적(research/13). 상처는 SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true 가 입힌다. 그 함수를 모두에게 건너뛰게 하자
 			// 도적 무리와 6,371번 맞는 동안(치명상 포함) 새 상처가 하나도 생기지 않았다. 이 항목은 self 가 플레이어의 영혼일 때만 건너뛴다
-			// (src/People.cpp 가 영혼의 주소를 모아 건다). 켠 채 그 함수를 같은 인자로 직접 부르자 플레이어의 병사에게는 건너뛰어졌고(멍 없음)
+			// (src/Shield.cpp 가 영혼의 주소를 모아 건다). 켠 채 그 함수를 같은 인자로 직접 부르자 플레이어의 병사에게는 건너뛰어졌고(멍 없음)
 			// 플레이어의 사람이 아닌 상인에게는 멍이 생겼다(0.13.0). 게임이 영혼의 메서드를 부를 때 self 가 그 영혼이라는 것도 봤다
 			// (0.16.0: 통증 한도 함수의 표본 [self in] 2,091번. research/16). 게임이 스스로 건 싸움에서 플레이어의 사람이 맞는 장면은 스무 시간 동안 없었다.
 			{ "ally_invincible", Area::Army, "아군 무적 (상처를 입지 않음)",
@@ -233,7 +267,7 @@ namespace NlCore
 				"옆의 '막은 상처'가 실제로 막은 수다" },
 
 			// 전투의 배율(research/13, 16). 영혼의 두 함수가 돌려주는 수에 곱한다: 싸울 때의 전투 기술 get_combat_level_in_battle() -> 10, 7 과
-			// 치명적인 통증의 한도 get_mortal_pain_threshold() -> 40. self 가 플레이어의 영혼인지로 아군과 적을 가린다(src/People.cpp 의 BattleTick 이 한 함수에 둘을 함께 건다).
+			// 치명적인 통증의 한도 get_mortal_pain_threshold() -> 40. self 가 플레이어의 영혼인지로 아군과 적을 가린다(src/Shield.cpp 의 BattleTick 이 한 함수에 둘을 함께 건다).
 			// 전투 기술은 올린 값이 20 에서 멈춘다(기술은 0~20 이다). 게임이 받는 수가 바뀌는 것까지 봤다(0.16.0. research/16):
 			// 통증 한도는 아군 40 => 120, 그 밖 40 => 12. 전투 기술은 그 밖의 5 => 3, 3 => 2 만(플레이어의 사람은 싸우지 않았다). 싸움의 결과가 달라지는 것은 보지 못했다.
 			// 실제 싸움 둘(침입, 도적 기지. research/23)에서 전투 기술의 둘을 봤다: 아군 12·13·15·16 => 20, 적 4 => 2, 5 => 3, 3 => 2, 그리고 공격의 추첨 배율이
@@ -280,7 +314,7 @@ namespace NlCore
 			// (그 앞의 1.8시간에는 시간당 0.81 이나 0.40 씩 줄었다. research/21). 잰 것은 0 뿐이다: 다른 수가 어떻게 먹는지는 보지 않았다.
 			{ "piety_decrease", Area::Religion, "신앙 감소(시간당)", "inst:o_debug.debug_piety_decrease_per_hour", N, 0, 0, 0, 10, true,
 				"0 으로 두면 신앙심이 줄지 않는다(그렇게 되는 것을 봤다). 원래 값은 0.83 이고, 이름으로 보아 한 시간에 줄어드는 양이다" },
-			// 신앙심 채워 두기: 욕구를 채워 두는 항목들과 같은 길(src/People.cpp 의 바퀴)로 욕구 3번만 채운다.
+			// 신앙심 채워 두기: 욕구를 채워 두는 항목들과 같은 길(src/Hold.cpp 의 바퀴)로 욕구 3번만 채운다.
 			// 켜고 40분(게임 시간) 뒤 플레이어의 사람 14명의 신앙심이 모두 100 이었고, 플레이어의 사람이 아닌 둘(주교, 손님)은 평소대로 줄었다(research/21).
 			{ "piety_full", Area::Religion, "신앙심 채워 두기", "inst:o_character.__soul.__motive.__motive", C, 1, 0, 0, 0, true,
 				"플레이어의 사람 모두의 신앙심을 가득 채워 둔다. 끄면 그때부터 평소대로 줄어든다" },
@@ -300,7 +334,7 @@ namespace NlCore
 			{ "piety_restore", Area::Religion, "기도·예배의 신앙 회복 배율", "global.__gameplay_vars.church_pray_piety_restore", CS, 3, 0, 1, 10, false,
 				"이름으로 보아 기도, 아침 예배, 성인과의 대화가 되돌리는 신앙심인 게임 변수 넷에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			// 게임 변수 church_preach_conversion_factor(1)에 배율을 쓴다. 값 써 넣기(Number)로 두지 않는다: global 뿌리의 Number 는 메인 메뉴에서도 써지고
-			// 창이 보이는 동안 전역을 훑는다. 모듈의 일(src/Production.cpp)은 게임 화면에서만 한다.
+			// 창이 보이는 동안 전역을 훑는다. 모듈의 일(src/World.cpp 가 src/Jobs 의 엔진에 등록한다)은 게임 화면에서만 한다.
 			{ "preach_conversion", Area::Religion, "설교 전환 배율", "global.__gameplay_vars.church_preach_conversion_factor", CS, 3, 0, 1, 20, false,
 				"이름으로 보아 설교가 사람을 바꾸는 정도에 곱하는 게임 변수(원래 1)에 곱한다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "donation_runes", Area::Religion, "헌금 룬", "inst:o_debug.church_donation_runes", N, 0, 0, 0, 100, false,
@@ -317,7 +351,7 @@ namespace NlCore
 			{ "no_new_criminals", Area::Crime, "주민이 부랑자(범죄자)가 되지 않음", "inst:o_character:0.c_criminal.is_criminal_immunity", H, 1, 0, 0, 0, true,
 				"게임이 주민을 범죄자로 만들기 직전에 묻는 '면책인가'에 언제나 그렇다고 답하게 한다. 켠 저녁 둘에는 게임의 시도 셋이 모두 막혔고, 끈 저녁들에는 시도 여섯이 모두 범죄자를 만들었다. "
 				"이미 범죄자인 사람은 그대로다(아래의 단추로 되돌린다)" },
-			// 범죄의 게임 변수들. 값을 쓰고 되돌리는 것은 모듈의 일이다(src/Production.cpp). 뜻은 이름에서 읽은 것이고, 이틀 동안 범죄자들이 범죄를 저지르지 않아 효과를 보지 못했다.
+			// 범죄의 게임 변수들. 값을 쓰고 되돌리는 것은 모듈의 일이다(src/Crime.cpp 가 src/Jobs 의 엔진에 등록한다). 뜻은 이름에서 읽은 것이고, 이틀 동안 범죄자들이 범죄를 저지르지 않아 효과를 보지 못했다.
 			{ "no_bandit_turn", Area::Crime, "주민이 도적으로 넘어가지 않음", "global.__gameplay_vars.dummy_turn_to_bandit_chance", C, 1, 0, 0, 0, false,
 				"이름으로 보아 주민이 도적이 될 확률인 게임 변수 둘(dummy_turn_to_bandit_chance, 그 _peaceful)을 0 으로 쓴다. 끄면 원래 값으로 되돌린다. 효과는 확인 전" },
 			{ "thug_days", Area::Crime, "부랑자가 깡패가 되기까지의 날 배율", "global.__gameplay_vars.dummy_criminal_days_to_thug", CS, 10, 0, 1, 100, false,
@@ -333,7 +367,7 @@ namespace NlCore
 			{ "no_tree_growth", Area::World, "나무가 자라지 않음", "inst:o_debug.is_disable_trees_grow", T, 1, 0, 0, 0, true,
 				"켜면 나무 관리자의 성장 시계(__hours_passed)가 선다(research/27: 켠 채 25시간 동안 3 그대로. 끈 채에는 시간마다 1 씩 올라 10시간마다 0 으로). 나무의 수가 느는 것은 두 상태 모두에서 보지 못했다" },
 			// 계절 붙들기(research/25): 게임은 지금 단계의 남은 시간을 시작 시각(__start_phase_time)에서 셈한다(시작을 하루 뒤로 쓰자 남은 시간이 하루 늘었다).
-			// src/World.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons").
+			// src/Season.cpp 가 1초마다 시작 시각을 흐른 만큼 따라 민다. 계절의 상태는 세이브에 남는다("seasons").
 			// 플레이에서 봤다(실행 2, 0.26.0): 남은 시간을 2시간 반으로 만들고 켠 채 네 시간을 돌리자 남은 시간과 단계가 그대로였고(정각을 네 번 지났다),
 			// 끄자 남은 시간이 다 지난 뒤의 정각에 게임이 __set_phase(1)을 불러 다음 단계로 넘겼다.
 			// 붙드는 것은 "지금 단계"다: 가혹한 계절 중에 켜면 그 단계에 머문다(같은 칸에 쓰는 것이라 그렇게 된다. 그 경우를 재지는 않았다).
@@ -348,7 +382,7 @@ namespace NlCore
 			{ "no_wolves", Area::World, "늑대가 나타나지 않음", "inst:o_game_map_controller.__current_local_map.__wolf_manager.get_max_number_of_wolves", HN, 0, 1, 0, 0, true,
 				"게임이 밤에 묻는 '늑대의 최대 수'에 0 을 답하게 한다. 켠 밤에는 게임이 늑대를 만들지 않았다. 이미 나온 늑대가 어떻게 되는지는 재지 않았다" },
 			// 광산의 매장량(research/25): MinesManager 의 __mines_stock(광산의 자리 -> 남은 수). 게임이 캘 때마다 __change_mine_stock(광산, 1)을 불렀고 수가 1 줄었다(18 -> 17).
-			// 세이브에 남는 자료다("mines_stock"). src/World.cpp 가 1초마다 줄어든 수를 되돌려 쓴다(core/WorldPlan 의 KeepStock).
+			// 세이브에 남는 자료다("mines_stock"). src/Mines.cpp 가 1초마다 줄어든 수를 되돌려 쓴다(core/WorldPlan 의 KeepStock).
 			// 플레이에서 봤다(실행 2): 끈 채로는 여섯 번 캐서 22 가 16 이 됐고, 켠 뒤로는 게임이 네 번 더 캤는데 16 그대로였다.
 			{ "mine_stock_hold", Area::World, "광산의 매장량이 줄지 않음", "inst:o_game_map_controller.__current_local_map.__mines_manager.__mines_stock", C, 1, 0, 0, 0, true,
 				"켠 동안 광산마다 매장량이 줄면 줄기 전의 수로 되돌려 쓴다(실제 시간 1초마다). 끄면 그때부터 다시 준다. 켤 때 이미 0 인 광산은 0 으로 남는다. "

@@ -481,6 +481,7 @@ namespace NlCore
 			// 계절 보기·가혹한 계절 하루 미루기·지금 단계 끝내기
 			// world save 는 지금 저장, world event name=<이벤트의 시스템 이름> 은 그 이벤트를 감독의 강제 이벤트로 써 둔다(2026-10-07. research/28).
 			// world events [group=<묶음>] [find=<글>] 은 이벤트의 표, world event_cancel 은 예약 취소, world event_end kind=<raid|prophecy|conspiracy|guest|unrest> 는 끝내기(research/29).
+			// world event_now name=<이벤트의 시스템 이름> 은 그 이벤트를 바로 일으킨다(게임의 조건 함수가 참일 때만. research/32).
 			WorldAct act = WorldAct::CooldownsClear;
 			if (count < 2 || !ParseWorldAct(tokens[1], act))
 				return Fail(command, "world needs one of: " + WorldActWords());
@@ -492,7 +493,7 @@ namespace NlCore
 			if (WorldActNeedsName(act))
 			{
 				if (name == command.Options.end() || !GoodEventName(name->second))
-					return Fail(command, "world event needs name=<the event's system name: letters, digits, underscores>");
+					return Fail(command, "world " + tokens[1] + " needs name=<the event's system name: letters, digits, underscores>");
 			}
 			else if (WorldActNeedsKind(act))
 			{

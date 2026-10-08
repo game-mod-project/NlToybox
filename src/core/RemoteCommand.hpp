@@ -38,6 +38,8 @@
 //   world <cooldowns_clear|bishop>                  이벤트 쿨다운을 0 으로 쓴다, 주교를 부른다(research/14)
 //   world events [group=<묶음>] [find=<글>],  world event_cancel,  world event_end kind=<raid|prophecy|conspiracy|guest|unrest>
 //                                                   이벤트의 표, 예약 취소, 확인된 가족의 끝내기(research/29)
+//   world event name=<이름>,  world event_now name=<이름>
+//                                                   그 이벤트를 예약한다(감독이 뽑는 날에 온다), 바로 일으킨다(게임의 조건 함수가 참일 때만. research/32)
 //   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
 //   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 게임의 디버그 평판을 하나씩 붙인다(research/19)
 //   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)

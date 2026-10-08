@@ -12,6 +12,7 @@ endif()
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
   src/core/AskPath.cpp
+  src/core/BuildingPlan.cpp
   src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
@@ -51,6 +52,7 @@ add_executable(nlcore_tests
   tests/native/test_economy.cpp
   tests/native/test_cheat.cpp
   tests/native/test_costbook.cpp
+  tests/native/test_building.cpp
   tests/native/test_hooks.cpp
   tests/native/test_rate.cpp
   tests/native/test_remote.cpp

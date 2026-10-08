@@ -91,7 +91,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 
 - **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
   사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산).
-  게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
+  게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비·거주 칸·건물의 효과 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
   (YYToolkit v5.0.0c가 Present 훅을 걸지 않는다. `research/00-game-structure.md` 참고).
@@ -164,6 +164,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   켤 때 먼저 있어야 하는 자리가 있는 항목은 표의 줄 끝에 `Gate` 를 적는다. 기다리는 동안 항목 옆에 "영주관이 놓인 뒤에 적용".
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
   업그레이드 중인 건물에 `c_construction.build_instantly()`(인자 없음)를 부르면 바로 끝난다(`src/Build.cpp`의 `instant_upgrade`. `research/09`). 3 이 아닌 상태에는 부르지 않는다.
+- **거주 칸(정원)**(`src/Build.cpp`의 `WalkLiving`, `core/BuildingPlan`. `research/32`. 2026-10-08): 건물 종류의 `__number_of_living_places`에 배율을 쓴다(`src/Jobs`의 엔진. 정수는 정수로 남는다).
+  병영(이름이 `barrack_`로 시작. `NlCore::IsBarracksName`)은 `barrack_capacity`(군대 영역), 그 밖(오두막·영주 저택·영주관·노예 막사)은 `housing_capacity`(인구 영역)가 한다.
+  건물의 `get_number_of_living_places()`(인자 없음)가 바로 따른다: 이미 지은 집도 먹는다(집의 창 "거주민(6 / 12)", 오두막·병영이 12명까지 찼다). 거주자의 목록은 `c_residence.__array_of_residents`(길이가 지금 사는 수).
+  끄면 정원은 돌아오고 넘친 거주자는 남았다(병영에서 아홉 시간). 세이브에 그 열쇠는 없다.
+- **건물의 효과**(`src/Build.cpp`의 `WalkEffects`·`RefreshEffects`, `core/BuildingPlan`. `research/32`): 건물 종류의 `__effect` = `{ __name, __effect(주변 건물의 안락도에 더하는 수), __range(칸), __type }`. 효과를 가진 종류는 14개다
+  (좋은 것: 제단·작은 교회·교회, 시장·교수대·선술집·영주관·`drug_deg`. 나쁜 것: 대장간·갑옷 대장간·용광로·숯가마·벌목장, 훈련장). 좋고 나쁨은 값의 부호다(`NlCore::EffectSideOf`).
+  - **효과를 내는 건물은 만들어질 때 범위를 칸의 사각형으로 굳힌다**(`c_effect.__effect_current`의 `__x1..__y2`. 받는 건물은 `c_effect.__applied_effects`의 목록과 합 `__applied_effects_value` = 집의 창의 "안락도").
+    게임 안에서 종류의 `__range`를 바꿔도 이미 있는 건물은 그대로다. 그래서 좋은 효과의 범위(`effect_range`)는 **메인 메뉴에서도 쓴다**(`JobDef::AnyScreen`. 건물 종류는 메뉴에서도 얻어진다):
+    켠 채로 세이브를 불러오면 그 세이브의 건물이 넓은 사각형으로 만들어진다(교회 6..39 → 0..51, 집 일곱 채의 안락도가 올랐다). 게임 안에서 끄면 종류의 값만 돌아온다.
+  - 나쁜 효과 없애기(`bad_effects_off`)는 값(`__effect.__effect`)을 0 으로 쓰고 건물마다 `c_effect.__update_applied_effects()`를 부른다(합을 목록의 값으로 다시 낸다. 범위에 드는 건물을 다시 찾지는 않는다).
+    **값을 0 으로 쓰면 부호가 사라지므로 처음 본 부호를 기억한다**(`NlCore::EffectSides`): 0 으로 써 둔 자리를 되돌릴 때 다시 찾으려고. 나쁜 효과를 받는 집이 있는 세이브에서는 보지 못했다(확인 전).
+  - `__update_applied_effects`·`__init_my_effect`가 인자를 읽지 않는 것은 기계어로 봤다(`research/32`의 주소). `set_applied_effects`·`set_effect`는 인자를 읽는다(꼴을 모른다: 부르지 않는다).
+    관리자 `…__current_local_map.__building_effects_manager`(`register_building`, `update_buildings_for_effect` …)는 두 실행에서 한 번도 불리지 않았다: 건물이 지어질 때 `record`로 꼴을 본 뒤에만 부른다.
 - 인물·영주·인구 패널(`src/People.cpp`, `core/PeoplePlan`. `research/11`). 영주·손님은 `o_character`, 주민·노예는 `o_dummy`이고 값은 `__soul` 아래에 있다.
   - 사람은 `__soul.__uuid`로 가리킨다. `inst:o_character:<n>`의 n 은 인물이 드나들면 바뀐다: 쓰기 전에 그 자리의 uuid 를 다시 본다(`StillThere`).
     플레이어의 사람은 `__soul.__faction.__system_name == "player"`다. 여럿에게 하는 명령과 표의 항목은 플레이어의 산 사람에게만 간다(손님은 `unique_guests`였다).
@@ -237,6 +250,14 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - **이벤트 골라 일으키기**(2026-10-07. `research/28`): 감독의 자료 `inst:o_data.__game_director_events_data`의 `__events_by_name`(ds_map 번호: 이름 → 이벤트 구조체. 61개. `list map:<번호>`로 이름을 본다)에서
     그 구조체를 얻어 `__debug_forced_event`에 쓴다(글이 아니라 **구조체**다). 감독의 `__try_to_determine_and_start_event`가 하루 한 번(오후) `get_debug_forced_event()`를 읽어 그것을 고르고 `reset_debug_forced_event()`로 지운다
     (써 둔 `u_guest_bard`가 그날 뽑혀 쿨다운에 올랐다). 원격 `world event name=<시스템 이름>`. 쿨다운 중인 이벤트도 오는지는 재지 않았다.
+    **예약은 그날 오지 않을 수 있다**(`research/32`): 감독의 `on_next_day()`가 그날의 이벤트 종류를 정하지 않으면 뽑기가 `(undefined, undefined, true, 구조체)`로 불려 예약을 읽지도 않는다.
+  - **이벤트 바로 일으키기**(2026-10-08. `research/32`. 줄의 "지금" 단추, 원격 `world event_now name=<시스템 이름>`. `src/Events.cpp`의 `SpawnEventNow`): 게임이 이벤트를 생기게 할 때 부르는 꼴 그대로 부른다(기록으로 봤다) —
+    `이벤트.__is_available()`(인자 없음)이 참일 때만(`NlCore::EventAvailable`. 거짓과 undefined 는 일으키지 않고 그 답을 적는다), `이벤트.__spawn_method()`(인자 없음. 감독이 지연 시각에 그렇게 부른다),
+    감독의 `apply_event_cooldowns(이벤트, true)`. 감독의 뽑기와 지연 시각(손님 18시)을 기다리지 않는다. 판정은 쿨다운의 칸에 그 이름이 올랐는가.
+    일으켜 본 것: 보상(부유한 이주민, 거래 제안), 예언(늑대 습격), 손님(음유시인. 17시 반에 바로 왔다). 습격·정치·반란·세계 지도는 조건이 참인 세이브가 없어 못 봤다(같은 호출 자리다).
+    `__is_available`은 이벤트마다 다르다(같은 때 음유시인은 참, 마녀는 거짓. 손님이 와 있으면 undefined). `__spawn_method`의 스크립트는 가족마다 다르고 모두 묶여 있다.
+    **감독의 `on_next_day()`를 불러 뽑게 하지 않는다**: 뽑기는 그날의 운에 달렸고 쿨다운의 날과 국면의 날이 하루씩 넘어간다(조사에서 한 번 불러 그 꼴을 봤다).
+    창의 청은 이름과 함께 쌓는다(`Ask{Act, Name, Family}`): 줄 둘을 잇달아 눌러도 섞이지 않는다. 결과의 줄은 표의 위에 있다.
 - 종교 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world bishop`이 같은 길을 탄다.
   이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0. 원격 `world cooldowns_clear`)는 아래의 이벤트 탭으로 갔다.
   - **지금 저장**(유틸 영역. `NlWorld::DrawUtil`): 게임의 자동 저장 함수 `gml_Script_save_game(0, 1)`(아침의 꼴. 저녁은 `(0, 2)`)을 부른다. `is_save_disabled`가 참이면 부르지 않는다.
@@ -380,7 +401,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`, `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`,
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.

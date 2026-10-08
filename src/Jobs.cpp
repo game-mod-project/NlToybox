@@ -160,7 +160,7 @@ namespace
 		}
 		if (!want && J.Book.Empty())
 			return;						// 되돌릴 것이 없다
-		if (!NlAccess::InGame())
+		if (!J.Def.AnyScreen && !NlAccess::InGame())
 		{
 			if (want)
 				NlCheats::SetNote(J.Def.Cheat, "게임을 시작하면 적용");

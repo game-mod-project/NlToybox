@@ -28,6 +28,7 @@ namespace NlJobs
 		WalkFn Walk;
 		void (*After)();			// 값을 쓴 뒤에 부른다(없으면 nullptr)
 		double Period;				// 다 쓴 뒤 다시 훑는 간격(초). 게임이 자료를 다시 만들면 그때 다시 쓴다
+		bool AnyScreen = false;		// 게임 화면이 아니어도(메인 메뉴) 한다. 게임이 켜질 때 만들어지는 자료(건물 종류)를 세이브를 불러오기 전에 써 둘 때
 	};
 
 	void Init(LogFn Log);

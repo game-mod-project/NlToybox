@@ -84,7 +84,22 @@ void RunCheatTests()
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 77);
+		CHECK(Cheats().size() == 81);
+		// 거주 칸과 효과의 범위(research/32): 건물 종류의 자료에 모듈이 배율을 쓴다(CustomScale). 주택과 병영은 배율이 따로다(영역도: 인구, 군대).
+		CHECK(FindCheat("housing_capacity") && FindCheat("housing_capacity")->Kind == CheatKind::CustomScale && FindCheat("housing_capacity")->Where == Area::People);
+		CHECK(FindCheat("barrack_capacity") && FindCheat("barrack_capacity")->Kind == CheatKind::CustomScale && FindCheat("barrack_capacity")->Where == Area::Army);
+		CHECK(FindCheat("effect_range") && FindCheat("effect_range")->Kind == CheatKind::CustomScale && FindCheat("effect_range")->Where == Area::Build);
+		// 늘리는 배율이다: 1 아래로는 받지 않는다(정원을 줄이면 살던 사람이 넘친다).
+		for (const char* id : { "housing_capacity", "barrack_capacity", "effect_range" })
+			CHECK(FindCheat(id) && FindCheat(id)->Min == 1 && FindCheat(id)->On == 2);
+		// 정원의 둘은 플레이에서 봤다(research/32): 집의 창이 "거주민(6 / 12)"를 보였고 오두막 셋과 병영 셋이 12명까지 찼다(원래 6).
+		CHECK(FindCheat("housing_capacity")->Verified && FindCheat("barrack_capacity")->Verified);
+		// 효과는 좋은 것(범위 배율)과 나쁜 것(없애기: 값을 0 으로)으로 나눈다.
+		// 좋은 효과의 범위는 플레이에서 봤다(메뉴에서 켜고 불러온 세이브에서 교회의 사각형이 넓어지고 집 일곱 채의 안락도가 올랐다).
+		// 나쁜 효과 없애기는 값이 써지고 되돌려지는 것까지다(나쁜 효과를 받는 집이 있는 세이브에서 보지 못했다).
+		CHECK(FindCheat("bad_effects_off") && FindCheat("bad_effects_off")->Kind == CheatKind::Custom && FindCheat("bad_effects_off")->Where == Area::Build);
+		CHECK(FindCheat("effect_range")->Verified);
+		CHECK(FindCheat("bad_effects_off") && !FindCheat("bad_effects_off")->Verified);
 		// 범죄(research/26). 주민이 범죄자가 되기 직전에 게임이 그 사람의 is_criminal_immunity()(불리언)를 묻는다. 참을 돌려주게 한 저녁에는 두 번의 시도에도
 		// 범죄자가 생기지 않았고, 그러지 않은 두 저녁에는 다섯 번·한 번의 시도에 다섯·한 명이 생겼다. 주소는 o_character 의 것으로 삼는다(게임 화면에는 o_character 가 언제나 있다).
 		CHECK(FindCheat("no_new_criminals") && FindCheat("no_new_criminals")->Kind == CheatKind::Hook && FindCheat("no_new_criminals")->On == 1
@@ -102,7 +117,7 @@ void RunCheatTests()
 		// 늑대의 최대 수: WolvesManager.get_max_number_of_wolves()(인자 없음)가 밤에 한 번 불려 수(11.1)를 돌려줬다(research/25). 0 을 돌려주게 한다(수를 돌려주던 함수에 수).
 		CHECK(FindCheat("no_wolves") && FindCheat("no_wolves")->Kind == CheatKind::HookNumber && FindCheat("no_wolves")->On == 0 && FindCheat("no_wolves")->Where == Area::World
 			&& HookForcedKind(FindCheat("no_wolves")->Kind) == 'n');
-		// 광산의 매장량 붙들기는 모듈의 일이다(src/World.cpp 가 줄어든 매장량을 되돌려 쓴다).
+		// 광산의 매장량 붙들기는 모듈의 일이다(src/Mines.cpp 가 줄어든 매장량을 되돌려 쓴다).
 		CHECK(FindCheat("mine_stock_hold") && FindCheat("mine_stock_hold")->Kind == CheatKind::Custom && FindCheat("mine_stock_hold")->Where == Area::World);
 		// 실행 2 에서 플레이로 본 것(research/25): 붙든 네 시간 동안 단계가 넘어가지 않았고 끄자 다음 정각에 넘어갔다, 켠 채 자동 저장 시각을 세 번 넘겨도 파일이 생기지 않았다,
 		// 켠 두 밤에는 늑대를 만들지 않았고 끈 두 밤에는 만들었다, 게임이 네 번 캐도 매장량이 그대로였다, 켜자 지도의 안개가 걷히고 끄자 돌아왔다.
@@ -117,7 +132,7 @@ void RunCheatTests()
 		CHECK(FindCheat("no_autosave")->ThisRunOnly);
 		for (const Cheat& cheat : Cheats())
 			CHECK(cheat.ThisRunOnly == (std::string(cheat.Id) == "no_autosave"));
-		// 월드(research/25). 계절 붙들기는 모듈의 일(src/World.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
+		// 월드(research/25). 계절 붙들기는 모듈의 일(src/Season.cpp 가 1초마다 시작 시각을 따라 민다), 세계 지도의 빠른 이동과 자동 저장 끄기는 게임의 디버그 깃발이다.
 		// (어느 것이 확인됐는지는 아래에서 본다)
 		CHECK(FindCheat("season_hold") && FindCheat("season_hold")->Kind == CheatKind::Custom && FindCheat("season_hold")->Where == Area::World);
 		CHECK(FindCheat("fast_map_moving") && FindCheat("fast_map_moving")->Kind == CheatKind::Toggle && FindCheat("fast_map_moving")->Where == Area::World
@@ -214,7 +229,7 @@ void RunCheatTests()
 		// 5단계: 연구 시간(research/12). 도서관 관리자의 get_learn_time 이 돌려주는 수에 곱한다. 효과는 보지 못했다.
 		CHECK(FindCheat("research_time") && FindCheat("research_time")->Kind == CheatKind::HookScale && FindCheat("research_time")->Where == Area::Knowledge
 			&& !FindCheat("research_time")->Verified && FindCheat("research_time")->Max <= 1);
-		// 4단계: 인구·욕구(research/11). 플레이어의 사람을 돌며 쓰는 항목은 모듈의 코드가 한다(src/People.cpp).
+		// 4단계: 인구·욕구(research/11). 플레이어의 사람을 돌며 쓰는 항목은 모듈의 코드가 한다(src/Hold.cpp).
 		for (const char* id : { "no_hunger", "no_tiredness", "needs_full", "always_happy", "no_old_age_death" })
 			CHECK(FindCheat(id) && FindCheat(id)->Kind == CheatKind::Custom && FindCheat(id)->Where == Area::People);
 		// 플레이에서 봤다(research/11): 욕구가 100 으로 유지되고(손님은 그대로), 기분이 35 → 98 이 됐다. 노화 깃발은 써지는 것까지만 봤다.
@@ -285,12 +300,12 @@ void RunCheatTests()
 		// 표의 항목이 없어도 제 패널이 있는 영역은 목록에서 켜져 있어야 한다. 경제는 표의 항목을 모두 뺀 뒤 목록에서 꺼져 있었다(research/08).
 		for (const AreaInfo& area : Areas())
 		{
-			// 인물·영주·인구는 제 패널(src/People.cpp)이 있다.
+			// 인물·영주·인구는 제 패널(src/PeopleDraw.cpp)이 있다.
 			const bool panel = area.Id == Area::Explorer || area.Id == Area::Economy || area.Id == Area::Time
 				|| area.Id == Area::Person || area.Id == Area::Lord || area.Id == Area::People
-				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/People.cpp)
+				|| area.Id == Area::Knowledge || area.Id == Area::Items		// 지식·아이템도 제 패널이 있다(src/PeopleDraw.cpp)
 				|| area.Id == Area::Army									// 군대: 병사를 만드는 단추
-				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트 쿨다운 지우기, 주교 부르기(src/World.cpp)
+				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트의 표(src/Events.cpp), 주교 부르기(src/World.cpp)
 				|| area.Id == Area::Diplomacy								// 왕국과의 관계(src/Diplomacy.cpp)
 				|| area.Id == Area::Crime									// 부랑자와 영주의 죄(src/Crime.cpp)
 				|| area.Id == Area::Presets;								// 프리셋: 확인된 항목의 묶음(core/Presets)

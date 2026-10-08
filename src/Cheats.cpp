@@ -519,7 +519,8 @@ void NlCheats::DrawPresets()
 	ImGui::PushTextWrapPos(0.0f);
 	ImGui::TextUnformatted("프리셋은 플레이에서 확인된 항목의 묶음입니다. 누르면 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켭니다. "
 		"탐색기의 잠금, 배율 7개, 한 번 하는 단추(금화, 병사 등)는 건드리지 않습니다. "
-		"건 묶음은 저장되어 다음 실행에서도 켜진 채 시작합니다(세이브를 불러오면 바로 적용됩니다). 끄려면 '기본'을 누릅니다.");
+		"건 묶음은 저장되어 다음 실행에서도 켜진 채 시작합니다(세이브를 불러오면 바로 적용됩니다). 끄려면 '기본'을 누릅니다. "
+		"'좋은 효과의 범위 배율'은 건물이 만들어질 때 먹습니다: 묶음을 건 뒤 세이브를 다시 불러와야 이미 지은 건물에 보입니다.");
 	ImGui::PopTextWrapPos();
 	{
 		// 지금 표의 상태가 어느 묶음과 같은지(항목을 따로 바꿨으면 어느 것과도 다르다).
@@ -537,8 +538,9 @@ void NlCheats::DrawPresets()
 		if (ImGui::Button(preset.Label, ImVec2(150, 0)))
 			ApplyPresetLocked(preset);
 		ImGui::SameLine();
-		ImGui::TextUnformatted(preset.Help);
+		// 설명은 창의 너비에서 줄을 바꾼다(한 줄로 그리자 '신'의 설명이 창의 오른쪽에서 잘렸다. research/32 의 화면). 이어지는 줄은 단추의 오른쪽에서 시작한다.
 		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted(preset.Help);
 		ImGui::TextDisabled("%s", PresetList(preset).c_str());
 		ImGui::PopTextWrapPos();
 		ImGui::Spacing();

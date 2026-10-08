@@ -4,6 +4,7 @@
 #include "Text.hpp"
 
 #include <algorithm>
+#include <cmath>
 #include <set>
 
 namespace NlCore
@@ -256,6 +257,24 @@ namespace NlCore
 		case 'n': return Name + ": 게임에 그 이름의 이벤트가 없습니다";
 		case 'w': return Name + ": 강제 이벤트에 쓰지 못했습니다 (" + Why + ")";
 		default: return Name + ": 강제 이벤트로 써 두었습니다. 게임의 감독이 다음에 이벤트를 뽑을 때(하루 한 번, 오후) 이것을 고릅니다";
+		}
+	}
+
+	bool EventAvailable(bool IsNumber, double Value)
+	{
+		return IsNumber && std::isfinite(Value) && Value != 0;
+	}
+
+	std::string InstantEventReport(const std::string& Name, char Outcome, const std::string& Detail)
+	{
+		switch (Outcome)
+		{
+		case 'n': return Name + ": 게임에 그 이름의 이벤트가 없습니다";
+		case 'm': return Name + ": 게임의 조건 함수(__is_available)를 부르지 못해 일으키지 않았습니다 (" + Detail + ")";
+		case 'a': return Name + ": 게임의 조건이 지금 맞지 않아 일으키지 않았습니다 (__is_available 의 답: " + Detail + ")";
+		case 'f': return Name + ": 이벤트를 만드는 함수(__spawn_method)를 부르지 못했습니다 (" + Detail + ")";
+		case 'c': return Name + ": 바로 일으켰습니다. 쿨다운은 올리지 못했습니다 (" + Detail + ")";
+		default: return Name + ": 바로 일으켰습니다 (쿨다운 " + Detail + "일)";
 		}
 	}
 

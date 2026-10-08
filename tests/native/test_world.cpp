@@ -19,7 +19,7 @@ void RunWorldTests()
 		CHECK(ParseWorldAct("event", act) && act == WorldAct::EventForce && std::string(WorldActWord(WorldAct::EventForce)) == "event");
 		CHECK(WorldActNeedsName(WorldAct::EventForce) && !WorldActNeedsName(WorldAct::SaveNow) && !WorldActNeedsName(WorldAct::BishopSend));
 		// 낱말의 목록(틀린 낱말에 답할 글)은 표에서 만든다.
-		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end");
+		CHECK(WorldActWords() == "cooldowns_clear, bishop, season, season_delay, season_end, save, event, events, event_cancel, event_end, event_now");
 		// 게임의 자료를 바꾸는 일인가(보기는 읽기만 한다).
 		CHECK(!WorldActChanges(WorldAct::SeasonShow) && WorldActChanges(WorldAct::SeasonDelay) && WorldActChanges(WorldAct::SeasonEnd)
 			&& WorldActChanges(WorldAct::CooldownsClear) && WorldActChanges(WorldAct::BishopSend) && WorldActChanges(WorldAct::SaveNow) && WorldActChanges(WorldAct::EventForce));

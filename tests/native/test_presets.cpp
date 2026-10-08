@@ -37,6 +37,22 @@ void RunPresetsTests()
 		};
 		CHECK(in_god("ally_power") == 2 && in_god("enemy_power") == 0.5 && in_god("ally_toughness") == -1.0 && in_god("enemy_toughness") == -1.0);
 
+		// 정원 배율 둘과 좋은 효과의 범위 배율은 샌드박스와 신 묶음에 그 항목의 가장 큰 배율(x10)로 든다(2026-10-08 에 사용자가 정했다. research/32). 쉬움에는 들지 않는다.
+		// 나쁜 효과 없애기는 확인 전이라 어느 묶음에도 들지 않는다.
+		const auto in = [](const char* preset, const char* id) {
+			for (const PresetItem& item : FindPreset(preset)->Items)
+				if (std::string(item.Id) == id)
+					return item.Number;
+			return -1.0;
+		};
+		for (const char* id : { "housing_capacity", "barrack_capacity", "effect_range" })
+		{
+			CHECK(in("sandbox", id) == 10 && in("god", id) == 10 && in("easy", id) == -1.0);
+			CHECK(FindCheat(id) && FindCheat(id)->Max == 10);		// 묶음의 배율이 그 항목이 받는 가장 큰 배율이다
+		}
+		for (const char* preset : { "easy", "sandbox", "god" })
+			CHECK(in(preset, "bad_effects_off") == -1.0);
+
 		// god 는 sandbox 가 켜는 것을 모두 켠다
 		for (const PresetItem& item : FindPreset("sandbox")->Items)
 		{

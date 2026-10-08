@@ -450,6 +450,8 @@ namespace
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
 		if (act == NlCore::WorldAct::EventForce)
 			Say("  " + NlEvents::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+		else if (act == NlCore::WorldAct::EventNow)
+			Say("  " + NlEvents::SpawnEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
 		else if (act == NlCore::WorldAct::EventList)
 		{
 			for (const std::string& line : NlEvents::List(C.Options.count("group") ? C.Options.at("group") : std::string(), C.Options.count("find") ? C.Options.at("find") : std::string()))
