@@ -148,6 +148,8 @@ namespace NlCore
 
 	// 특성 이름의 꼴: 소문자·숫자·밑줄만, 1~64자. 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 	bool GoodTraitName(const std::string& Name);
+	// 그 일이 받는 글(name=)의 꼴인가: 지식 주기는 지식의 이름(느낌표도 받는다. core/LibraryPlan), 그 밖은 특성의 이름의 꼴.
+	bool GoodPersonText(PersonAct Act, const std::string& Text);
 	// 붙이지도 떼지도 않는 특성: 종(human, wolf, pig, dog)과 죽음의 상태(dead, lost_head …). 게임이 어떻게 받는지 재지 않았다.
 	bool IsProtectedTrait(const std::string& Name);
 	// "치료"가 떼는 부상의 특성 이름들(inst:o_data.game_trait_list 에 있는 이름). 병과 출혈은 게임의 함수(cure_all_disease, cure_bleeding)가 한다.

@@ -11,6 +11,7 @@
 #include "RolePlan.hpp"
 #include "Presets.hpp"
 #include "CrimePlan.hpp"
+#include "LibraryPlan.hpp"
 #include "WorldPlan.hpp"
 #include "Text.hpp"
 
@@ -421,7 +422,7 @@ namespace NlCore
 				person.Text = name->second;
 			if (NeedsIndex(person.Act) && (person.Index < 0 || person.Index >= IndexLimit(person.Act)))
 				return Fail(command, std::string("person ") + tokens[2] + " needs index=<0.." + std::to_string(IndexLimit(person.Act) - 1) + ">");
-			if (NeedsText(person.Act) && !GoodTraitName(person.Text))
+			if (NeedsText(person.Act) && !GoodPersonText(person.Act, person.Text))
 				return Fail(command, std::string("person ") + tokens[2] + " needs name=<name>");
 			const bool trait = person.Act == PersonAct::TraitAdd || person.Act == PersonAct::TraitRemove;
 			if (trait && IsProtectedTrait(person.Text))
@@ -472,6 +473,20 @@ namespace NlCore
 			command.Target = CrimeActWord(crime.Act);
 			if (!crime.Who.empty())
 				command.Options["who"] = crime.Who;
+		}
+
+		void ParseLibraryLine(const std::vector<std::string>& tokens, RemoteCommand& command)
+		{
+			// library list [find=<글>] | add name=<지식> | add_all | remove name=<지식> | undo      지식 탭의 "도서관의 책"과 같은 길(core/LibraryPlan. research/33)
+			LibraryCommand library;
+			std::string why;
+			if (!ParseLibraryCommand(std::vector<std::string>(tokens.begin() + 1, tokens.end()), library, why))
+				return Fail(command, why);
+			command.Target = LibraryActWord(library.Act);
+			if (!library.Name.empty())
+				command.Options["name"] = library.Name;
+			if (!library.Find.empty())
+				command.Options["find"] = library.Find;
 		}
 
 		void ParseWorldLine(const std::vector<std::string>& tokens, RemoteCommand& command)
@@ -747,6 +762,8 @@ namespace NlCore
 			ParseTimeLine(tokens, command);
 		else if (verb == "crime")
 			ParseCrimeLine(tokens, command);
+		else if (verb == "library")
+			ParseLibraryLine(tokens, command);
 		else if (verb == "world")
 			ParseWorldLine(tokens, command);
 		else if (verb == "diplomacy")

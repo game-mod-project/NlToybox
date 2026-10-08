@@ -3,6 +3,7 @@
 #include "Text.hpp"
 
 #include "FamilyPlan.hpp"
+#include "LibraryPlan.hpp"
 #include "RolePlan.hpp"
 
 #include <algorithm>
@@ -279,14 +280,15 @@ namespace NlCore
 			Why = "수가 아닙니다";
 		if (Why.empty() && gift && (std::round(Command.Amount) == 0 || std::fabs(Command.Amount) > k_GiftMax))
 			Why = "줄 수가 0 이거나 너무 큽니다";
-		// 지식의 이름도 특성의 이름과 같은 꼴이다(소문자·숫자·밑줄). 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
+		// 지식의 이름은 특성의 이름의 꼴(소문자·숫자·밑줄)에 느낌표를 더 받는다: 게임의 이름 둘에 있다(core/LibraryPlan 의 GoodKnowledgeName. research/33).
+		// 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 		if (Why.empty() && Command.Act == PersonAct::Equip && !FindLoadout(Command.Text))
 			Why = "모르는 장비 묶음입니다";
 		if (Why.empty() && Command.Act == PersonAct::Role && !FindRole(Command.Text))
 			Why = "모르는 역할 프리셋입니다";
 		if (Why.empty() && Command.Act == PersonAct::Conceive && (!IsUuid(Command.Text) || Command.Text == Command.Who))
 			Why = "아버지를 uuid 로 짚습니다 (자기 자신은 안 됩니다)";
-		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
+		if (Why.empty() && NeedsText(Command.Act) && !GoodPersonText(Command.Act, Command.Text))
 			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
 		if (Why.empty() && trait && IsProtectedTrait(Command.Text))
 			Why = "붙이거나 뗄 수 없는 특성입니다";
@@ -345,6 +347,11 @@ namespace NlCore
 	bool AgeValue(double Asked, double& Out)
 	{
 		return Clamp(Asked, k_AgeMin, k_AgeMax, true, Out);
+	}
+
+	bool GoodPersonText(PersonAct Act, const std::string& Text)
+	{
+		return Act == PersonAct::KnowledgeAdd ? GoodKnowledgeName(Text) : GoodTraitName(Text);
 	}
 
 	bool GoodTraitName(const std::string& Name)

@@ -19,6 +19,7 @@
 #include "core/Guard.hpp"
 #include "core/Hooks.hpp"
 #include "core/Knobs.hpp"
+#include "core/LibraryPlan.hpp"
 #include "core/Localization.hpp"
 #include "core/NumberEdit.hpp"
 #include "core/PathTable.hpp"
@@ -89,3 +90,4 @@ void RunFamilyTests();
 void RunRoleTests();
 void RunCrimeTests();
 void RunEventsTests();
+void RunLibraryTests();

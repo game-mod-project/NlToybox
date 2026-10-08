@@ -299,6 +299,15 @@ void RunPeopleTests()
 		CHECK(!CheckPersonCommand(c, why));
 		c.Text.clear();
 		CHECK(!CheckPersonCommand(c, why));
+		// 게임의 지식 이름 둘에는 느낌표가 있다(41!building_wooden_wall_section, 42!building_fortification_tower. research/33): 지식의 이름은 느낌표를 받는다.
+		// 특성의 이름은 받지 않는다(그런 특성을 본 적이 없다).
+		c.Text = "41!building_wooden_wall_section";
+		CHECK(CheckPersonCommand(c, why));
+		CHECK(ParseRemoteLine("person 25556c3312bce178 knowledge_add name=42!building_fortification_tower").Error.empty());
+		c.Act = PersonAct::TraitAdd;
+		CHECK(!CheckPersonCommand(c, why) && why == "특성 이름이 아닙니다");
+		CHECK(!ParseRemoteLine("person 25556c3312bce178 trait_add name=41!brave").Error.empty());
+		c.Act = PersonAct::KnowledgeAdd;
 
 		c.Act = PersonAct::ItemAdd;
 		c.Index = 1;
