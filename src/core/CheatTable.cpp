@@ -164,12 +164,21 @@ namespace NlCore
 				"건설 목록의 건물이 모두 보인다. 조건에 걸리는 건물은 여전히 지을 수 없다(어느 조건인지는 재지 않았다)" },
 			{ "build_duration", Area::Build, "건설 시간 계수", "inst:o_debug.debug_building_duration_factor", N, 0, 0, 0, 5, false,
 				"debug_params.json 의 building_duration_factor 가 옮겨진 값이다(원래 0.5). 작을수록 빨리 지어질 것으로 보인다" },
-			// 건물 효과의 범위(research/32). 건물 종류의 __effect 구조체에 __name·__effect·__range·__type 이 있다(castle: public_place_nearby, 범위 8).
-			// 게임의 현지화 파일에 효과의 이름이 여섯 있다(no_church, public_place_nearby, water_nearby, living_zone, quality_work, burned).
-			// src/Build.cpp 가 건물 종류를 돌며 __range 에 배율을 쓰고, 처음 걸을 때 종류마다의 효과를 로그에 적는다.
-			// 어느 건물이 어떤 효과와 범위를 갖는지, 게임이 그 수를 언제 읽는지는 재지 않았다.
-			{ "effect_range", Area::Build, "건물 효과의 범위 배율", "inst:o_building.generic.__effect.__range", CS, 2, 0, 1, 10, false,
-				"건물 종류마다의 효과(공공장소 근처, 교회 없음, 물 근처 …)가 미치는 범위에 곱한다. 끄면 원래 범위로 되돌린다. 효과는 확인 전" },
+			// 건물의 효과(research/32). 건물 종류의 __effect 구조체에 __name·__effect(주변 건물의 안락도에 더하는 수)·__range(칸)·__type 이 있다.
+			// 이 빌드에서 효과를 가진 종류는 14개다. 좋은 효과: religious_nearby(제단 +3, 작은 교회 +5, 교회 +7. 범위 12),
+			// public_place_nearby(시장·교수대·선술집·영주관·drug_deg +3. 범위 8). 나쁜 효과: 대장간·갑옷 대장간·용광로·숯가마·벌목장 -4(범위 6), 훈련장 -8(범위 8).
+			// 효과를 내는 건물은 지어질 때 범위를 칸의 사각형(c_effect.__effect_current 의 __x1..__y2)으로 굳혀 두고, 받는 건물은 그 목록과 합
+			// (c_effect.__applied_effects, __applied_effects_value = 집의 창의 "안락도")을 들고 있다.
+			// 그래서 종류의 __range 를 바꿔도 이미 지은 건물의 사각형은 그대로였다(두 배로 써 둔 아홉 시간 반 동안 집 28채의 안락도가 그대로).
+			// 범위 배율은 쓴 뒤에 지어지는(또는 불러와지는) 건물에 먹는 것으로 보인다(재기 전). 이미 지은 건물에 먹이는 길(BuildingEffectsManager 의 등록 함수)은 꼴을 못 봤다.
+			{ "effect_range", Area::Build, "좋은 효과의 범위 배율", "inst:o_building.generic.__effect.__range", CS, 2, 0, 1, 10, false,
+				"안락도를 올리는 효과(교회·제단, 시장·선술집·영주관 같은 공공장소)가 미치는 범위에 곱한다. 끄면 원래 범위로 되돌린다.\n"
+				"켠 뒤에 짓는 건물부터 먹는 것으로 보인다(이미 지은 건물의 범위는 지을 때 굳는다). 효과는 확인 전" },
+			// 나쁜 효과 없애기: 값(__effect.__effect)을 0 으로 쓰고 건물마다 게임의 c_effect.__update_applied_effects()(인자 없음. 본문이 argc 를 읽지 않는다)로 합을 다시 내게 한다.
+			// 교회로 길을 봤다: 종류의 값 7 을 0 으로 쓰고 그 함수를 부르자 그 교회의 효과를 받던 집의 안락도가 19 -> 12, 되돌리고 부르자 19.
+			// 나쁜 효과를 받는 집이 있는 세이브에서는 보지 못했다(아덴 세이브의 용광로·훈련장 범위에는 집이 없다).
+			{ "bad_effects_off", Area::Build, "나쁜 효과 없애기", "inst:o_building.generic.__effect.__effect", C, 1, 0, 0, 0, false,
+				"안락도를 깎는 효과(대장간·용광로·숯가마·벌목장, 훈련장)의 크기를 0 으로 쓰고 집들의 안락도를 다시 셈하게 한다. 끄면 원래 크기로 되돌린다. 효과는 확인 전" },
 
 			// 인구·욕구(research/11). 욕구는 __soul.__motive.__motive[6](0 수면, 1 음식, 2 휴식, 3 신앙심, 4 성관계, 5 돌봄)에 있다.
 			// 모듈(src/People.cpp)이 플레이어의 사람(영주와 주민)을 돌며 그 칸을 상한으로 써 둔다.
@@ -197,9 +206,12 @@ namespace NlCore
 			// 거주 칸(research/32). 건물 종류(GenericBuilding)마다 __number_of_living_places 가 있다(castle 에서 2 를 봤다).
 			// 게임의 건물 자료에서 0 보다 큰 것은 오두막·영주 저택·영주관·병영이다. src/Build.cpp 가 건물 종류를 돌며 그 칸에 배율을 쓴다
 			// (src/Jobs 의 엔진: 처음 본 값이 바탕, 끄면 되돌린다. 정수는 정수로 남는다). 병영은 군대 영역의 barrack_capacity 가 따로 한다.
-			// 세이브에 그 열쇠는 없다(거주자의 목록은 있다). 이미 지은 집이 따르는지, 끈 뒤 정원을 넘는 거주자를 게임이 어떻게 다루는지는 재지 않았다.
-			{ "housing_capacity", Area::People, "주택 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, false,
-				"병영을 뺀 거주 건물(오두막, 영주 저택, 영주관)의 종류마다 거주 칸의 수에 곱한다. 끄면 원래 수로 되돌린다. 효과는 확인 전" },
+			// 세이브에 그 열쇠는 없다(거주자의 목록은 있다).
+			// 플레이에서 봤다(2026-10-08, 0.31.0. research/32): 2 를 걸자 25종에 써졌고 건물의 get_number_of_living_places() 가 6 -> 12(오두막, 노예 막사), 2 -> 4(영주 저택, 영주관)가 됐다.
+			// 집의 창이 "거주민(6 / 12)"를 보였고, 이주민과 만든 농민이 들어와 오두막 셋이 12명이 됐다(원래 6).
+			{ "housing_capacity", Area::People, "주택 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, true,
+				"병영을 뺀 거주 건물(오두막, 영주 저택, 영주관, 노예 막사)의 종류마다 거주 칸의 수에 곱한다. 이미 지은 집도 바로 따른다.\n"
+				"끄면 원래 수로 되돌린다(이미 들어와 사는 사람은 남는 것으로 보인다: 병영에서 아홉 시간 동안 그랬다)" },
 
 			// 임신·출산의 게임 변수(research/24. 모듈의 일이 쓴다: src/Production.cpp 의 WalkVars. 열쇠는 core/FamilyPlan).
 			// global.__gameplay_vars 에 pregnancy_chance, pregnancy_from_dummy_chance, pregnancy_miscarriage_chance, pregnancy_mother_die, trait_death_in_childbirth 가 있다.
@@ -234,8 +246,10 @@ namespace NlCore
 				"gml_Script_anon_SoulBasic_gml_GlobalScript_SoulBasic_11987516072_SoulBasic_gml_GlobalScript_SoulBasic",
 				HS, 0.1, 1, 0.01, 1, true, "병사를 고용할 때 내는 금화에 곱한다(0.1 이면 10분의 1). 고용 창을 다시 열면 보인다" },
 			// 병영의 거주 칸(research/32). 주택 정원 배율(housing_capacity)과 같은 칸이고 건물 종류의 이름이 barrack_ 로 시작하는 것만 한다(core/BuildingPlan).
-			{ "barrack_capacity", Area::Army, "병영 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, false,
-				"병영의 종류마다 거주 칸의 수에 곱한다. 끄면 원래 수로 되돌린다. 효과는 확인 전" },
+			// 플레이에서 봤다(2026-10-08, 0.31.0. research/32): 2 를 걸고 병사 20명을 만들자(게임이 add_resident_with_priority 를 20번 불렀다) 병영 넷이 12·12·12·10명이 됐다
+			// (원래 6. 병영의 거주자 합 26 -> 48, 원래 정원의 합은 36). 끄자 정원은 6 으로 돌아왔고 넘친 거주자는 아홉 시간 뒤에도 그대로였다.
+			{ "barrack_capacity", Area::Army, "병영 정원 배율", "inst:o_building.generic.__number_of_living_places", CS, 2, 0, 1, 10, true,
+				"병영의 종류마다 거주 칸의 수에 곱한다. 이미 지은 병영도 바로 따른다. 끄면 원래 수로 되돌린다(이미 들어와 사는 병사는 남았다: 아홉 시간 동안 봤다)" },
 
 			// 아군 무적(research/13). 상처는 SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true 가 입힌다. 그 함수를 모두에게 건너뛰게 하자
 			// 도적 무리와 6,371번 맞는 동안(치명상 포함) 새 상처가 하나도 생기지 않았다. 이 항목은 self 가 플레이어의 영혼일 때만 건너뛴다

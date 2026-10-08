@@ -87,7 +87,10 @@ namespace
 	bool WalkHousing(const NlJobs::Visit& V, std::string& Why) { return WalkLiving(V, false, Why); }
 	bool WalkBarracks(const NlJobs::Visit& V, std::string& Why) { return WalkLiving(V, true, Why); }
 
-	bool g_EffectsLogged = false;		// 효과의 목록은 한 실행에 한 번만 적는다
+	// 건물의 효과(research/32). 건물 종류의 __effect = { __name, __effect(주변 건물의 안락도에 더하는 수), __range(칸), __type }.
+	// 좋은 효과(값이 양수: 교회·제단, 공공장소)는 범위에 배율을 쓰고(effect_range), 나쁜 효과(음수: 대장간·용광로·벌목장, 훈련장)는 값을 0 으로 쓴다(bad_effects_off).
+	bool g_EffectsLogged = false;		// 효과의 목록은 한 실행에 한 번만 적는다(처음 걷기 전에: 쓰기 전의 값으로)
+	NlCore::EffectSides g_Sides;		// 건물 종류마다 처음 본 부호. 값을 0 으로 써 둔 뒤에도 나쁜 효과의 자리를 다시 찾는다
 
 	// 구조체의 멤버 하나를 로그에 적을 글로(글은 그대로, 수는 가장 짧게, 그 밖과 없는 것은 "?").
 	std::string Brief(const RValue& In, const char* Member)
@@ -99,16 +102,31 @@ namespace
 		return value.IsString() ? value.ToString() : NlGame::IsNumber(value) ? NlCore::Shortest(value.ToDouble()) : "?";
 	}
 
-	// 건물 종류마다의 효과를 로그에 적는다(쓰기 전의 값으로): 효과(이름, 범위, 크기, 종류)마다 그것을 가진 건물 종류들과 구조체의 수.
-	// 어느 건물이 어떤 효과를 갖는지, 건물 종류들이 한 구조체를 함께 쓰는지를 이 빌드에서 보려고 둔다.
-	void LogEffects()
+	// 건물 종류의 효과 구조체와, 그 값의 부호(처음 본 것). 효과가 없거나 값이 수가 아니면 거짓.
+	bool EffectOf(const std::string& Building, const RValue& Generic, RValue& Effect, NlCore::EffectSide& Side)
 	{
+		RValue value;
+		std::string ignored;
+		if (!NlAccess::Follow(Generic, { { '.', "__effect", 0 } }, Effect, ignored) || !Effect.IsStruct()
+			|| !NlAccess::Follow(Effect, { { '.', "__effect", 0 } }, value, ignored) || !NlGame::IsNumber(value))
+			return false;
+		Side = g_Sides.Of(Building, value.ToDouble());
+		return true;
+	}
+
+	// 건물 종류마다의 효과를 로그에 적는다(쓰기 전의 값으로): 효과(이름, 범위, 크기, 종류)마다 그것을 가진 건물 종류들과 구조체의 수.
+	// 어느 건물이 어떤 효과를 갖는지를 이 빌드에서 보려고 둔다(게임이 갱신되면 research/32 의 표와 견준다). 부호도 여기서 처음 기억한다.
+	void LogEffectsOnce()
+	{
+		if (g_EffectsLogged)
+			return;
+		g_EffectsLogged = true;
 		std::map<std::string, std::pair<std::string, std::set<const void*>>> seen;
 		std::string why;
 		NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
 			RValue effect;
-			std::string ignored;
-			if (!NlAccess::Follow(generic, { { '.', "__effect", 0 } }, effect, ignored) || !effect.IsStruct())
+			NlCore::EffectSide side = NlCore::EffectSide::None;
+			if (!EffectOf(building, generic, effect, side))
 				return true;
 			auto& entry = seen[Brief(effect, "__name") + " range " + Brief(effect, "__range") + " effect " + Brief(effect, "__effect") + " type " + Brief(effect, "__type")];
 			entry.first += " " + building;
@@ -120,23 +138,48 @@ namespace
 			Log("build: effect " + what + " in " + std::to_string(entry.second.size()) + " struct(s):" + entry.first);
 	}
 
-	// 건물 효과의 범위(치트 표의 effect_range): 건물 종류의 __effect.__range 를 엔진에 넘긴다. Key 는 건물 종류의 이름.
-	// 건물 종류들이 한 구조체를 함께 쓰면 엔진이 그 자리를 한 번만 다룬다(같은 훑기에서 같은 자리는 건너뛴다).
-	bool WalkEffectRanges(const NlJobs::Visit& V, std::string& Why)
+	// 한쪽(좋은 것이나 나쁜 것)의 효과를 가진 건물 종류마다 그 구조체의 Member 칸을 엔진에 넘긴다. Key 는 건물 종류의 이름.
+	bool WalkEffects(const NlJobs::Visit& V, NlCore::EffectSide Wanted, const char* Member, std::string& Why)
 	{
-		if (!g_EffectsLogged)
-		{
-			g_EffectsLogged = true;
-			LogEffects();
-		}
-		const PathStep step{ '.', "__range", 0 };
+		LogEffectsOnce();
+		const PathStep step{ '.', Member, 0 };
 		return NlBuildings::ForEachType([&](const std::string& building, const RValue& generic) {
-			RValue effect, range;
+			RValue effect, value;
+			NlCore::EffectSide side = NlCore::EffectSide::None;
 			std::string ignored;
-			if (NlAccess::Follow(generic, { { '.', "__effect", 0 } }, effect, ignored) && effect.IsStruct() && NlAccess::Follow(effect, { step }, range, ignored))
-				V(effect, step, building, 0, -1, range);
+			if (EffectOf(building, generic, effect, side) && side == Wanted && NlAccess::Follow(effect, { step }, value, ignored))
+				V(effect, step, building, 0, -1, value);
 			return true;
 		}, Why);
+	}
+
+	// 좋은 효과의 범위(치트 표의 effect_range). 효과를 내는 건물은 지어질 때 범위를 사각형으로 굳혀 둔다: 쓴 뒤에 지어지는 건물부터 먹는다.
+	bool WalkGoodRanges(const NlJobs::Visit& V, std::string& Why) { return WalkEffects(V, NlCore::EffectSide::Good, "__range", Why); }
+	// 나쁜 효과의 값(치트 표의 bad_effects_off). 엔진이 0 으로 쓰고 끄면 되돌린다. 쓴 뒤에 RefreshEffects 가 건물마다 합을 다시 내게 한다.
+	bool WalkBadValues(const NlJobs::Visit& V, std::string& Why) { return WalkEffects(V, NlCore::EffectSide::Bad, "__effect", Why); }
+
+	// 건물마다 받는 효과의 합을 다시 내게 한다: 게임의 c_effect.__update_applied_effects()(BuildingComponentEffects).
+	// 인자가 없다는 것은 기계어로 봤다(0x141C112C0: 본문이 argc 를 어디에도 옮기지 않는다). 31번 불러 탈이 없었고, 종류의 값을 바꾼 뒤 부르자 합이 따라왔다(research/32).
+	// 이 함수는 받는 효과의 목록은 그대로 두고 합만 다시 낸다(범위에 드는 건물을 다시 찾지는 않는다).
+	void RefreshEffects()
+	{
+		const int count = NlAccess::InstanceCount("o_building");
+		Log("build: calling __update_applied_effects on the buildings (" + std::to_string(count) + " instance(s))");		// 부르기 전에 남긴다
+		size_t called = 0, failed = 0;
+		std::string first_failure;
+		for (int i = 0; i < count; i++)
+		{
+			const std::string base = "inst:o_building:" + std::to_string(i) + ".c_effect";
+			RValue component, result;		// 이 함수 안에서만 든다
+			std::string why;
+			if (!NlAccess::Read(NlCore::ParseAskPath(base), component, why) || !component.IsStruct())
+				continue;		// 효과 구성요소가 없는 건물
+			if (NlAccess::CallMethod(NlCore::ParseAskPath(base + ".__update_applied_effects"), {}, result, why))
+				called++;
+			else if (!failed++)
+				first_failure = "o_building:" + std::to_string(i) + ": " + why;
+		}
+		Log("build: effects updated on " + std::to_string(called) + " building(s)" + (failed ? ", " + std::to_string(failed) + " failed (first: " + first_failure + ")" : ""));
 	}
 
 	// ---- 즉시 업그레이드 (research/09) ----
@@ -211,7 +254,9 @@ void NlBuild::Init(LogFn Log_)
 	// 건물 종류의 자료는 게임이 켜질 때 만들어진다. 15초마다 다시 훑어 게임이 다시 만들었으면 다시 쓴다(조리법과 같다).
 	NlJobs::Add({ "housing_capacity", "living places (housing)", false, &WalkHousing, nullptr, 15 });
 	NlJobs::Add({ "barrack_capacity", "living places (barracks)", false, &WalkBarracks, nullptr, 15 });
-	NlJobs::Add({ "effect_range", "effect ranges", false, &WalkEffectRanges, nullptr, 15 });
+	// 좋은 효과의 범위는 메인 메뉴에서도 쓴다(AnyScreen): 건물은 지어지거나 불러와질 때 범위를 굳히므로, 세이브를 불러오기 전에 써 두어야 그 세이브의 건물에 먹는다.
+	NlJobs::Add({ "effect_range", "good effect ranges", false, &WalkGoodRanges, nullptr, 15, true });
+	NlJobs::Add({ "bad_effects_off", "bad effect values", true, &WalkBadValues, &RefreshEffects, 15 });
 }
 
 void NlBuild::GameTick(double Now)

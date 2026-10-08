@@ -84,14 +84,20 @@ void RunCheatTests()
 			else
 				CHECK(cheat.On != cheat.Off);		// Toggle: 써 넣는 두 값. Hook: 바꿔 돌려줄 값(On). Custom: 켬과 끔
 		}
-		CHECK(Cheats().size() == 80);
+		CHECK(Cheats().size() == 81);
 		// 거주 칸과 효과의 범위(research/32): 건물 종류의 자료에 모듈이 배율을 쓴다(CustomScale). 주택과 병영은 배율이 따로다(영역도: 인구, 군대).
 		CHECK(FindCheat("housing_capacity") && FindCheat("housing_capacity")->Kind == CheatKind::CustomScale && FindCheat("housing_capacity")->Where == Area::People);
 		CHECK(FindCheat("barrack_capacity") && FindCheat("barrack_capacity")->Kind == CheatKind::CustomScale && FindCheat("barrack_capacity")->Where == Area::Army);
 		CHECK(FindCheat("effect_range") && FindCheat("effect_range")->Kind == CheatKind::CustomScale && FindCheat("effect_range")->Where == Area::Build);
-		// 늘리는 배율이다: 1 아래로는 받지 않는다(정원을 줄이면 살던 사람이 넘친다). 효과는 재기 전이다.
+		// 늘리는 배율이다: 1 아래로는 받지 않는다(정원을 줄이면 살던 사람이 넘친다).
 		for (const char* id : { "housing_capacity", "barrack_capacity", "effect_range" })
-			CHECK(FindCheat(id) && !FindCheat(id)->Verified && FindCheat(id)->Min == 1 && FindCheat(id)->On == 2);
+			CHECK(FindCheat(id) && FindCheat(id)->Min == 1 && FindCheat(id)->On == 2);
+		// 정원의 둘은 플레이에서 봤다(research/32): 집의 창이 "거주민(6 / 12)"를 보였고 오두막 셋과 병영 셋이 12명까지 찼다(원래 6).
+		CHECK(FindCheat("housing_capacity")->Verified && FindCheat("barrack_capacity")->Verified);
+		// 효과는 좋은 것(범위 배율)과 나쁜 것(없애기: 값을 0 으로)으로 나눈다. 둘 다 플레이에서 보기 전이다.
+		CHECK(FindCheat("bad_effects_off") && FindCheat("bad_effects_off")->Kind == CheatKind::Custom && FindCheat("bad_effects_off")->Where == Area::Build);
+		for (const char* id : { "effect_range", "bad_effects_off" })
+			CHECK(FindCheat(id) && !FindCheat(id)->Verified);
 		// 범죄(research/26). 주민이 범죄자가 되기 직전에 게임이 그 사람의 is_criminal_immunity()(불리언)를 묻는다. 참을 돌려주게 한 저녁에는 두 번의 시도에도
 		// 범죄자가 생기지 않았고, 그러지 않은 두 저녁에는 다섯 번·한 번의 시도에 다섯·한 명이 생겼다. 주소는 o_character 의 것으로 삼는다(게임 화면에는 o_character 가 언제나 있다).
 		CHECK(FindCheat("no_new_criminals") && FindCheat("no_new_criminals")->Kind == CheatKind::Hook && FindCheat("no_new_criminals")->On == 1

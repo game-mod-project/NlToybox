@@ -29,11 +29,18 @@ namespace
 	constexpr const char* k_Director = "inst:o_game_map_controller.__game_director";
 	constexpr const char* k_EventsData = "inst:o_data.__game_director_events_data";
 
+	// 청 하나. Name: 이벤트의 이름(예약, 바로 일으키기). Family: 끝낼 가족. 이름을 청과 함께 둔다: 줄 둘의 단추를 잇달아 눌러도 섞이지 않는다.
+	struct Ask
+	{
+		WorldAct Act = WorldAct::CooldownsClear;
+		std::string Name;
+		NlCore::EventFamily Family = NlCore::EventFamily::None;
+	};
+
 	std::recursive_mutex g_Mutex;		// 아래 전부를 지킨다
 	NlEvents::LogFn g_Log;
-	std::deque<WorldAct> g_Queue;		// 창이 쌓고 틱이 한다
+	std::deque<Ask> g_Queue;			// 창이 쌓고 틱이 한다
 	std::string g_Last;					// 마지막으로 한 일
-	std::string g_PendingEvent;			// 일으킬 이벤트의 이름(창이 적고 틱이 쓴다)
 	std::vector<std::string> g_EventNames;	// 게임의 이벤트 이름들(감독의 자료의 ds_map 열쇠. 게임 화면에서 한 번 읽는다)
 	double g_NextNames = 0;				// 이름을 다시 읽어 볼 시각
 	bool g_Busy = false;				// 하는 중이다(여기서 부른 게임의 함수가 틱을 다시 부르면 안쪽은 아무것도 하지 않는다)
@@ -100,6 +107,47 @@ namespace
 		return NlCore::ForceEventReport(Name, 'd', std::string());
 	}
 
+	// 이벤트 바로 일으키기(research/32). 게임이 이벤트를 뽑아 생기게 할 때 부르는 꼴 그대로다(기록으로 봤다):
+	// 그 이벤트의 __is_available()(인자 없음) -> 참이면 __spawn_method()(인자 없음. 지연 생성의 시각에 감독이 그렇게 부른다), 감독의 apply_event_cooldowns(이벤트, true).
+	// 감독의 뽑기(하루 한 번. 그날의 이벤트 종류가 정해지지 않은 날에는 예약을 읽지도 않는다)와 지연 시각(손님 18시)을 기다리지 않는다.
+	// 조건의 답이 참이 아니면 부르지 않는다(이미 손님이 와 있다, 습격이 허용되지 않는 때다). 쿨다운은 조건에 들지 않는다(감독이 따로 본다).
+	std::string SpawnEventNow(const std::string& Name)
+	{
+		double id = 0;
+		if (!NlAccess::ReadNumber(std::string(k_EventsData) + ".__events_by_name", id))
+			return NlCore::InstantEventReport(Name, 'm', "이벤트 목록(ds_map)의 번호를 읽지 못했습니다");
+		const std::string base = "map:" + NlCore::Shortest(id) + "@" + Name;
+		RValue event, answer, result;		// 이 함수 안에서만 든다
+		std::string why;
+		if (!NlAccess::Read(NlCore::ParseAskPath(base), event, why) || !event.IsStruct())
+			return NlCore::InstantEventReport(Name, 'n', std::string());
+
+		Log("world call " + Name + ".__is_available()");		// 부르기 전에 남긴다
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(base + ".__is_available"), {}, answer, why))
+			return NlCore::InstantEventReport(Name, 'm', why);
+		const bool number = NlGame::IsNumber(answer);
+		if (!NlCore::EventAvailable(number, number ? answer.ToDouble() : 0))
+		{
+			const NlAccess::Row said = NlAccess::Describe(NlCore::PathStep{}, answer);
+			const std::string word = said.Text.empty() ? said.Type : said.Text;
+			Log("world: " + Name + " is not available now (" + word + "); not spawned");
+			return NlCore::InstantEventReport(Name, 'a', word);
+		}
+
+		Log("world call " + Name + ".__spawn_method()");
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(base + ".__spawn_method"), {}, result, why))
+			return NlCore::InstantEventReport(Name, 'f', why);
+
+		Log("world call apply_event_cooldowns(" + Name + ", true)");
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_Director) + ".apply_event_cooldowns"), { event, RValue(true) }, result, why))
+			return NlCore::InstantEventReport(Name, 'c', why);
+		double days = 0;
+		if (!NlAccess::ReadNumber(std::string(k_Director) + ".__events_cooldowns." + Name, days) || !(days > 0))
+			return NlCore::InstantEventReport(Name, 'c', "쿨다운의 칸에 그 이름이 없습니다");
+		Log("world: " + Name + " spawned now, cooldown " + NlCore::Shortest(days) + " day(s)");
+		return NlCore::InstantEventReport(Name, 'd', NlCore::Shortest(days));
+	}
+
 	// 이벤트의 이름들(ds_map 의 열쇠)을 한 번 읽는다. 못 읽으면 다음 틱에 다시.
 	void ReadEventNames()
 	{
@@ -144,7 +192,6 @@ namespace
 	double g_NextRead = 0;				// 상태를 다시 읽을 시각(패널이 보일 때 1초)
 	char g_Filter[48] = "";				// 창의 찾기 칸
 	int g_GroupPick = 0;				// 창의 묶음(0 전체, 1.. EventGroups 의 차례)
-	NlCore::EventFamily g_EndFamily = NlCore::EventFamily::None;		// 끝낼 가족(창이 적고 틱이 쓴다)
 
 	std::string LabelOf(const std::string& Name)
 	{
@@ -299,14 +346,16 @@ namespace
 		return NlCore::EndEventReport(Family, after.Read && !after.Present ? 'd' : 'u', before.Name);
 	}
 
-	std::string DoNow(WorldAct Act)
+	std::string DoNow(const Ask& What)
 	{
 		if (!NlAccess::InGame())
 			return "게임 화면이 아닙니다";
-		switch (Act)
+		switch (What.Act)
 		{
 		case WorldAct::EventForce:
-			return ForceEventNow(g_PendingEvent);
+			return ForceEventNow(What.Name);
+		case WorldAct::EventNow:
+			return SpawnEventNow(What.Name);
 		case WorldAct::CooldownsClear:
 		{
 			const NlCore::ClearResult events = ClearNumbers(std::string(k_Director) + ".__events_cooldowns");
@@ -319,7 +368,7 @@ namespace
 		case WorldAct::EventCancel:
 			return CancelNow();
 		case WorldAct::EventEnd:
-			return EndNow(g_EndFamily);
+			return EndNow(What.Family);
 		default:
 			return std::string();
 		}
@@ -334,14 +383,14 @@ namespace
 
 	constexpr size_t k_MaxQueue = 4;		// 창이 쌓아 둘 청의 수. 넘치면 받지 않고 결과 줄에 적는다
 
-	void Push(WorldAct Act)
+	void Push(Ask What)
 	{
 		if (g_Queue.size() >= k_MaxQueue)
 		{
 			g_Last = NlCore::QueueFullText(k_MaxQueue);
 			return;
 		}
-		g_Queue.push_back(Act);
+		g_Queue.push_back(std::move(What));
 	}
 }
 
@@ -391,9 +440,9 @@ void NlEvents::Tick(double Now, bool Visible)
 	}
 	if (!g_Queue.empty())
 	{
-		const WorldAct act = g_Queue.front();
+		const Ask what = std::move(g_Queue.front());
 		g_Queue.pop_front();
-		Remember(act, DoNow(act));
+		Remember(what.Act, DoNow(what));
 	}
 	if (read)
 	{
@@ -420,14 +469,17 @@ void NlEvents::Draw()
 		{
 			ImGui::SameLine();
 			if (ImGui::Button("예약 취소"))
-				Push(WorldAct::EventCancel);
+				Push({ WorldAct::EventCancel });
 		}
 		if (g_Now.Delayed > 0)
 			ImGui::Text("지연 생성 %d건 (뽑혔고 그 시각에 생긴다)", g_Now.Delayed);
 	}
-	NlUi::Hint("일으키기는 게임의 감독이 보는 '강제 이벤트' 자리에 그 이벤트의 구조체를 써 둡니다. 감독은 하루 한 번(오후) 이벤트를 뽑을 때 그 자리를 읽어 그것을 고르고 지웁니다"
-		"(research/28: 써 둔 u_guest_bard 가 그날 뽑혀 쿨다운에 올랐다). 예약 취소는 게임의 함수 reset_debug_forced_event() 로 그 자리를 비웁니다(research/29 에서 확인). "
-		"쿨다운 중인 이벤트도 오는지는 재지 않았습니다. 습격·반란·예언 이벤트도 그대로 옵니다.");
+	NlUi::Hint("'지금'은 게임이 이벤트를 생기게 할 때 부르는 꼴 그대로 부릅니다: 그 이벤트의 조건 함수(__is_available)가 참이면 만드는 함수(__spawn_method)를 부르고 "
+		"감독의 쿨다운에 올립니다(research/32: 보상 '부유한 이주민'과 예언 '늑대 습격'을 그렇게 일으켰고, 손님은 게임이 18시에 같은 꼴로 부르는 것을 봤습니다). "
+		"조건이 맞지 않으면(손님이 이미 와 있다, 습격이 허용되지 않는 때다) 일으키지 않고 그렇게 적습니다. 습격·정치·반란·세계 지도의 이벤트는 같은 꼴이지만 직접 일으켜 보지는 못했습니다.");
+	NlUi::Hint("'예약'은 게임의 감독이 보는 '강제 이벤트' 자리에 그 이벤트의 구조체를 써 둡니다. 감독은 하루 한 번 이벤트를 뽑을 때 그 자리를 읽어 그것을 고르고 지웁니다"
+		"(research/28). 그날의 이벤트 종류가 정해지지 않은 날에는 예약을 읽지 않으므로 며칠 뒤에 올 수 있습니다(research/32). "
+		"예약 취소는 게임의 함수 reset_debug_forced_event() 로 그 자리를 비웁니다(research/29 에서 확인).");
 
 	// 표
 	const std::vector<std::string> groups = NlCore::EventGroups();
@@ -470,11 +522,11 @@ void NlEvents::Draw()
 				continue;
 			ImGui::TableNextRow();
 			ImGui::TableNextColumn();
-			if (ImGui::SmallButton(("일으키기##" + name).c_str()))
-			{
-				g_PendingEvent = name;
-				Push(WorldAct::EventForce);
-			}
+			if (ImGui::SmallButton(("지금##" + name).c_str()))
+				Push({ WorldAct::EventNow, name });
+			ImGui::SameLine();
+			if (ImGui::SmallButton(("예약##" + name).c_str()))
+				Push({ WorldAct::EventForce, name });
 			ImGui::TableNextColumn();
 			ImGui::TextUnformatted(rowGroup.c_str());
 			ImGui::TableNextColumn();
@@ -517,10 +569,7 @@ void NlEvents::Draw()
 		const bool allowed = NlCore::EventEndAllowed(end);
 		ImGui::BeginDisabled(!allowed || !status.Present);
 		if (ImGui::SmallButton((std::string(allowed ? "끝내기" : "끝내기 (확인 전)") + "##" + NlCore::EventFamilyKey(end.Family)).c_str()))
-		{
-			g_EndFamily = end.Family;
-			Push(WorldAct::EventEnd);
-		}
+			Push({ WorldAct::EventEnd, std::string(), end.Family });
 		ImGui::EndDisabled();
 	}
 	ImGui::Text("반란: %s", NlCore::EventStatusText(NlCore::EventFamily::Rebellion, false, false, std::string()).c_str());
@@ -528,7 +577,7 @@ void NlEvents::Draw()
 
 	ImGui::SeparatorText("쿨다운");
 	if (ImGui::Button("이벤트 쿨다운 지우기"))
-		Push(WorldAct::CooldownsClear);
+		Push({ WorldAct::CooldownsClear });
 	NlUi::Hint("게임이 이벤트를 고를 때 보는 '남은 날'(이벤트마다, 묶음마다)을 0 으로 씁니다. 써지는 것까지 봤고, 이벤트가 더 일찍 오는지는 확인 전입니다. "
 		"쿨다운은 세이브에 들어가는 자료입니다(세이브 파일에 그 열쇠가 있습니다). 쓴 채 저장하면 남습니다.");
 	if (!g_Last.empty())
@@ -541,7 +590,7 @@ std::string NlEvents::Do(NlCore::WorldAct Act)
 	if (g_Busy)
 		return "busy";
 	const NlCore::ScopedFlag busy(g_Busy);
-	return Remember(Act, DoNow(Act));
+	return Remember(Act, DoNow({ Act }));
 }
 
 std::string NlEvents::ForceEvent(const std::string& Name)
@@ -550,8 +599,16 @@ std::string NlEvents::ForceEvent(const std::string& Name)
 	if (g_Busy)
 		return "busy";
 	const NlCore::ScopedFlag busy(g_Busy);
-	g_PendingEvent = Name;
-	return Remember(WorldAct::EventForce, DoNow(WorldAct::EventForce));
+	return Remember(WorldAct::EventForce, DoNow({ WorldAct::EventForce, Name }));
+}
+
+std::string NlEvents::SpawnEvent(const std::string& Name)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return "busy";
+	const NlCore::ScopedFlag busy(g_Busy);
+	return Remember(WorldAct::EventNow, DoNow({ WorldAct::EventNow, Name }));
 }
 
 std::vector<std::string> NlEvents::List(const std::string& Group, const std::string& Find)
@@ -593,6 +650,5 @@ std::string NlEvents::End(NlCore::EventFamily Family)
 	if (g_Busy)
 		return "busy";
 	const NlCore::ScopedFlag busy(g_Busy);
-	g_EndFamily = Family;
-	return Remember(WorldAct::EventEnd, DoNow(WorldAct::EventEnd));
+	return Remember(WorldAct::EventEnd, DoNow({ WorldAct::EventEnd, std::string(), Family }));
 }

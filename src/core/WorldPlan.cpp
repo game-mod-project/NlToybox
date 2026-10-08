@@ -25,12 +25,13 @@ namespace NlCore
 			{ WorldAct::EventList, "events", false },
 			{ WorldAct::EventCancel, "event_cancel", true },
 			{ WorldAct::EventEnd, "event_end", true },
+			{ WorldAct::EventNow, "event_now", true },
 		};
 	}
 
 	bool WorldActNeedsName(WorldAct Act)
 	{
-		return Act == WorldAct::EventForce;
+		return Act == WorldAct::EventForce || Act == WorldAct::EventNow;
 	}
 
 	bool GoodEventName(const std::string& Name)
@@ -111,7 +112,8 @@ namespace NlCore
 
 	bool IsEventAct(WorldAct Act)
 	{
-		return Act == WorldAct::EventForce || Act == WorldAct::EventList || Act == WorldAct::EventCancel || Act == WorldAct::EventEnd || Act == WorldAct::CooldownsClear;
+		return Act == WorldAct::EventForce || Act == WorldAct::EventNow || Act == WorldAct::EventList || Act == WorldAct::EventCancel || Act == WorldAct::EventEnd
+			|| Act == WorldAct::CooldownsClear;
 	}
 
 	bool WorldActNeedsKind(WorldAct Act)

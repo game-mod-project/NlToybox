@@ -12,9 +12,10 @@ namespace NlCore
 	// 창의 단추와 원격 `world <낱말>`이 같은 길을 탄다. 불러서 게임이 끝난 것(궁수 매복)은 넣지 않는다.
 	// 계절의 일(research/25): 보기(읽기만), 미루기(시작 시각을 하루 뒤로), 지금 단계 끝내기(남은 시간을 줄인다). 셈은 core/SeasonPlan.
 	// 지금 저장(save. 게임의 자동 저장 함수 save_game(0, 1). research/28)과 이벤트 골라 일으키기(event. 감독의 __debug_forced_event 에 그 이벤트의 구조체를 쓴다. 이름을 받는다).
-	enum class WorldAct { CooldownsClear, BishopSend, SeasonShow, SeasonDelay, SeasonEnd, SaveNow, EventForce, EventList, EventCancel, EventEnd };
+	// 이벤트 바로 일으키기(event_now. 게임이 부르는 꼴 그대로 그 이벤트의 __is_available() 과 __spawn_method() 를 부른다. research/32. 이름을 받는다).
+	enum class WorldAct { CooldownsClear, BishopSend, SeasonShow, SeasonDelay, SeasonEnd, SaveNow, EventForce, EventList, EventCancel, EventEnd, EventNow };
 	bool ParseWorldAct(const std::string& Word, WorldAct& Out);
-	// 이름(name=)을 받는 일인가(이벤트 일으키기만).
+	// 이름(name=)을 받는 일인가(이벤트의 예약과 바로 일으키기).
 	bool WorldActNeedsName(WorldAct Act);
 	// 이벤트의 시스템 이름의 꼴: 비지 않고 글자·숫자·밑줄만(64자 안).
 	bool GoodEventName(const std::string& Name);
