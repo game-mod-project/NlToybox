@@ -64,6 +64,7 @@ int main(int argc, char** argv)
 	RunRoleTests();
 	RunCrimeTests();
 	RunEventsTests();
+	RunLibraryTests();
 
 	if (g_Failed)
 	{

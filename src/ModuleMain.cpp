@@ -14,6 +14,7 @@
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "Events.hpp"
+#include "Library.hpp"
 #include "People.hpp"
 #include "PeopleAccess.hpp"
 #include "Shield.hpp"
@@ -35,7 +36,7 @@ using namespace YYTK;
 
 namespace
 {
-	constexpr const char* k_Version = "0.31.2";
+	constexpr const char* k_Version = "0.31.3";
 	constexpr const char* k_ProbeBuiltin = "code_is_compiled";
 	constexpr const char* k_ProbeScript = "gml_Script_command_line_parameters_init";
 
@@ -168,6 +169,7 @@ EXPORTED AurieStatus ModuleInitialize(
 	NlPeople::Init([](const std::string& Line) { LogLine(Line); }, module_dir.parent_path().parent_path());
 	NlCourt::Init([](const std::string& Line) { LogLine(Line); });
 	NlCrime::Init([](const std::string& Line) { LogLine(Line); });
+	NlLibrary::Init([](const std::string& Line) { LogLine(Line); });
 	NlDiplomacy::Init([](const std::string& Line) { LogLine(Line); });
 	NlBuild::Init([](const std::string& Line) { LogLine(Line); });
 	NlMenu::Init(module_dir, k_Version, [](const std::string& Line) { LogLine(Line); });

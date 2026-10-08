@@ -11,6 +11,7 @@
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "Events.hpp"
+#include "Library.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Explorer.hpp"
@@ -174,6 +175,7 @@ void NlMenu::GameTick()
 	NlMines::Tick(now);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
 	NlCrime::GameTick(now, visible && page == Area::Crime);
+	NlLibrary::GameTick(now, visible && page == Area::Knowledge);
 	NlCourt::GameTick(now, visible && (page == Area::Lord || page == Area::Religion));		// 종교 패널의 주교와의 평판도 같은 모듈이 한다
 	NlPeople::GameTick(now, visible && (page == Area::Person || page == Area::Lord || page == Area::People || page == Area::Knowledge || page == Area::Items || page == Area::Army));
 	if (visible && now >= g_NextState)
@@ -256,11 +258,24 @@ void NlMenu::Draw()
 		NlCourt::Draw();		// 영주끼리의 평판과 왕에 대한 충성(src/Court.cpp)
 		break;
 	case Area::Knowledge:
-		// 표의 항목(연구 시간)과 배율(교본 경험)을 먼저, 그 아래에 지식을 주는 패널.
+		// 표의 항목(연구 시간)과 배율(교본 경험)을 먼저, 그 아래에 탭 둘: 영주에게 지식을 주는 패널(남은 높이를 다 쓴다)과 도서관의 책(src/Library.cpp).
 		NlCheats::DrawArea(page);
 		NlTweaks::DrawArea(page);
 		ImGui::Separator();
-		NlPeople::DrawKnowledge();
+		if (ImGui::BeginTabBar("knowledge"))
+		{
+			if (ImGui::BeginTabItem("영주의 지식"))
+			{
+				NlPeople::DrawKnowledge();
+				ImGui::EndTabItem();
+			}
+			if (ImGui::BeginTabItem("도서관의 책"))
+			{
+				NlLibrary::Draw();
+				ImGui::EndTabItem();
+			}
+			ImGui::EndTabBar();
+		}
 		break;
 	case Area::Items:
 		NlPeople::DrawItems();
