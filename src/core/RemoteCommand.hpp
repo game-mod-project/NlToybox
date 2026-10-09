@@ -33,6 +33,9 @@
 //                                                   재능을 붙인다(core/RolePlan). 답은 한 것과 하지 못한 것의 수다
 //   person spawn_soldier amount=<1..20>             플레이어의 병사를 만든다(게임의 디버그 함수. research/13)
 //   person spawn <soldier|knight|peasant|slave|lord>  디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다
+//   person spawn lord [gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]
+//                                                   영주는 성별·나이·문화·역할 프리셋을 정해 만들 수 있다(research/35). 정하지 않은 것은 게임에 맡긴다
+//   person <uuid> culture_set name=<문화의 이름>    플레이어의 영주의 문화를 바꾼다(게임의 set_culture)
 //   preset <normal|easy|sandbox|god>                치트 표의 확인된 항목의 묶음을 건다(모드창의 프리셋과 같다)
 //   time <pause|resume>                             게임의 시간을 멈춘다, 다시 흐르게 한다
 //   world <cooldowns_clear|bishop>                  이벤트 쿨다운을 0 으로 쓴다, 주교를 부른다(research/14)

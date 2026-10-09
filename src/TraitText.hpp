@@ -24,6 +24,7 @@ namespace NlTraitText
 	bool Titled(const std::string& Name);					// 화면 이름이 힌트의 제목에서 온 것인가(흐린 글씨)
 	std::string Label(const std::string& Name);				// "화면 이름 (게임의 이름)" 또는 게임의 이름
 	const char* SkillLabel(size_t Index);					// 능력치의 화면 이름(없으면 모듈의 이름)
+	std::string CultureLabel(const std::string& Name);		// 문화의 보일 이름: "화면 이름 (게임의 이름)". 게임의 글이 없으면 게임의 이름만(research/35)
 	struct Notes
 	{
 		std::string Names, Hints, Files;		// 이름을 어디서 몇 개 읽었는가, 설명이 몇 개 붙었는가, 힌트 파일을 읽은 결과

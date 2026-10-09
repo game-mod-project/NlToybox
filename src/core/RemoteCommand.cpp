@@ -379,10 +379,22 @@ namespace NlCore
 			if (count >= 2 && tokens[1] == "spawn")
 			{
 				// person spawn <soldier|knight|peasant|slave|lord>: 게임의 디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다(research/13)
+				// person spawn lord [gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]: 영주는 만들 때 정할 것을 받는다(core 의 LordSpawn. research/35)
 				SpawnKind kind = SpawnKind::Soldier;
-				if (count != 3 || !ParseSpawnKind(tokens[2], kind))
+				if (count < 3 || !ParseSpawnKind(tokens[2], kind))
 					return Fail(command, "person spawn needs soldier, knight, peasant, slave or lord");
 				command.Target = "spawn";
+				if (count > 3)
+				{
+					if (kind != SpawnKind::Lord)
+						return Fail(command, "person spawn takes options only for lord (gender=, age=, culture=, role=)");
+					if (!Options(tokens, 3, command))
+						return;
+					LordSpawn spawn;
+					std::string why;
+					if (!ParseLordSpawn(command.Options, spawn, why))
+						return Fail(command, why);
+				}
 				command.Options["kind"] = tokens[2];
 				return;
 			}
@@ -401,7 +413,7 @@ namespace NlCore
 			PersonCommand person;
 			if (count < 3 || !GoodWho(tokens[1]) || !ParsePersonAct(tokens[2], person.Act))
 				return Fail(command, "person needs who (a uuid, lords or people) and what to do (skill_set, skill_add, skills_max, need_set, needs_fill, age_set, happy, cure, "
-					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role, role_undo, pregnancy_next, birth, grow_up, conceive)");
+					"trait_add, trait_remove, knowledge_all, knowledge_add, money_add, item_add, equip, role, role_undo, pregnancy_next, birth, grow_up, conceive, culture_set)");
 			command.Target = tokens[1];
 			if (!Options(tokens, 3, command))
 				return;

@@ -681,6 +681,49 @@ namespace NlPeople::Internal
 		return true;
 	}
 
+	// 문화를 바꾼다(research/35): 게임의 SoulBasic.set_culture(문화 구조체). 인자는 하나다(기계어: 첫 인자만 읽고 그것의 get_name·get_dialect 를 부른다).
+	// 그 함수는 영혼의 문화를 바꾸고, 외모의 문화 이름을 맞추고, 그 문화의 방언을 더하고, "문화가 바뀌었다"는 이벤트를 낸다.
+	// 게임이 스스로 부르는 것은 보지 못했다. 소환한 영주에게 불러 문화 makha → gwelts, 외모의 문화 이름 gwelts, 방언 2 → 3 이 되는 것을 봤다. 이름은 바뀌지 않는다.
+	// 플레이어의 영주에게만 한다(주민과 손님에게는 불러 보지 않았다). 문화는 게임이 무작위로 고르는 목록의 것만 받는다.
+	bool OneCultureSet(const PersonCommand& C, const PersonRow& Row, const std::string& soul, RValue& soul_value, std::string& Note)
+	{
+		if (!NlCore::IsPlayersLord(Row))
+		{
+			Note = "플레이어의 영주에게만 합니다";
+			return false;
+		}
+		const bool listed = std::any_of(g_Now.Cultures.begin(), g_Now.Cultures.end(), [&](const CultureName& one) { return one.Name == C.Text; });
+		RValue culture, result;		// 이 함수 안에서만 든다
+		std::string name, why, before, after;
+		// 문화 구조체는 게임의 자료에서 얻는다(이름 → 구조체). 그 구조체의 이름이 청한 이름인지 다시 본다.
+		if (!listed || !NlAccess::Read(NlCore::ParseAskPath(std::string(k_Cultures) + ".__cultures_map." + C.Text), culture, why) || !culture.IsStruct()
+			|| !FollowString(culture, { { '.', "__name", 0 } }, name) || name != C.Text)
+		{
+			Note = "게임에 없는 문화입니다: " + C.Text;
+			return false;
+		}
+		if (!NlAccess::ReadText(soul + ".__culture.__name", before))
+		{
+			Note = "지금의 문화를 읽지 못했습니다";
+			return false;
+		}
+		if (before == C.Text)
+		{
+			Note = "이미 그 문화입니다";
+			return true;
+		}
+		Log("people call set_culture(" + C.Text + ") on " + Row.Uuid);		// 부르기 전에 남긴다
+		if (!NlAccess::CallMethod(NlCore::ParseAskPath(soul + ".set_culture"), { culture }, result, Note))
+			return false;
+		if (!NlAccess::ReadText(soul + ".__culture.__name", after) || after != C.Text)
+		{
+			Note = "문화가 " + (after.empty() ? std::string("읽히지 않습니다") : after + " 입니다");
+			return false;
+		}
+		Note = "문화 " + before + " 에서 " + after + " 로";
+		return true;
+	}
+
 	// 한 사람에게 명령 하나를 한다. 그 자리의 uuid 를 다시 보고(StillThere) 행동마다의 함수로 나눈다(위의 One*. 2026-10-07 리뷰 R4 로 나눴다).
 	bool One(const PersonCommand& C, const PersonRow& Row, std::string& Note, bool Bulk)
 	{
@@ -715,6 +758,7 @@ namespace NlPeople::Internal
 		case PersonAct::MoneyAdd: return OneMoneyAdd(C, Row, soul, soul_value, Note);
 		case PersonAct::Equip: return OneEquip(C, Row, soul, soul_value, Note);
 		case PersonAct::ItemAdd: return OneItemAdd(C, Row, soul, soul_value, Note);
+		case PersonAct::CultureSet: return OneCultureSet(C, Row, soul, soul_value, Note);
 		}
 		return false;
 	}
@@ -852,6 +896,86 @@ namespace NlPeople::Internal
 		Log("people: spawner " + std::string(NlCore::SpawnWord(Kind)) + ", people " + std::to_string(before) + " -> " + std::to_string(after));
 		return label + (after > before ? " 하나를 만들었습니다" : ": 불렀지만 사람의 수가 그대로입니다")
 			+ " (영주와 주민 " + std::to_string(before) + "명에서 " + std::to_string(after) + "명으로)";
+	}
+
+	// 지금 읽어 둔 사람들 가운데 o_character(영주와 손님)의 uuid 들. 새로 생긴 영주를 앞뒤로 견줘 가린다.
+	std::vector<std::string> CharacterUuids()
+	{
+		std::vector<std::string> out;
+		for (const PersonRow& row : g_Now.People)
+			if (row.Character)
+				out.push_back(row.Uuid);
+		return out;
+	}
+
+	// 성별·나이·문화·역할을 정해 플레이어의 영주 하나를 만든다(research/35). 돌려주는 것: 만든 것의 줄과, 입힌 일마다의 줄.
+	// - 성별을 정하지 않았으면 소환기의 __spawn_lord()(지금까지와 같다).
+	// - 정했으면 소환기가 하는 일을 같은 꼴로 한다: 카메라의 get_mouse_x()·get_mouse_y()(인자 없음, 수) → 지도의 그래프의 get_node_by_pos(수, 수) -> 구조체(칸)
+	//   → 영지의 debug_spawn_new_player_character(int64 성별, 칸) -> 인스턴스. 넷 모두 게임이 그 꼴로 부르는 것을 기록했고, 성별의 수가 0 이면 남성(m_name…),
+	//   1 이면 여성(f_name…)인 것을 여섯 번 봤다. 소환기의 본문은 그 호출들이 전부다(기계어): 나이와 이름은 만드는 함수 안에서 정해진다.
+	// - 문화·나이·역할은 만든 뒤에 그 영주에게 입힌다(core 의 LordSpawnSteps: set_culture, set_age, 역할 프리셋). 새 영주는 o_character 의 uuid 를 앞뒤로 견줘 가린다.
+	std::vector<std::string> SpawnLordNow(const NlCore::LordSpawn& Options)
+	{
+		std::string why;
+		if (!NlCore::CheckLordSpawn(Options, why))
+			return { why };
+		if (!NlAccess::InGame())
+			return { "게임 화면이 아닙니다" };
+		if (!Scan())
+			return { g_Now.Why };
+		// 문화는 만들기 전에 본다: 만든 뒤에 거절하면 고르지 않은 영주가 남는다.
+		if (!Options.Culture.empty()
+			&& std::none_of(g_Now.Cultures.begin(), g_Now.Cultures.end(), [&](const CultureName& one) { return one.Name == Options.Culture; }))
+			return { "게임에 없는 문화입니다: " + Options.Culture };
+		const std::vector<std::string> before = CharacterUuids();
+
+		RValue made;		// 이 함수 안에서만 든다
+		if (Options.Gender == NlCore::LordGender::Any)
+		{
+			const std::string path = std::string(k_Spawner) + "." + NlCore::SpawnMethod(NlCore::SpawnKind::Lord);
+			Log("people call " + path + "()");		// 부르기 전에 남긴다
+			if (!CallNoArgs(path, made, why))
+				return { "영주: 부르지 못했습니다: " + why };
+		}
+		else
+		{
+			double x = 0, y = 0;
+			RValue node;
+			if (!CallNumber(std::string(k_Camera) + ".get_mouse_x", x) || !CallNumber(std::string(k_Camera) + ".get_mouse_y", y))
+				return { "마우스의 자리를 읽지 못했습니다" };
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_MapGraph) + ".get_node_by_pos"), { RValue(x), RValue(y) }, node, why) || !node.IsStruct())
+				return { "마우스가 가리키는 지도의 칸을 얻지 못했습니다 (마우스를 지도 위에 두고 다시 누르세요)" };
+			const int gender = NlCore::LordGenderValue(Options.Gender);
+			Log("people call debug_spawn_new_player_character(" + std::to_string(gender) + ", the node at " + Shortest(x) + ", " + Shortest(y) + ")");
+			if (!NlAccess::CallMethod(NlCore::ParseAskPath(std::string(k_Province) + ".debug_spawn_new_player_character"),
+				{ RValue(static_cast<int64_t>(gender)), node }, made, why))
+				return { "영주: 부르지 못했습니다: " + why };
+		}
+		NlShield::RefreshSoon();		// 새 사람의 영혼을 바로 다음 틱에 묶음에 넣는다(전투의 항목들)
+
+		const std::vector<PersonCommand> wanted = NlCore::LordSpawnSteps(Options, "new");
+		if (!Scan())
+			return { NlCore::LordSpawnLine(std::string(), false, !wanted.empty()) + " (" + g_Now.Why + ")" };
+		const std::string uuid = NlCore::NewcomerUuid(before, CharacterUuids());
+		const PersonRow* row = uuid.empty() ? nullptr : FindRow(uuid);
+		std::vector<std::string> lines;
+		std::string first = NlCore::LordSpawnLine(row ? row->Name : std::string(), row != nullptr, !wanted.empty());
+		if (row && Options.Gender != NlCore::LordGender::Any)
+		{
+			// 고른 성별로 만들어졌는지 게임에 묻는다(get_gender(): 인자 없음, 0·1. research/24).
+			double gender = k_Unknown;
+			const bool read = CallNumber(Base(*row) + ".__soul.get_gender", gender);
+			first += !read ? " (성별을 읽지 못했습니다)" : gender == NlCore::LordGenderValue(Options.Gender)
+				? std::string(" (") + NlCore::LordGenderLabel(Options.Gender) + ")" : " (성별이 고른 것과 다릅니다)";
+		}
+		Log("people: spawn lord: gender " + std::string(NlCore::LordGenderWord(Options.Gender)) + ", age " + Shortest(Options.Age) + ", culture "
+			+ (Options.Culture.empty() ? "-" : Options.Culture) + ", role " + (Options.Role.empty() ? "-" : Options.Role) + ": " + (row ? "new lord " + uuid : "the new lord was not told apart")
+			+ ", characters " + std::to_string(before.size()) + " -> " + std::to_string(CharacterUuids().size()));
+		lines.push_back(first);
+		if (row)
+			for (const PersonCommand& step : NlCore::LordSpawnSteps(Options, uuid))		// 문화, 나이, 역할. 걸음마다 사람들을 다시 읽고 그 자리의 uuid 를 다시 본다(Execute)
+				lines.push_back(Execute(step));
+		return lines;
 	}
 
 }

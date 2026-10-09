@@ -45,6 +45,9 @@ namespace
 	// 능력치의 화면 이름(능력치의 열쇠 -> 게임의 한국어 이름. 비면 영어). 시작할 때 main.csv 에서 읽는다(열쇠 "actor.skill.<열쇠>").
 	// 읽지 못한 것은 여기 없고 그때는 모듈의 이름(SkillNames)을 보인다.
 	std::unordered_map<std::string, std::string> g_SkillCaptions;
+	// 문화의 화면 이름(게임의 이름 → 글). 열쇠는 게임의 문화 구조체의 __caption 에서 본 꼴이다("…culture.gwelts". research/35).
+	constexpr const char* k_CultureCaptionPrefix = "main_menu.new_game.province.kingdom.culture.";
+	std::unordered_map<std::string, std::string> g_CultureCaptions;
 
 	void Log(const std::string& Line)
 	{
@@ -125,6 +128,14 @@ namespace
 					if (row != skill_rows.end() && !row->second.empty() && row->second.size() <= 48 && row->second.find_first_of("\r\n<{") == std::string::npos)
 						g_SkillCaptions.emplace(skill.Key, row->second);
 				}
+			// 문화의 이름도 같은 파일에 있다: 문화 구조체의 __caption 이 드는 열쇠(k_CultureCaptionPrefix + 이름. research/35). 한 줄짜리 짧은 글만 받는다.
+			g_CultureCaptions.clear();
+			std::unordered_map<std::string, std::string> culture_rows;
+			std::string culture_why;
+			if (NlCore::ReadLocalization(text, k_CultureCaptionPrefix, { "Korean", "English" }, culture_rows, culture_why))
+				for (auto& [key, value] : culture_rows)
+					if (!value.empty() && value.size() <= 48 && value.find_first_of("\r\n<{") == std::string::npos)
+						g_CultureCaptions.emplace(key.substr(std::string(k_CultureCaptionPrefix).size()), std::move(value));
 		}
 
 		// 힌트의 글: 게임의 locale_definition.json 이 드는 힌트 파일 셋. 같은 열쇠가 여러 파일에 있으면 먼저 읽은 것을 둔다
@@ -355,6 +366,13 @@ const char* NlTraitText::SkillLabel(size_t Index)
 {
 	std::lock_guard lock(g_Mutex);
 	return ::SkillLabel(Index);
+}
+
+std::string NlTraitText::CultureLabel(const std::string& Name)
+{
+	std::lock_guard lock(g_Mutex);
+	const auto found = g_CultureCaptions.find(Name);
+	return found != g_CultureCaptions.end() ? found->second + " (" + Name + ")" : Name;
 }
 
 NlTraitText::Notes NlTraitText::GetNotes()
