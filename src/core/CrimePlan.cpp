@@ -1,5 +1,7 @@
 #include "CrimePlan.hpp"
 
+#include "Text.hpp"
+
 #include "FamilyPlan.hpp"
 
 #include <cmath>
@@ -69,11 +71,6 @@ namespace NlCore
 		return out;
 	}
 
-	bool CanClear(const Vagabond& Who)
-	{
-		return !Who.Thug;
-	}
-
 	std::string LordsLine(int Lords, int WithCrimes, int Unread)
 	{
 		if (Lords <= 0)
@@ -84,11 +81,11 @@ namespace NlCore
 		return out;
 	}
 
-	ClearOutcome AfterClear(bool SamePerson, bool FlagRead, double Raw)
+	ClearOutcome AfterClear(bool SamePerson, bool FlagRead, double Raw, bool ThugRead, double ThugRaw)
 	{
-		if (!SamePerson || !FlagRead || !std::isfinite(Raw))
+		if (!SamePerson || !FlagRead || !std::isfinite(Raw) || !ThugRead || !std::isfinite(ThugRaw))
 			return ClearOutcome::Unknown;
-		return Raw > 0 ? ClearOutcome::Still : ClearOutcome::Cleared;
+		return Raw > 0 || ThugRaw > 0 ? ClearOutcome::Still : ClearOutcome::Cleared;
 	}
 
 	std::string StolenReport(int Called, double GoldBefore, double GoldAfter, const std::string& Why)
@@ -132,7 +129,7 @@ namespace NlCore
 				return true;
 			}
 			const char* everyone = act.Who == 'a' ? "all" : "lords";
-			if (Words.size() != 2 || (Words[1] != everyone && !GoodUuid(Words[1])))
+			if (Words.size() != 2 || (Words[1] != everyone && !IsUuid(Words[1])))
 			{
 				Why = std::string("crime ") + act.Word + " needs a uuid or " + everyone;
 				return false;
@@ -152,12 +149,14 @@ namespace NlCore
 		return "";
 	}
 
-	std::string ClearReport(int Asked, int Done, int Skipped, int Unsure, const std::string& Why)
+	std::string ClearReport(int Asked, int Done, int Skipped, int Unsure, const std::string& Why, int ThugsDone)
 	{
 		if (Asked <= 0)
 			return "되돌릴 부랑자가 없습니다";
+		// 되돌린 깡패의 수는 따로 적는다(게임이 만든 깡패에게서 확인했다: 두 깃발과 is_thug()·is_criminal_scum()이 거짓이 됐다. research/28).
+		const std::string thugs = ThugsDone > 0 ? "그 가운데 깡패 " + People(ThugsDone) : std::string();
 		if (Done == Asked)
-			return "부랑자 " + People(Asked) + "을 주민으로 되돌렸습니다";
+			return "부랑자 " + People(Asked) + "을 주민으로 되돌렸습니다" + (thugs.empty() ? "" : " (" + thugs + ")");
 		std::string notes;
 		const auto note = [&notes](const std::string& text) { notes += std::string(notes.empty() ? "" : ", ") + text; };
 		const int failed = Asked - Done - Skipped - Unsure;
@@ -167,7 +166,7 @@ namespace NlCore
 			note(People(Unsure) + "은 부른 뒤 확인하지 못함");
 		if (failed > 0)
 			note(People(failed) + "은 못 함" + (Why.empty() ? "" : ": " + Why));
-		return "부랑자 " + People(Asked) + " 가운데 " + People(Done) + "을 주민으로 되돌렸습니다 (" + notes + ")";
+		return "부랑자 " + People(Asked) + " 가운데 " + People(Done) + "을 주민으로 되돌렸습니다 (" + notes + (thugs.empty() ? "" : ". " + thugs) + ")";
 	}
 
 	std::string TraitClearReport(bool Sins, int Lords, int Removed, int Failed, int Unread, const std::string& Why)

@@ -4,8 +4,11 @@
 #include "Cheats.hpp"
 #include "Court.hpp"
 #include "Crime.hpp"
+#include "Library.hpp"
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
+#include "Events.hpp"
+#include "MapGen.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Game.hpp"
@@ -14,6 +17,7 @@
 #include "Search.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/MapPlan.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Text.hpp"
 
@@ -162,8 +166,32 @@ namespace
 	}
 
 	// write 는 남기고 poke 는 되돌린다.
+	// 글을 쓴다(write <path>=s:<글>). 없던 값(undefined)에도 쓴다: 읽지 못한 옛 값은 "?"로 적고 되돌릴 때는 쓰지 않는다.
+	void DoWriteText(const RemoteCommand& C, bool Restore)
+	{
+		const std::string text = C.Options.at("text");
+		std::string old, read, back, why, why_back;
+		const bool had = NlAccess::ReadText(C.Target, old);
+		Say("  old " + (had ? "\"" + old + "\"" : std::string("?")) + ", writing \"" + text + "\"");		// 쓰다가 죽으면 여기까지 남는다
+		const bool stuck = NlAccess::WriteString(C.Target, text, why);
+		const bool have = NlAccess::ReadText(C.Target, read);
+		std::string line = "  read " + (have ? "\"" + read + "\"" : std::string("?")) + (stuck ? " (stuck)" : " (not stuck: " + why + ")");
+		if (Restore && had)
+		{
+			const bool restored = NlAccess::WriteString(C.Target, old, why_back);
+			const bool have_back = NlAccess::ReadText(C.Target, back);
+			line += "; restored " + (have_back ? "\"" + back + "\"" : std::string("?")) + (restored ? "" : " (restore failed: " + why_back + ")");
+		}
+		else if (Restore)
+			line += "; not restored (the old value was not a text)";
+		Say(line);
+		Log("remote " + C.Verb + " " + C.Target + " = \"" + text + "\"" + (stuck ? "" : ": " + why));
+	}
+
 	void DoWrite(const RemoteCommand& C, bool Restore)
 	{
+		if (C.Options.count("kind") && C.Options.at("kind") == "s")
+			return DoWriteText(C, Restore);
 		double old = 0, read = 0, back = 0;
 		if (!NlAccess::ReadNumber(C.Target, old))
 		{
@@ -228,25 +256,22 @@ namespace
 			Say("  : " + (global ? why : std::string("no global instance")));
 			return;
 		}
-		// 정식 이름으로만 부른다. 접두 없는 이름은 다른 루틴을 가리킨다(research/07).
-		const std::string name = NlCore::ScriptRoutineName(C.Target);
+		// 정식 이름으로만 부른다. 접두 없는 이름은 다른 루틴을 가리킨다(research/07). 찾기와 부르기는 Game.cpp 가 한다.
+		std::string name;
 		int index = -1;
-		if (!name.empty())
-			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-		if (index < 100000 || index >= 500000)
+		if (!NlGame::FindScript(C.Target, name, index, why))
 		{
-			Say("  : no such script: " + C.Target);
+			Say("  : " + why);
 			return;
 		}
 
 		Say("  calling " + name + " with " + std::to_string(args.size()) + " arguments");		// 죽으면 여기까지 남는다
 		Log("remote call " + name + " (" + std::to_string(args.size()) + " arguments)");
 		RValue result;
-		const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, name, global, global, args);
-		if (AurieSuccess(status))
+		if (AurieSuccess(NlGame::CallScriptStatus(name, args, result, why)))
 			SayResult(result);
 		else
-			Say(std::string("  : ") + AurieStatusToString(status));
+			Say("  : " + why);
 	}
 
 	// 메서드를 부른다. 묶인 곳이 없는 메서드(생성자의 정적 메서드)는 주소의 부모에 묶어 부른다(NlAccess::CallMethod).
@@ -416,7 +441,22 @@ namespace
 		Say("  " + NlEconomy::Do(command));
 	}
 
-	// 종교·이벤트 패널의 단추와 같은 길(NlWorld::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	// 지도 패널의 단추와 같은 길(NlMapGen::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoMap(const RemoteCommand& C)
+	{
+		NlCore::MapCommand command;
+		std::string why;
+		if (!NlCore::MapCommandFromParts(C.Target, C.Options, command, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		Say("  running map " + C.Target);		// 죽으면 여기까지 남는다
+		for (const std::string& line : NlMapGen::Do(command))
+			Say("  " + line);
+	}
+
+	// 종교·유틸·이벤트 패널의 단추와 같은 길(NlWorld::Do, NlEvents). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoWorld(const RemoteCommand& C)
 	{
 		NlCore::WorldAct act = NlCore::WorldAct::CooldownsClear;
@@ -426,7 +466,23 @@ namespace
 			return;
 		}
 		Say("  running world " + C.Target);		// 죽으면 여기까지 남는다
-		Say("  " + NlWorld::Do(act));
+		if (act == NlCore::WorldAct::EventForce)
+			Say("  " + NlEvents::ForceEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+		else if (act == NlCore::WorldAct::EventNow)
+			Say("  " + NlEvents::SpawnEvent(C.Options.count("name") ? C.Options.at("name") : std::string()));
+		else if (act == NlCore::WorldAct::EventList)
+		{
+			for (const std::string& line : NlEvents::List(C.Options.count("group") ? C.Options.at("group") : std::string(), C.Options.count("find") ? C.Options.at("find") : std::string()))
+				Say("  " + line);
+		}
+		else if (act == NlCore::WorldAct::EventEnd)
+		{
+			NlCore::EventFamily family = NlCore::EventFamily::None;
+			NlCore::ParseEventFamily(C.Options.count("kind") ? C.Options.at("kind") : std::string(), family);		// 줄의 꼴은 ParseRemoteLine 이 이미 봤다
+			Say("  " + NlEvents::End(family));
+		}
+		else
+			Say("  " + NlWorld::Do(act));		// 취소·쿨다운은 NlWorld::Do 가 NlEvents::Do 로 넘긴다
 	}
 
 	// 범죄 패널의 단추와 같은 길(NlCrime::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
@@ -445,6 +501,28 @@ namespace
 		}
 		Say("  running crime " + C.Target + (command.Who.empty() ? "" : " " + command.Who));		// 죽으면 여기까지 남는다
 		for (const std::string& line : NlCrime::Do(command))
+			Say("  " + line);
+	}
+
+	// 지식 탭의 "도서관의 책"과 같은 길(NlLibrary::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoLibrary(const RemoteCommand& C)
+	{
+		std::vector<std::string> words = { C.Target };
+		for (const char* key : { "name", "find" })
+		{
+			const auto given = C.Options.find(key);
+			if (given != C.Options.end())
+				words.push_back(std::string(key) + "=" + given->second);
+		}
+		NlCore::LibraryCommand command;
+		std::string why;
+		if (!NlCore::ParseLibraryCommand(words, command, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		Say("  running library " + C.Target + (command.Name.empty() ? "" : " " + command.Name));		// 죽으면 여기까지 남는다
+		for (const std::string& line : NlLibrary::Do(command))
 			Say("  " + line);
 	}
 
@@ -534,8 +612,19 @@ namespace
 		else if (C.Target == "spawn")
 		{
 			NlCore::SpawnKind kind = NlCore::SpawnKind::Soldier;
+			NlCore::LordSpawn lord;
+			std::string why;
 			if (!NlCore::ParseSpawnKind(C.Options.count("kind") ? C.Options.at("kind") : std::string(), kind))
 				lines = { "person spawn needs a kind" };
+			else if (kind == NlCore::SpawnKind::Lord && !NlCore::ParseLordSpawn(C.Options, lord, why))
+				lines = { why };
+			else if (kind == NlCore::SpawnKind::Lord && !NlCore::IsPlainLordSpawn(lord))
+			{
+				// 무언가를 정한 영주 소환(research/35). 아무것도 정하지 않은 것은 아래의 지금까지의 길로 간다.
+				Say("  running person spawn lord (gender " + std::string(NlCore::LordGenderWord(lord.Gender)) + ", age " + NlCore::Shortest(lord.Age)
+					+ ", culture " + (lord.Culture.empty() ? "-" : lord.Culture) + ", role " + (lord.Role.empty() ? "-" : lord.Role) + ")");		// 죽으면 여기까지 남는다
+				lines = NlPeople::SpawnLord(lord);
+			}
 			else
 			{
 				Say(std::string("  running person spawn ") + NlCore::SpawnWord(kind));		// 죽으면 여기까지 남는다
@@ -581,6 +670,121 @@ namespace
 			Say(std::string("  ") + object + " " + std::to_string(NlAccess::InstanceCount(object)));
 	}
 
+	// ---- 짧은 동사들(Execute 의 사슬에 있던 것. 2026-10-07 리뷰 R5) ----
+
+	void DoPreset(const RemoteCommand& C)
+	{
+		std::string text;
+		Say(NlCheats::ApplyPreset(C.Target, text) ? "  " + text : "  : no such preset");
+	}
+
+	void DoTime(const RemoteCommand& C)
+	{
+		Say("  running time " + C.Target);		// 죽으면 여기까지 남는다
+		Say("  " + NlCheats::TimeNow(C.Target == "pause"));
+	}
+
+	void DoCheat(const RemoteCommand& C)
+	{
+		const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
+		double set = 0;		// 범위 안으로 당겨진 값(청한 값과 다를 수 있다)
+		const bool numbered = ok && C.Number != 0 && NlCheats::Factor(C.Target, set);
+		Say(ok ? "  cheat " + C.Target + (numbered ? " = " + Shortest(set) : C.Number != 0 ? " on" : " off")
+			: "  : cannot set " + C.Target + (C.Args.empty() ? " (it needs a number)" : " (it takes no number)"));
+	}
+
+	void DoPage(const RemoteCommand& C)
+	{
+		Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
+	}
+
+	void DoTree(const RemoteCommand& C)
+	{
+		size_t budget = static_cast<size_t>(NlCore::OptionNumber(C, "max", 300));
+		Tree(NlCore::ParseAskPath(C.Target), AsOption(C), 0, static_cast<int>(NlCore::OptionNumber(C, "depth", 2)), budget, "  ");
+	}
+
+	void DoWriteOrPoke(const RemoteCommand& C)
+	{
+		DoWrite(C, C.Verb == "poke");
+	}
+
+	void DoRecord(const RemoteCommand& C)
+	{
+		std::string name, why;
+		if (NlRecorder::Watch(C.Target, name, why))
+			Say("  recording " + name);
+		else
+			Say("  : " + why);
+	}
+
+	void DoUnoverride(const RemoteCommand& C)
+	{
+		const int stopped = NlRecorder::Unoverride(C.Target);
+		Say(stopped > 0 ? "  stopped " + std::to_string(stopped) : "  : nothing is overridden under that name");
+	}
+
+	void DoUnrecord(const RemoteCommand& C)
+	{
+		Say("  stopped " + std::to_string(NlRecorder::Unwatch(C.Target)));
+	}
+
+	void DoRecords(const RemoteCommand& C)
+	{
+		const std::string report = NlRecorder::Report(C.Target);
+		Say(report.empty() ? "  (nothing recorded)" : report.substr(0, report.size() - 1));		// 끝의 줄바꿈은 Say 가 붙인다
+	}
+
+	void DoStateLine(const RemoteCommand&)
+	{
+		DoState();
+	}
+
+	void DoShot(const RemoteCommand& C)
+	{
+		NlUi::RequestShot(g_Dir / ("NlToyBox.shot." + C.Target + ".bmp"));
+		Say("  shot requested: NlToyBox.shot." + C.Target + ".bmp");
+	}
+
+	void DoWindow(const RemoteCommand& C)
+	{
+		NlUi::SetVisible(C.Target == "open");
+		Say("  window " + C.Target);
+	}
+
+	void DoUi(const RemoteCommand& C)
+	{
+		// 모드창의 입력 큐에 넣는다(게임 창과 진짜 마우스·키보드는 건드리지 않는다). 다음 프레임들에 차례로 먹는다.
+		const auto option = [&](const char* key) {
+			const auto found = C.Options.find(key);
+			return found != C.Options.end() ? found->second : std::string();
+		};
+		bool ok = false;
+		if (C.Target == "click")
+			ok = NlUi::InjectClick(static_cast<float>(NlCore::OptionNumber(C, "x", 0)), static_cast<float>(NlCore::OptionNumber(C, "y", 0)));
+		else if (C.Target == "type")
+			ok = NlUi::InjectText(option("text"));
+		else
+			ok = NlUi::InjectKey(option("name"));
+		Say(ok ? "  ui " + C.Target + " queued" : "  : the mod window is not ready");
+	}
+
+	// 동사 → 하는 함수. 동사를 더하면 core/RemoteCommand 의 Parse…Line 과 여기에 한 줄씩 더한다.
+	struct Handler
+	{
+		const char* Verb;
+		void (*Do)(const RemoteCommand&);
+	};
+	constexpr Handler k_Handlers[] = {
+		{ "ask", DoAsk }, { "about", DoAbout }, { "list", DoList }, { "tree", DoTree }, { "statics", DoStatics },
+		{ "find", DoFind }, { "refine", DoRefine }, { "write", DoWriteOrPoke }, { "poke", DoWriteOrPoke },
+		{ "record", DoRecord }, { "unrecord", DoUnrecord }, { "records", DoRecords },
+		{ "call", DoCall }, { "method", DoMethod }, { "treecall", DoTreeCall }, { "override", DoOverride }, { "unoverride", DoUnoverride },
+		{ "economy", DoEconomy }, { "person", DoPerson }, { "crime", DoCrime }, { "library", DoLibrary }, { "map", DoMap }, { "world", DoWorld }, { "diplomacy", DoDiplomacy }, { "court", DoCourt }, { "traits", DoTraits },
+		{ "preset", DoPreset }, { "time", DoTime }, { "cheat", DoCheat }, { "page", DoPage },
+		{ "state", DoStateLine }, { "shot", DoShot }, { "window", DoWindow }, { "ui", DoUi },
+	};
+
 	void Execute(const RemoteCommand& C)
 	{
 		if (!C.Error.empty())
@@ -588,115 +792,13 @@ namespace
 			Say("  : " + C.Error);
 			return;
 		}
-		if (C.Verb == "ask")
-			DoAsk(C);
-		else if (C.Verb == "about")
-			DoAbout(C);
-		else if (C.Verb == "economy")
-			DoEconomy(C);
-		else if (C.Verb == "person")
-			DoPerson(C);
-		else if (C.Verb == "crime")
-			DoCrime(C);
-		else if (C.Verb == "world")
-			DoWorld(C);
-		else if (C.Verb == "diplomacy")
-			DoDiplomacy(C);
-		else if (C.Verb == "court")
-			DoCourt(C);
-		else if (C.Verb == "traits")
-			DoTraits(C);
-		else if (C.Verb == "preset")
-		{
-			std::string text;
-			Say(NlCheats::ApplyPreset(C.Target, text) ? "  " + text : "  : no such preset");
-		}
-		else if (C.Verb == "time")
-		{
-			Say("  running time " + C.Target);		// 죽으면 여기까지 남는다
-			Say("  " + NlCheats::TimeNow(C.Target == "pause"));
-		}
-		else if (C.Verb == "cheat")
-		{
-			const bool ok = C.Args.empty() ? NlCheats::Set(C.Target, C.Number != 0) : NlCheats::SetNumber(C.Target, C.Args[0].Number);
-			double set = 0;		// 범위 안으로 당겨진 값(청한 값과 다를 수 있다)
-			const bool numbered = ok && C.Number != 0 && NlCheats::Factor(C.Target, set);
-			Say(ok ? "  cheat " + C.Target + (numbered ? " = " + Shortest(set) : C.Number != 0 ? " on" : " off")
-				: "  : cannot set " + C.Target + (C.Args.empty() ? " (it needs a number)" : " (it takes no number)"));
-		}
-		else if (C.Verb == "page")
-			Say(NlMenu::SetPage(C.Target) ? "  page " + C.Target : "  : unknown page");
-		else if (C.Verb == "list")
-			DoList(C);
-		else if (C.Verb == "tree")
-		{
-			size_t budget = static_cast<size_t>(NlCore::OptionNumber(C, "max", 300));
-			Tree(NlCore::ParseAskPath(C.Target), AsOption(C), 0, static_cast<int>(NlCore::OptionNumber(C, "depth", 2)), budget, "  ");
-		}
-		else if (C.Verb == "find")
-			DoFind(C);
-		else if (C.Verb == "refine")
-			DoRefine(C);
-		else if (C.Verb == "write" || C.Verb == "poke")
-			DoWrite(C, C.Verb == "poke");
-		else if (C.Verb == "record")
-		{
-			std::string name, why;
-			if (NlRecorder::Watch(C.Target, name, why))
-				Say("  recording " + name);
-			else
-				Say("  : " + why);
-		}
-		else if (C.Verb == "statics")
-			DoStatics(C);
-		else if (C.Verb == "treecall")
-			DoTreeCall(C);
-		else if (C.Verb == "override")
-			DoOverride(C);
-		else if (C.Verb == "unoverride")
-		{
-			const int stopped = NlRecorder::Unoverride(C.Target);
-			Say(stopped > 0 ? "  stopped " + std::to_string(stopped) : "  : nothing is overridden under that name");
-		}
-		else if (C.Verb == "unrecord")
-			Say("  stopped " + std::to_string(NlRecorder::Unwatch(C.Target)));
-		else if (C.Verb == "records")
-		{
-			const std::string report = NlRecorder::Report(C.Target);
-			Say(report.empty() ? "  (nothing recorded)" : report.substr(0, report.size() - 1));		// 끝의 줄바꿈은 Say 가 붙인다
-		}
-		else if (C.Verb == "call")
-			DoCall(C);
-		else if (C.Verb == "method")
-			DoMethod(C);
-		else if (C.Verb == "state")
-			DoState();
-		else if (C.Verb == "shot")
-		{
-			NlUi::RequestShot(g_Dir / ("NlToyBox.shot." + C.Target + ".bmp"));
-			Say("  shot requested: NlToyBox.shot." + C.Target + ".bmp");
-		}
-		else if (C.Verb == "window")
-		{
-			NlUi::SetVisible(C.Target == "open");
-			Say("  window " + C.Target);
-		}
-		else if (C.Verb == "ui")
-		{
-			// 모드창의 입력 큐에 넣는다(게임 창과 진짜 마우스·키보드는 건드리지 않는다). 다음 프레임들에 차례로 먹는다.
-			const auto option = [&](const char* key) {
-				const auto found = C.Options.find(key);
-				return found != C.Options.end() ? found->second : std::string();
-			};
-			bool ok = false;
-			if (C.Target == "click")
-				ok = NlUi::InjectClick(static_cast<float>(NlCore::OptionNumber(C, "x", 0)), static_cast<float>(NlCore::OptionNumber(C, "y", 0)));
-			else if (C.Target == "type")
-				ok = NlUi::InjectText(option("text"));
-			else
-				ok = NlUi::InjectKey(option("name"));
-			Say(ok ? "  ui " + C.Target + " queued" : "  : the mod window is not ready");
-		}
+		for (const Handler& handler : k_Handlers)
+			if (C.Verb == handler.Verb)
+			{
+				handler.Do(C);
+				return;
+			}
+		Say("  : unknown command: " + C.Verb);		// 파서가 거른다. 여기 오면 표에 빠진 동사다
 	}
 }
 

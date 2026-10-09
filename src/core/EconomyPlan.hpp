@@ -45,11 +45,11 @@ namespace NlCore
 	};
 
 	// 지금의 수를 보고 명령을 변화량들로 푼다. 넘기는 변화량은 언제나 유한한 정수다(게임의 함수에 그대로 간다). 0 인 변화는 뺀다.
-	// 줄일 때는 줄일 수 있는 양을 넘지 않는다: 금화는 지금 수, 자원은 Counts 와 Free 가운데 작은 쪽(예약된 몫은 줄이지 않는다).
+	// 줄일 때는 줄일 수 있는 양을 넘지 않는다: 금화는 지금 수, 자원은 Basis 와 Free 가운데 작은 쪽(예약된 몫은 줄이지 않는다).
 	// 읽은 수가 수가 아니면 그것은 하지 않는다.
-	// Counts: 자원 번호 → 지금 수(맞추기의 기준). Free: 자원 번호 → 예약되지 않은 수(없으면 Counts 를 쓴다).
+	// Basis: 자원 번호 → 맞추기의 기준이 되는 수(경제 패널은 화면이 보이는, 예약되지 않은 수를 넘긴다. research/08·18). Free: 자원 번호 → 예약되지 않은 수(없으면 Basis 를 쓴다).
 	// Stocked: 창고의 갈래에 든 자원 번호들. 여기에 없는 자원은 하나씩으로도 건드리지 않는다.
-	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
+	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Basis,
 		const std::vector<double>& Free, const std::vector<int>& Stocked);
 
 	// 최소값 유지. 자원마다(금화는 -1) 바닥을 두고, 화면의 수가 그보다 적으면 모자란 만큼 더한다.
@@ -65,18 +65,6 @@ namespace NlCore
 	bool GoodFloorAmount(double Asked);
 	// 상태 파일에 적을 수 있는 열쇠인가(자원의 열쇠나 "gold": 소문자·숫자·밑줄, 40자까지).
 	bool GoodFloorKey(const std::string& Key);
-
-	// 최소값 칸의 편집. 치는 동안의 수는 들고만 있다가 칸을 떠날 때(Enter, Tab, 다른 곳을 누름) 한 번 넣는다.
-	// Dear ImGui 의 수 입력 칸(InputScalar)은 "Enter 를 눌렀을 때만 참"(EnterReturnsTrue)을 지원하지 않는다(그 함수의 단언. 편집을 마친 것은
-	// IsItemDeactivatedAfterEdit 로 보라고 적혀 있다). 그 플래그에 기대던 칸은 Enter 말고는 수를 넣을 길이 없었고, 칸을 떠나면 친 수가 버려졌다.
-	struct FloorEdit
-	{
-		bool Has = false;		// 치고 있는 수가 있다
-		double Value = 0;
-	};
-	// 프레임마다 칸을 그린 뒤에 부른다. Typed: 이번 프레임에 칸의 수가 바뀌었다(그 수가 Value). Left: 편집한 뒤 칸을 떠났다. Active: 칸이 아직 잡혀 있다.
-	// 참이면 Out 을 넣는다(한 번만). 치지 않고 떠났으면 넣지 않고, 잡혀 있지도 떠나지도 않았는데 남은 수는 버린다.
-	bool StepFloorEdit(FloorEdit& Edit, bool Typed, double Value, bool Left, bool Active, double& Out);
 
 	// 바닥에 못 미치는 것들의 변화량(언제나 양의 정수). 바닥과 같거나 많은 것은 건드리지 않는다(줄이지 않는다).
 	// Gold: 지금 금화. Free: 자원 번호 → 예약되지 않은 수(게임의 화면이 보이는 수). Allowed: 건드려도 되는 자원 번호들.

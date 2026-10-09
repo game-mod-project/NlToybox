@@ -4,6 +4,7 @@
 #include "Cheats.hpp"
 #include "Game.hpp"
 #include "core/AskPath.hpp"
+#include "core/NumberEdit.hpp"
 #include "core/Retry.hpp"
 #include "core/Text.hpp"
 
@@ -76,7 +77,7 @@ namespace
 
 	// 최소값(바닥). 열쇠 → 0 보다 큰 정수(core 의 FloorValue 를 거친 것). 창과 원격 명령이 바꾸고 틱이 읽는다.
 	std::map<std::string, double> g_Floors;
-	std::map<std::string, NlCore::FloorEdit> g_FloorEdits;		// 최소값 칸마다의 치고 있는 수(열쇠 → 편집). 그리는 쪽만 쓴다
+	std::map<std::string, NlCore::NumberEdit> g_NumberEdits;		// 최소값 칸마다의 치고 있는 수(열쇠 → 편집). 그리는 쪽만 쓴다
 	bool g_FloorsChanged = false;		// 상태 파일에 적을 것이 있다
 	double g_NextFloor = 0;
 	std::map<int, double> g_FloorLogged;	// 자원 번호(-1 금화) → 그것을 채우는 호출을 로그에 마지막으로 적은 때
@@ -396,24 +397,31 @@ namespace
 
 	// ---- 그리는 쪽 (러너를 부르지 않는다) ----
 
+	constexpr size_t k_MaxQueue = 16;		// 창이 쌓아 둘 명령의 수(한도가 없었다. 2026-10-07 리뷰 R3). 넘치면 받지 않고 결과 줄에 적는다
+
 	void Push(EconomyAct Act, int Resource, double Amount)
 	{
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			g_Now.Last = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
 		g_Queue.push_back({ Act, Resource, Amount });
 	}
 
-	// 최소값의 입력 칸. 치는 동안의 수는 들고만 있다가(치는 도중의 수로 채우지 않게) 칸을 떠날 때 넣는다: Enter, Tab, 다른 곳을 누름(core 의 StepFloorEdit).
+	// 최소값의 입력 칸. 치는 동안의 수는 들고만 있다가(치는 도중의 수로 채우지 않게) 칸을 떠날 때 넣는다: Enter, Tab, 다른 곳을 누름(core 의 StepNumberEdit).
 	// 0 을 넣으면 지운다. PushID 된 자리에서 부른다.
 	// 0.24.1 까지는 InputDouble 에 EnterReturnsTrue 를 줬는데 Dear ImGui 의 수 입력 칸은 그것을 지원하지 않는다(InputScalar 의 단언).
 	// Enter 말고는 수를 넣을 길이 없었고 칸을 떠나면 친 수가 버려졌다(사용자 보고 2026-10-06).
 	void DrawFloor(const std::string& Key, const std::string& Label)
 	{
 		const auto it = g_Floors.find(Key);
-		NlCore::FloorEdit& edit = g_FloorEdits[Key];
+		NlCore::NumberEdit& edit = g_NumberEdits[Key];
 		double value = edit.Has ? edit.Value : (it == g_Floors.end() ? 0 : it->second);
 		ImGui::SetNextItemWidth(80);
 		const bool typed = ImGui::InputDouble("##min", &value, 0, 0, "%.0f");
 		double apply = 0;
-		if (NlCore::StepFloorEdit(edit, typed, value, ImGui::IsItemDeactivatedAfterEdit(), ImGui::IsItemActive(), apply))
+		if (NlCore::StepNumberEdit(edit, typed, value, ImGui::IsItemDeactivatedAfterEdit(), ImGui::IsItemActive(), apply))
 			g_Now.Last = SetFloor(Key, Label, apply);
 	}
 }

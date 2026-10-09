@@ -76,14 +76,22 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   아침의 것은 06:00 에 난다(실행 1 에서 06:00:06 에 생겼다. `research/25`).
   **시험 값이 든 채 그 시각을 넘기지 않는다**
   (넘겨야 하면 먼저 사용자에게 알린다. 켜기 전의 사본은 `backups\saves\`에 있다).
-- 게임이 켜지다 멈추는 일이 있다(지금까지 두 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가
-  `Using LEA pattern for RI ending`에서 끝난다. 모듈이 적재되기 전이라 모듈과 무관하다. 승인받은 횟수 안에서 다시 켠다.
+  자동 저장은 `gml_Script_save_game(0, 1)`을 부른다(아침. `research/28`. 두 인자의 뜻은 모른다: 저녁과 사람의 저장을 더 보기 전에는 부르지 않는다).
+  06:00 의 저장을 기록으로 받으려면 **06:00 앞에서 배속을 4 로 낮춘다**(배속 24 는 한 바퀴에 게임 48분이라 지나친다. 두 번 놓쳤다).
+- 게임이 켜지다 멈추는 일이 있다(지금까지 세 번). 게임 창이 뜨지 않고, `NlToyBox.log`가 없고, `aurie.log`가 어느 `[trace]` 줄에서 끝난다
+  (`Using LEA pattern for RI ending`, `Hooks::InitializeStage2Hooks`). 모듈이 적재되기 전이라 모듈과 무관하다.
+  **원인은 Aurie 콘솔 창의 선택(QuickEdit) 모드다**(2026-10-07 실측. `research/06`): 창 제목이 `선택 Aurie Framework Log …`이고, 선택 모드에서는 콘솔에 쓰는 호출이
+  선택이 끝날 때까지 막혀 프로세스가 선다. 콘솔 창에 Escape 를 보내면(`Clear-NlConsoleSelect`. 진짜 키보드는 건드리지 않는다) 바로 이어진다.
+  `load-save.ps1`·`check-load.ps1`이 기다리는 동안 그것을 보고 푼다. **콘솔 창을 누르지 않는다.** 그래도 멈추면 승인받은 횟수 안에서 다시 켠다.
   강제로 끄기 전에 Aurie 콘솔 창의 글을 받아 둔다(`research/06-cheat-menu.md`).
 - `check-load.ps1`과 `probe.ps1`은 게임 창에 `WM_CLOSE`를 보내 정상 종료시키고(그래야 `aurie.log`가
   채워진다), 15초 안에 끝나지 않을 때만 강제 종료한다(`Stop-NlGame`).
 
 ## 모듈을 쓸 때
 
+- **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
+  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 도서관의 책은 `Library.cpp`(지식 탭의 둘째 탭). 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산). 지도 탭(새 게임의 생성 설정)은 `MapGen.cpp`.
+  게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비·거주 칸·건물의 효과 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
   (YYToolkit v5.0.0c가 Present 훅을 걸지 않는다. `research/00-game-structure.md` 참고).
@@ -121,9 +129,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     청한 만큼 바뀌었는지는 `__total__`의 앞뒤로 본다(함수의 반환값에 기대지 않는다). `change`는 용량을 보지 않는다.
   - 원격 명령 `economy`와 `page`가 같은 길을 창 없이 태운다. 패널을 고치면 실행 묶음에서 `economy …`와 화면으로 확인한다.
   - **수 입력 칸(`InputDouble`·`InputInt`)에 `ImGuiInputTextFlags_EnterReturnsTrue`를 주지 않는다.** Dear ImGui 가 지원하지 않는다(`InputScalar`의 단언. 릴리스 빌드에서는 조용히 지나간다):
-    Enter 로만 들어가고 칸을 떠나면 친 수가 버려진다(최소값 칸이 그랬다. `research/18`의 끝). 치는 동안의 수는 들고 있다가 `IsItemDeactivatedAfterEdit()`에 넣는다(`NlCore::StepFloorEdit`).
+    Enter 로만 들어가고 칸을 떠나면 친 수가 버려진다(최소값 칸이 그랬다. `research/18`의 끝). 치는 동안의 수는 들고 있다가 `IsItemDeactivatedAfterEdit()`에 넣는다(`NlCore::StepNumberEdit`).
+    **수 입력 칸은 `NlUi::InputNumber(라벨, 열쇠, 값, 서식, 넣을 수)`로 그린다**(치트의 수·배율 칸, 탐색기의 값·잠금 값 칸. 2026-10-07 에 넷 모두 게임에서 Tab 과 다른 곳 누르기로 확인했다).
   - **창의 입력 칸은 글자를 쳐 넣어 확인한다**: 원격 `ui click x= y=`, `ui type text=`, `ui key name=<enter|tab|escape|backspace>`가 Dear ImGui 의 입력 큐에만 넣는다
     (게임 창과 진짜 마우스·키보드는 건드리지 않는다. 자리는 `shot`으로 본다. Tab 은 다음 입력 칸으로 옮기며 그 칸을 보이는 데로 끌어온다). 원격 명령만으로 확인한 칸은 확인한 것이 아니다.
+    `ui type`은 글자·숫자·`.`·`-`·`_`만 받는다(콜론이 든 주소는 치지 못한다: 탐색기는 뿌리 목록의 줄을 눌러 들어간다). 값을 써 넣으면 결과 줄이 생겨 아래 줄들이 내려간다. 다음 자리는 `shot`을 다시 떠서 본다.
+    **탭(`BeginTabItem`)은 같은 자리를 두 번 누른다**: Dear ImGui 의 탭은 앞 프레임에 마우스가 올라와 있어야 눌리는 항목(`AllowOverlap`)이라 첫 누름은 올려놓기만 한다(`research/33`의 끝. 단추와 입력 칸은 한 번이면 된다).
 - 게임의 판정을 바꿀 때는 그 함수가 돌려주는 값을 훅으로 바꾼다(`NlRecorder::Override`. 스펙 §3 의 수단 D. `research/09`).
   - 바꾸기 전에 `statics <주소>`로 이름을 찾고 `record`로 그 함수가 무엇을 받고 무엇을 돌려주는지 본다. 불리언·수를 돌려주는 함수만 바꾼다
     (`is_allow_to_build`처럼 구조체를 돌려주는 함수는 바꾸지 않는다). 켜 둔 게임에서 `override`로 먼저 풀어 본 뒤 치트 표의 `Hook` 항목으로 굳힌다.
@@ -139,9 +150,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 건설 창이 건물을 다루는 길은 `ConstructionManager.get_building_gui_struct(이름)`이다. 사용자가 창을 다루지 않아도 이것을 직접 불러 어떤 판정이 불리는지 볼 수 있다.
 - 건물 종류(171개)는 `gml_Script_get_generic_building(이름)`으로 얻는다(이름은 `gml_Script_building_generic_get_array_of_all_buildings()`). ds_map 에 들어 있어
   전역 탐색으로는 보이지 않는다(`find … in=ds`). 건설비는 `…__construction_cost.levels[등급]`(`money`, `resources.__array_of_resource_quantity[39]`)이고
-  업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`가 0 으로 쓰고 `core/CostBook`의 값으로 되돌린다.
+  업그레이드의 비용은 같은 종류의 다음 등급이다. `src/Build.cpp`의 `WalkCosts`가 자리를 넘기고 `src/Jobs`의 엔진이 0 으로 쓰고 되돌린다.
   함수가 돌려준 구조체 안은 `NlAccess::Follow`로 보고 `NlAccess::SetNumber`로 쓴다(주소의 뿌리가 없다. 쓴 뒤 다시 읽어 확인한다).
-  - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Production.cpp`에 일(`Job`) 하나를 더한다: 대상을 넘기는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목.
+  - **이름을 얻는 스크립트는 `return global.__building_storage.get_all_names();` 한 줄이다**(`research/34`). 그 전역(구조체 `BuildingStorage`, 칸 `__map`)은 부팅 중에는 없고,
+    없을 때 부르면 게임이 "I32 argument is unset"로 끝난다. `NlBuildings::ForEachType`은 `NlBuildings::Ready()`가 거짓이면 부르지 않는다. 전역이 생긴 뒤에도 종류는 파일을 읽으며 채워진다
+    (그 사이의 걷기는 0개를 찾는다: 엔진은 그것을 "다 썼다"로 치지 않고 곧 다시 걷는다. `NlCore::WalkFoundNothing`).
+  - 자료를 돌며 배율을 쓰는 항목(창고 용량, 조리법의 수와 재료)은 `src/Jobs`의 엔진에 그 영역의 파일이 `NlJobs::Add`로 등록한다(걷는 함수 하나와 치트 표의 `Custom`·`CustomScale` 항목).
     한 자리에 쓸 값은 `NlCore::PlanValue`가 정한다(처음 본 값이 바탕. 써 둔 값을 다시 봐도 두 번 곱하지 않는다). 열쇠는 번호가 아니라 이름으로 삼는다.
   - 창고 종류의 용량은 `inst:o_data.__building_warehouse_data.__generic_warehouses.<종류>.__capacity_in_categories.<갈래>.capacity`, 조리법은 건물 종류의
     `__production.__map_of_production`(ds_map: 만드는 자원 → 재료의 배열과 만들어지는 수)이다(`research/10`).
@@ -150,8 +164,24 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     **세이브의 열쇠에는 런타임 이름의 앞 `__`가 없다**(`__events_cooldowns` → `"events_cooldowns"`). 밑줄을 떼고 찾는다(`research/14`. 위의 "없었다"는 두 이름 모두로 다시 봤다).
   - 되돌릴 값을 장부가 받은 자리에만 0 을 쓴다(`CostBook::Remember`의 반환값). 되돌린 자리만 장부에서 지운다(`Forget`). 실패하면 간격을 늘려 다시 한다(`core/Retry`).
   - 0 으로 쓴 비용은 세이브에 남지 않는다(켠 채 저장한 세이브를 치트 없이 불러와 쟀다. `research/09`). 게임의 값을 고쳐 쓰는 항목을 새로 만들면 이것부터 잰다.
+- **즉시 건설(`instant_build`)의 깃발은 영주관이 놓인 뒤에만 쓴다**(`Cheat::Gate` = `…__province.__cached_hall`. `NlCore::GateWaits`): 새 게임의 영주관 배치 때 `is_instant_build_buildings` 가 1 이면 게임이 끝난다(2026-10-07 의 가르기. `research/30`).
+  켤 때 먼저 있어야 하는 자리가 있는 항목은 표의 줄 끝에 `Gate` 를 적는다. 기다리는 동안 항목 옆에 "영주관이 놓인 뒤에 적용".
 - 건물의 건설 구성요소는 `inst:o_building:<n>.c_construction`이다(`__construction_status`: 평소 0, 업그레이드 중 3. 등급은 `inst:o_building:<n>.__level`).
   업그레이드 중인 건물에 `c_construction.build_instantly()`(인자 없음)를 부르면 바로 끝난다(`src/Build.cpp`의 `instant_upgrade`. `research/09`). 3 이 아닌 상태에는 부르지 않는다.
+- **거주 칸(정원)**(`src/Build.cpp`의 `WalkLiving`, `core/BuildingPlan`. `research/32`. 2026-10-08): 건물 종류의 `__number_of_living_places`에 배율을 쓴다(`src/Jobs`의 엔진. 정수는 정수로 남는다).
+  병영(이름이 `barrack_`로 시작. `NlCore::IsBarracksName`)은 `barrack_capacity`(군대 영역), 그 밖(오두막·영주 저택·영주관·노예 막사)은 `housing_capacity`(인구 영역)가 한다.
+  건물의 `get_number_of_living_places()`(인자 없음)가 바로 따른다: 이미 지은 집도 먹는다(집의 창 "거주민(6 / 12)", 오두막·병영이 12명까지 찼다). 거주자의 목록은 `c_residence.__array_of_residents`(길이가 지금 사는 수).
+  끄면 정원은 돌아오고 넘친 거주자는 남았다(병영에서 아홉 시간). 세이브에 그 열쇠는 없다.
+- **건물의 효과**(`src/Build.cpp`의 `WalkEffects`·`RefreshEffects`, `core/BuildingPlan`. `research/32`): 건물 종류의 `__effect` = `{ __name, __effect(주변 건물의 안락도에 더하는 수), __range(칸), __type }`. 효과를 가진 종류는 14개다
+  (좋은 것: 제단·작은 교회·교회, 시장·교수대·선술집·영주관·`drug_deg`. 나쁜 것: 대장간·갑옷 대장간·용광로·숯가마·벌목장, 훈련장). 좋고 나쁨은 값의 부호다(`NlCore::EffectSideOf`).
+  - **효과를 내는 건물은 만들어질 때 범위를 칸의 사각형으로 굳힌다**(`c_effect.__effect_current`의 `__x1..__y2`. 받는 건물은 `c_effect.__applied_effects`의 목록과 합 `__applied_effects_value` = 집의 창의 "안락도").
+    게임 안에서 종류의 `__range`를 바꿔도 이미 있는 건물은 그대로다. 그래서 좋은 효과의 범위(`effect_range`)는 **메인 메뉴에서도 쓴다**(`JobDef::AnyScreen`. 건물 종류는 메뉴에서도 얻어진다.
+    게임 화면 밖에서는 게임이 건물 자료를 올린 뒤에만 한다: `NlCore::JobMayRun`. 0.31.3 까지는 켠 채로 게임을 켜면 부팅 중에 스크립트를 불러 게임이 끝났다. `research/34`):
+    켠 채로 세이브를 불러오면 그 세이브의 건물이 넓은 사각형으로 만들어진다(교회 6..39 → 0..51, 집 일곱 채의 안락도가 올랐다). 게임 안에서 끄면 종류의 값만 돌아온다.
+  - 나쁜 효과 없애기(`bad_effects_off`)는 값(`__effect.__effect`)을 0 으로 쓰고 건물마다 `c_effect.__update_applied_effects()`를 부른다(합을 목록의 값으로 다시 낸다. 범위에 드는 건물을 다시 찾지는 않는다).
+    **값을 0 으로 쓰면 부호가 사라지므로 처음 본 부호를 기억한다**(`NlCore::EffectSides`): 0 으로 써 둔 자리를 되돌릴 때 다시 찾으려고. 나쁜 효과를 받는 집이 있는 세이브에서는 보지 못했다(확인 전).
+  - `__update_applied_effects`·`__init_my_effect`가 인자를 읽지 않는 것은 기계어로 봤다(`research/32`의 주소). `set_applied_effects`·`set_effect`는 인자를 읽는다(꼴을 모른다: 부르지 않는다).
+    관리자 `…__current_local_map.__building_effects_manager`(`register_building`, `update_buildings_for_effect` …)는 두 실행에서 한 번도 불리지 않았다: 건물이 지어질 때 `record`로 꼴을 본 뒤에만 부른다.
 - 인물·영주·인구 패널(`src/People.cpp`, `core/PeoplePlan`. `research/11`). 영주·손님은 `o_character`, 주민·노예는 `o_dummy`이고 값은 `__soul` 아래에 있다.
   - 사람은 `__soul.__uuid`로 가리킨다. `inst:o_character:<n>`의 n 은 인물이 드나들면 바뀐다: 쓰기 전에 그 자리의 uuid 를 다시 본다(`StillThere`).
     플레이어의 사람은 `__soul.__faction.__system_name == "player"`다. 여럿에게 하는 명령과 표의 항목은 플레이어의 산 사람에게만 간다(손님은 `unique_guests`였다).
@@ -169,7 +199,16 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 지식과 아이템 패널도 이 파일에 있다(`research/12`). **지식은 영주가 가진다**: `__soul.__character_soul.__knowledge`의 `add_all_knowledge()`(인자 없음),
     `add_knowledge(지식 구조체, true, true)`. 지식 구조체는 `inst:o_data.__knowledge_data.__knowledge_list[n]`(121개. `__name`, `__caption_replaced`)에서 얻고 그 자리의 이름을 다시 본다.
     소지금은 `__inventory.change_money(변화량)`, 소지품은 `__inventory.change(자원 번호, 변화량)`으로 바꾼다(더할 정수는 `NlCore::GiftDelta`: 가진 것보다 많이 빼지 않는다).
-  - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/People.cpp`의 `One()`에 case 하나를 더한다
+  - **소환할 영주의 성별·나이·문화·역할**(`core/PeoplePlan`의 `LordSpawn`, `src/PeopleActs.cpp`의 `SpawnLordNow`. `research/35`. 2026-10-10): 영주 탭의 "마우스 자리에 영주 소환".
+    소환기의 `__spawn_lord()`는 카메라의 `get_mouse_x()`·`get_mouse_y()` → 지도의 그래프(`…__current_local_map.__graph`)의 `get_node_by_pos(x, y)` → 영지의
+    `debug_spawn_new_player_character(성별, 칸)`이 전부다(기계어와 기록). **성별은 그 첫 인자다**(`int64`: 0 남성, 1 여성. 이름 `m_name…`·`f_name…`이 따라온다):
+    성별을 정했으면 그 호출들을 같은 꼴로 직접 하고, 정하지 않았으면 지금까지처럼 `__spawn_lord()`를 부른다. 칸을 얻지 못하면 만드는 함수를 부르지 않는다.
+    **문화는 인자가 아니다**(만드는 함수가 `get_random_culture()`를 두 번 부른다: 첫 번째가 영혼의 문화와 외모, 두 번째가 이름. 소환기의 `__is_culture_change`·`__culture`는 영주에게 듣지 않는다).
+    만든 뒤 게임의 `SoulBasic.set_culture(문화 구조체)`(인자 하나: 기계어)로 바꾼다: 영혼의 문화, 외모의 문화 이름, 방언이 따라온다. 이름은 그대로다.
+    문화 구조체는 `inst:o_data.__cultures_data.__cultures_map.<이름>`에서 얻고 이름을 다시 본다. 받는 문화는 `__cultures_list`의 넷(gwelts, tanaya, makha, voruns)뿐이다(`rosters`는 불러 보지 않았다).
+    나이(18~80)와 역할은 이미 있는 길(`set_age`, 역할 프리셋)로 입힌다. 새 영주는 `o_character`의 uuid 를 앞뒤로 견줘 꼭 하나일 때만 가린다(`NlCore::NewcomerUuid`).
+    문화 바꾸기는 한 사람의 일로도 있다(`PersonAct::CultureSet`. 플레이어의 영주에게만). 고른 설정은 그 실행 안에서만 든다(파일에 남기지 않는다).
+  - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/PeopleActs.cpp`(리팩토링 C 전에는 `People.cpp`)에 `One<할 일>` 함수 하나와 `One()`의 case 한 줄을 더한다(행동마다 함수 하나다. 2026-10-07 에 그렇게 나눴다)
     (창의 단추와 원격 `person`이 같은 길을 탄다).
   - **인자가 없는 함수는 기계어로 가린다**: 본문이 `argc`(r9d)를 레지스터에도 스택에도 옮기지 않으면 인자를 읽지 않는다(`research/11`. 게임이 부르지 않는 디버그 함수에 쓴다).
   - **들머리의 인자 맞춤(`0x14018A9B0`, N)은 "생략해도 된다"가 아니다.** 모자란 인자를 `undefined`로 채울 뿐이고, 그 값을 수로 쓰는 함수는 GML 오류로 게임을 끝낸다
@@ -179,6 +218,19 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     "REAL argument incorrect type undefined"로 죽었다(`research/14`). 게임이 스스로 부르지 않는 함수를 처음 부를 때는 **실행의 맨 마지막에, 그 뒤에 할 일을 남기지 않고** 하나만 부르고,
     사용자에게 오류 창이 뜰 수 있다고 먼저 알린다. 불러서 된 것: `debug_force_send_bishop()`, 디버그 소환기의 `__spawn_*()`, `rebellion_debug_spawn_player_soldier()`,
     `debug_pregnancy_next_stage()`. **불러서 게임이 끝난 것**(다시 부르지 않는다): `get_summary_army_loyalty()`, `debug_start_ambush_archers()`, `start_ambush_wolves()`, `begin_pregnant()`.
+- **도서관의 책**(`src/Library.cpp`, `core/LibraryPlan`. `research/33`. 2026-10-08): 지식 영역은 탭 둘이다("영주의 지식", "도서관의 책"). 영주의 지식 패널은 남은 높이를 다 쓰는 자식 창이라 그 아래에 더 그리지 않는다.
+  - 도서관 관리자 `inst:o_game_map_controller.__library_manager`의 `__books` 는 ds_map 의 번호다: **지식 구조체 → 권수**. 열쇠는 게임의 지식 목록(`inst:o_data.__knowledge_data.__knowledge_list[n]`. 121개)의 구조체다.
+    읽을 때는 ds_map 인지와 크기를 먼저 보고(빈 도서관과 읽지 못한 것을 가른다) 열쇠의 배열에서 얻은 열쇠로 이름(`__name`)과 권수를 읽는다. 게임의 `get_books_count()`(인자 없음)는 **종류**를 센다.
+  - 넣기·빼기는 게임의 `change_books(지식 구조체, 1 | -1)`(게임이 책 사본이 만들어질 때 `(구조체, 1)`로 부른다. `-1`을 두 번 불러 칸이 없어지는 것까지 봤다). **1 과 -1 로만 부른다**(다른 수는 불러 보지 않았다).
+    함수는 `undefined`를 주므로 **권수를 앞뒤로 읽어** 정확히 1 만큼 달라졌을 때만 됐다고 적는다(`NlCore::AfterBookChange`). 한 틱에 100권 넘게 잇달아 불러도 탈이 없었다.
+  - **되돌리기는 모듈이 넣은 책만 뺀다**(`NlCore::LibraryMemory`. 이 실행 안에서만, 파일에 남기지 않는다. 그 자리의 것: `core/PlaceKey`). 읽을 때마다 기억을 지금의 권수에 맞춘다(`Clamp`).
+    모듈이 넣은 책을 게임이 한 권 더 만든 뒤에 되돌리자 모듈의 것만 빠지고 게임의 것이 남았다.
+  - 지식의 이름 둘에는 느낌표가 있다(`41!building_wooden_wall_section`, `42!building_fortification_tower`). 지식의 이름 검사는 `GoodKnowledgeName`이고 영주에게 지식 하나를 주는 일도 그것을 쓴다(`GoodPersonText`).
+    0.31.3 전에는 특성의 검사(`GoodTraitName`. 느낌표를 받지 않는다)를 써서 그 둘은 "하나 주기"가 "지식 이름이 아닙니다"로 거절됐다.
+  - **넣은 책으로 영주가 배우는 것은 보지 못했다**: 학습을 정하는 것은 게임의 도서관 창이고(`set_interaction`. 꼴을 모른다) 하루 동안 한 번도 불리지 않았다. 지식을 어떻게 얻었는지는 인물 기록의 틀로 가린다
+    (`…__character_soul.__logs_new.__logs_per_years[해][줄].__template`: `got_knowledge_from_book`, `got_knowledge_from_insight`). 지식의 수만 보고 "책으로 배웠다"고 적지 않는다(통찰이었다).
+    넣은 책이 세이브에 남는지도 저장해 보지 않았다(세이브의 도서관 자료에 `books`: 이름과 권수가 있다는 것까지).
+  - 원격 `library list [find=<글>]`(찾는 글이 없으면 도서관에 있는 책만), `library add name=<지식>`, `library add_all`, `library remove name=<지식>`, `library undo`.
 - 군대(`research/13`). 병사는 `o_dummy`이고 갈래(`__soul.__social_strata`)가 2 다. 병영의 목록은 `…__soldiers_barracks_manager.get_array_of_soldiers()`.
   - 병사 추가: `gml_Script_rebellion_debug_spawn_player_soldier()`(인자 없음). 지도 가장자리에 생겨 걸어온다. 한 틱에 20번까지 불러 봤다(`NlCore::SoldierBatch`).
   - 고용 값: `SoulBasic.get_soldier_cost()`가 돌려주는 수(치트 표의 `hire_cost`. 고용 창과 실제로 빠진 금화로 봤다).
@@ -188,7 +240,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     인자 없이 부르면 게임이 끝난다(`research/14`, `16`). 게임이 스스로 거는 싸움(아덴 세이브는 4일차 14:20 쯤과 20:00 쯤)은 플레이어의 사람이 아닌 것들끼리다(전투 기술 3 과 5).
   - 상처는 `SoulBasic.take_damage("상처의 이름", 구조체, 불리언) -> true`가 입힌다. 건너뛰면(`b:0 skip`) 상처가 생기지 않는다. 들어올 때 `Result`는 `undefined`다.
   - **훅을 불린 대상(self)으로 가릴 수 있다**(`NlRecorder::Forced::Who`: `'p'` 플레이어의 영혼일 때만, `'o'` 아닐 때만). 훅 안에서는 진영을 읽을 수 없으므로
-    틱이 플레이어의 사람들의 `__soul` 구조체 주소를 모아 `NlRecorder::SetPlayerSelves`에 넣는다(`src/People.cpp`의 `ShieldTick`. 0.5초마다).
+    틱이 플레이어의 사람들의 `__soul` 구조체 주소를 모아 `NlRecorder::SetPlayerSelves`에 넣는다(`src/Shield.cpp`의 `BattleTick`. 0.5초마다. 리팩토링 C 전에는 `People.cpp`).
     가려졌는지는 `records <이름>`의 "applied to N call(s), let M pass"와 표본의 `[self in, other out, …]`으로 본다.
     **게임이 영혼의 메서드를 부를 때 self 는 그 영혼이다**(통증 한도 함수의 표본 `[self in]`. `research/16`).
     한 함수에 아군과 적의 배율을 따로 걸 수 있다(`Forced{Kind 'x', Number, Other, Who 'p', Cap}`. `core/Hooks`의 `HookFactor`·`ScaleCapped`, `core/BattlePlan`의 `PlanSides`).
@@ -212,12 +264,37 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     지도를 떠나면 분대의 주소가 없어진다: 그 주소로 건 기록은 스크립트 이름으로 멈춘다.
   - **사용자가 하는 게임을 지켜볼 때는 읽기와 `record`만 쓴다**: 값을 쓰지 않고, 게임의 함수를 부르지 않고, `session.ps1`로 끄지 않는다. 끝나면 내가 건 기록만 멈춘다
     (`unrecord <주소>`. `unrecord all`은 치트가 건 것의 기록까지 멈춘다). **기록의 표본은 건 뒤의 처음 여섯뿐이다**: 적의 표본을 받으려면 싸움이 붙은 뒤에 `record`를 다시 보낸다.
+    `records <주소>`도 주소를 받는다(`records become_thug` 같은 짧은 이름은 아무것도 찾지 못한다. 전부는 `records`). **일어나는 때를 모르는 호출은 불러오자마자 기록을 건다**(깡패 전환을 늦게 걸어 대조에서 놓쳤다).
     `list <그릇> max=5`는 찾는 칸을 자를 수 있다(칸 하나는 `ask`로 바로 묻는다).
 - 프리셋(`src/core/Presets`, `src/Cheats.cpp`의 `ApplyPresetLocked`): 치트 표의 **확인된 항목의 묶음**이다. 항목을 묶음에 넣을 때는 `Verified`인지, 값을 써 넣는 종류(`Number`)가 아닌지 본다
   (`CheckPreset`과 시험이 막는다). 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켠다(이미 켜져 있고 배율이 같으면 건드리지 않는다). 탐색기의 잠금과 배율 7개는 건드리지 않는다.
   새 항목이 확인되면 맞는 묶음에 한 줄을 더한다. 원격 `preset <normal|easy|sandbox|god>`, `time pause|resume`.
-- 종교·이벤트 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0),
-  주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world cooldowns_clear|bishop`이 같은 길을 탄다.
+- **이벤트 탭**(`src/Events.cpp`, `core/EventPlan`. `research/29`. 2026-10-07): 게임의 이벤트 61개의 표(이름·묶음·갈래·화면 이름의 열쇠·모드가 지은 이름·가족)가 `core/EventPlan` 에 있다(값은 옮기지 않는다).
+  화면 이름은 모듈이 시작할 때 `main.csv` 에서 표의 열쇠만 읽는다(`guest.`, `raid.`, `prophecy.`, `map.reward_*`, `map.conspiracy`. 열쇠가 없는 것의 이름은 모드가 지은 추정이다).
+  패널: 예약된 강제 이벤트와 **취소**(`reset_debug_forced_event()`. 인자 없음. 확인됨), 묶음·찾기로 거르는 표와 줄마다 일으키기, 가족 다섯(습격·예언·음모·손님·소요)의 진행 중 상태(`__current_raid` 들을 읽기만)와 **끝내기**, 쿨다운 지우기.
+  **끝내기는 표(`EventEndTable`)의 `Verified` 가족만 부른다. 처음에는 다섯 모두 확인 전이다**: 그 이벤트가 진행 중인 세이브에서 후보 함수를 `record` 로 보고, 실행의 맨 마지막에 한 번 불러 상태가 바뀌는 것을 본 뒤에만 `Verified` 를 참으로 바꾸고 `research/29` 에 적는다.
+  원격 `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<raid|prophecy|conspiracy|guest|unrest>`. 이벤트의 일은 `NlWorld::Do` 가 `NlEvents::Do` 로 넘긴다(`NlCore::IsEventAct`. 계절과 같다).
+  - **이벤트 골라 일으키기**(2026-10-07. `research/28`): 감독의 자료 `inst:o_data.__game_director_events_data`의 `__events_by_name`(ds_map 번호: 이름 → 이벤트 구조체. 61개. `list map:<번호>`로 이름을 본다)에서
+    그 구조체를 얻어 `__debug_forced_event`에 쓴다(글이 아니라 **구조체**다). 감독의 `__try_to_determine_and_start_event`가 하루 한 번(오후) `get_debug_forced_event()`를 읽어 그것을 고르고 `reset_debug_forced_event()`로 지운다
+    (써 둔 `u_guest_bard`가 그날 뽑혀 쿨다운에 올랐다). 원격 `world event name=<시스템 이름>`. 쿨다운 중인 이벤트도 오는지는 재지 않았다.
+    **예약은 그날 오지 않을 수 있다**(`research/32`): 감독의 `on_next_day()`가 그날의 이벤트 종류를 정하지 않으면 뽑기가 `(undefined, undefined, true, 구조체)`로 불려 예약을 읽지도 않는다.
+  - **이벤트 바로 일으키기**(2026-10-08. `research/32`. 줄의 "지금" 단추, 원격 `world event_now name=<시스템 이름>`. `src/Events.cpp`의 `SpawnEventNow`): 게임이 이벤트를 생기게 할 때 부르는 꼴 그대로 부른다(기록으로 봤다) —
+    `이벤트.__is_available()`(인자 없음)이 참일 때만(`NlCore::EventAvailable`. 거짓과 undefined 는 일으키지 않고 그 답을 적는다), `이벤트.__spawn_method()`(인자 없음. 감독이 지연 시각에 그렇게 부른다),
+    감독의 `apply_event_cooldowns(이벤트, true)`. 감독의 뽑기와 지연 시각(손님 18시)을 기다리지 않는다. 판정은 쿨다운의 칸에 그 이름이 올랐는가.
+    일으켜 본 것: 보상(부유한 이주민, 거래 제안), 예언(늑대 습격), 손님(음유시인. 17시 반에 바로 왔다). 습격·정치·반란·세계 지도는 조건이 참인 세이브가 없어 못 봤다(같은 호출 자리다).
+    `__is_available`은 이벤트마다 다르다(같은 때 음유시인은 참, 마녀는 거짓. 손님이 와 있으면 undefined). `__spawn_method`의 스크립트는 가족마다 다르고 모두 묶여 있다.
+    **감독의 `on_next_day()`를 불러 뽑게 하지 않는다**: 뽑기는 그날의 운에 달렸고 쿨다운의 날과 국면의 날이 하루씩 넘어간다(조사에서 한 번 불러 그 꼴을 봤다).
+    창의 청은 이름과 함께 쌓는다(`Ask{Act, Name, Family}`): 줄 둘을 잇달아 눌러도 섞이지 않는다. 결과의 줄은 표의 위에 있다.
+- **지도 탭**(`src/MapGen.cpp`, `core/MapPlan`. `research/31`. 2026-10-10): 새 게임의 **생성기 화면**(영지 선택 뒤 지도 미리 보기가 보이는 화면. 영주관 자리의 선택과 게임의 "지도 재생성"도 그 화면에 있다)에서만 된다
+  (`NlCore::MapScreen`: 초기화기 `__is_active` + 설정 구조체 + 미리 보기 제어기 구조체 + 게임 안이 아님. 메인 메뉴에서는 쓰지도 부르지도 않는다).
+  영지의 생성 설정 17개(`…__initial_area.__generator_settings.<칸>`: 지형 `__lakes`·`__hills`·`__hills_distribution`·`__mountains`·`__river`, 막힘 `__blocked_*` 4, 자원 `__berry`·`__bush`·`__clay`·`__fertile`·`__hop`·`__iron`·`__plants`·`__tree`)를 칸에 바로 쓴다(세터는 부르지 않는다).
+  **다시 생성은 게임이 부르는 꼴 그대로 `MapPreviewController.regenerate_map()`**(인자 없음). 원래대로는 `__stashed_settings.<열쇠>`. **자원의 단계는 자리의 수다**(철 4·점토 4 로 쓰고 다시 생성하자 광산·점토 자리가 4개씩. 한 영지에서 한 번 잰 것). 쓴 값은 게임의 생성기 창의 슬라이더에 그대로 보인다(호수 5).
+  프리셋은 `mods\Aurie\NlToyBox.maps.txt`(사용자의 설정. 막힘 4개는 들지 않는다). **씨앗 고정은 뺐다**: `regenerate_map()` 이 안에서 `set_generator_seed(-1)` 을 부르고, 생성기는 `get_generator_seed()` 를 읽지 않는다(모듈의 호출과 게임의 "생성" 둘 다 기록 0번. 2026-10-10). 원격 `map seed` 는 그 까닭만 답한다.
+  원격 `map show|set <열쇠>=<수> …|regenerate|restore|preset save|load|delete name=|seed <수|random>`.
+- 종교 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world bishop`이 같은 길을 탄다.
+  이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0. 원격 `world cooldowns_clear`)는 아래의 이벤트 탭으로 갔다.
+  - **지금 저장**(유틸 영역. `NlWorld::DrawUtil`): 게임의 자동 저장 함수 `gml_Script_save_game(0, 1)`(아침의 꼴. 저녁은 `(0, 2)`)을 부른다. `is_save_disabled`가 참이면 부르지 않는다.
+    새 파일의 이름은 세이브 폴더를 앞뒤로 읽어 적는다(읽기만). 원격 `world save`.
   세력의 자료는 `gm.__factions_manager`(`__array_of_factions[57]`, `__player_faction`)에 있고, 게임은 `Faction.get_relation_with(세력) -> 수`, `is_enemy_with(세력) -> 불리언`을 부른다.
 - 외교 패널(`src/Diplomacy.cpp`, `core/DiplomacyPlan`. `research/19`). 왕국 사이의 관계(종류)는 `…__factions_manager.__allies_matrix.__matrix.<A 의 uuid>.<B 의 uuid>`에 있다
   (A 가 B 를 보는 관계. **방향이 있다**). 수의 뜻: 0 allies, 1 enemies, 2 deadly enemies, 3 neutrals, 4 friends, 5 vassal, 6 sir, 7 opponent.
@@ -236,7 +313,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 협정은 `…__factions_manager.__agreement_matrix.__matrix.<A>.<B>`의 비트다: 평화 4, 교역 협정 8, 방어 동맹 192(게임의 판정 `is_declared_*_with`가 `is_has_agreement`에 넘기는 수).
     협정이 없으면 칸도 없다. `set_agreement(세력, 세력, 비트)`가 양쪽 칸에 쓴다. 이미 든 협정을 지우지 않게 지금의 비트에 더한 수를 넘기고(`NlCore::PactCell`) 쓴 뒤 칸을 다시 읽는다.
     푸는 함수(`reset_agreement`, 인자 5)는 부르지 않았다.
-  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`.
+  - 원격 `diplomacy list`, `diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]`, `diplomacy <uuid> opinion amount=<수>`, `diplomacy <uuid> pact name=<peace|trade|defence>`,
+    `diplomacy <uuid|all> clear [side=]`(붙여 둔 디버그 평판 떼기. 2026-10-07: `detach_opinion_about_faction(대상 세력, 자료)`를 좋은 자료로 세다가 왕의 `__opinion_minds`가 줄지 않으면 나쁜 자료로.
+    세지 못하는 왕에게는 떼지 않는다. 붙은 것이 없을 때 불러도 탈이 없었고(`research/28`: 수가 그대로다), 뗀 뒤의 관계는 게임이 다시 셈한 것이라 붙이기 전과 다를 수 있다(중립 → 대립을 봤다).
+    `DiplomacyGoal::Clear`, `core`의 `DetachCheck`·`AfterDetach`·`ClearOpinionReport`).
     `queue=1`이면 창의 단추와 같은 길(쌓기)을 탄다.
 - 영주의 호감·충성(`src/Court.cpp`, `core/CourtPlan`. `research/20`). 영주 영역의 아래에 그린다.
   - 영주가 다른 영주를 보는 평판은 `inst:o_character:<n>.__soul.__character_soul.__opinions`(OpinionMinds)에 든 평판들의 합이다. **대상을 가리키는 인자는 상대의 `__soul.__character_soul`이다**
@@ -260,12 +340,17 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 성스러운 보호는 `inst:o_game_map_controller.__onboard_manager.__is_under_holy_defence`(수 1)이고 `is_under_holy_defence()`가 그 수를 돌려준다. **수를 돌려주는 판정은 `CheatKind::HookNumber`로 건다**
     (돌려줄 형은 `NlCore::HookForcedKind`가 정한다: 불리언 `'b'`, 수 `'n'`, 배율 `'x'`). 게임이 돌려주던 형 그대로 바꾼다.
   - 종교의 게임 변수(`global.__gameplay_vars`의 `religiosity_*_cost`, `*_piety_restore`, `church_preach_conversion_factor`)와 설교의 비용(`inst:o_data.__preach_data.__preach_list[n].__cost`)은
-    `src/Production.cpp`의 일이 쓴다(`WalkVars`, `WalkReligionCosts`. 열쇠의 목록은 `core/WorldPlan`). 세이브에는 그 열쇠가 없다. **게임이 그 값을 따르는지는 보지 못했다**(설교를 정하는 것은 게임의 창이다).
+    `src/World.cpp`가 `src/Jobs`의 엔진에 등록한 일이 쓴다(`NlJobs::WalkVars`, `WalkReligionCosts`. 열쇠의 목록은 `core/WorldPlan`. 리팩토링 C 전에는 `Production.cpp`). 세이브에는 그 열쇠가 없다. **게임이 그 값을 따르는지는 보지 못했다**(설교를 정하는 것은 게임의 창이다).
   - **표에 `global.` 뿌리로 값을 써 넣는 항목(Toggle, Number)을 두지 않는다**(시험이 막는다): 메인 메뉴에서도 써지고, 창이 보이는 동안 전역 4,700여 개를 훑는다. 게임 변수는 모듈의 일(Custom·CustomScale)로 쓴다.
   - 설교의 효과(설교 강도, 전환 확률, 헌금)는 재지 못했다: 설교가 정해져 있지 않은 세이브에서는 그 스크립트들이 한 번도 불리지 않는다. 돌려주는 형을 보지 못한 함수에는 배율을 걸지 않는다.
+    **설교를 거는 함수는 `c_church.set_preach(영혼, 설교 자료)`다**(`inst:o_building:<n>.c_church`. 자료는 `inst:o_data.__preach_data.__preach_list[n]`. 거꾸로(자료, uuid 글) 부르면 `get_uuid`를 찾지 못해 게임이 끝났다. `research/27`).
+    그렇게 건 설교(`c_church.__preach` 구조체: `__preach`, `__preacher_uuid`, `__is_player_inited` false)는 **08:00 에 시작되지 않고 지워졌다.** 게임의 창이 더 하는 일을 모른다. 헌금은 그래서 못 쟀다.
   - 건물의 종류는 `inst:o_building:<n>.raw_caption`(`"building.stone_church"`)으로 가린다. 교회의 구성요소는 `c_church`(교회가 아니면 -4).
-- **시간을 흘리는 스크립트는 배속이 0 으로 떨어지면 다시 건다**(아덴 세이브는 4일차 08:00 에 이야기 창이 떠 멈춘다. 다시 걸지 않으면 거기서 선다. `research/21`).
-- 특성의 글(`core/Localization`, `src/People.cpp`. `research/20`). **게임 파일의 글을 레포에 싣지 않는다**: 모듈이 시작할 때 게임 폴더의 `localization\main.csv`(화면 이름)와
+- **시간을 흘리는 스크립트는 배속이 바라는 수와 다르면 다시 건다**(0 만이 아니다. `research/21`, `27`): 아덴 세이브는 **아침마다 08:01 에 이야기 창("신제국". 자정의 통계 창도 있다)이 떠 멈춘다**
+  (`o_time_controller.is_fully_paused` 참. `time resume`으로는 풀리지 않는다: `write inst:o_time_controller.is_fully_paused=0` 뒤에 `__set_warp`를 다시 건다. 창은 그대로 두고 흐른다),
+  **날마다 11:00 쯤 배속이 1 로 돌아온다**(세 실행에서 같았다. `time resume`도 x1 로 푼다: `__set_warp`는 그 뒤에). `ask`의 글 답에는 따옴표가 붙는다(`= string "5c61…"`. uuid 를 견줄 때 뗀다).
+  `cheat`로 쓴 값은 다음 틱에 써지므로 같은 요청 묶음의 `ask`는 옛 값을 본다(2초 뒤에 따로 묻는다). 아무것도 켜지 않은 **대조 실행이 먼저다**: 같은 세이브에서 깡패·노사·헌금은 대조에서도 안 일어나 켠 실행만으로는 가릴 수 없었다(`research/27`).
+- 특성의 글(`core/Localization`, `src/TraitText.cpp`. 리팩토링 C 전에는 `People.cpp`. `research/20`). **게임 파일의 글을 레포에 싣지 않는다**: 모듈이 시작할 때 게임 폴더의 `localization\main.csv`(화면 이름)와
   힌트 파일 셋(`hints_tutorial.csv`, `hints_with_icons.csv`, `hints.csv`)을 읽는다(Korean 칸, 비면 English 칸. `ReadLocalization`). 시험은 지어낸 글로 한다.
   - 화면 이름의 열쇠와 설명의 열쇠는 게임에 묻는다: `gml_Script_trait_property_get(이름, 번호)`(게임이 (글, 정수)로 부른다). 0번 이름, 1번 화면 이름의 열쇠(대개 `trait.<이름>`.
     `aging`은 `trait.oldman`, 안쪽 특성 `__…__`은 빈 글), **21번 힌트(설명)의 열쇠**. **열쇠를 이름으로 어림하지 않는다**(`hint_<이름>`·`hint_talent_<이름>`·`hint_trait_<이름>`이 섞여 있고 44개는 어느 꼴도 아니다).
@@ -274,7 +359,9 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 힌트의 첫 줄은 제목이고 그 아래가 설명이다(`SplitHint`). 꺾쇠 표식은 지우고 `{…}` 자리는 "(값)"으로 보인다(`PlainHint`). 이름의 줄이 없는 특성은 힌트의 제목을 흐린 글씨의 명칭으로 보인다(`GoodHintTitle`).
   - 진짜 파일을 코어의 코드로 읽어 보는 선택 시험: `$env:NLTOYBOX_TEST_GAME_DIR = <게임 폴더>`를 주고 `build\nlcore_tests.exe tools\probes`(글은 내지 않고 수만 낸다. 평소 시험은 게임 파일에 기대지 않는다).
   - **긴 글을 표의 좁은 칸에 두지 않는다**(설명 칸이 한 글자 너비가 돼 세로로 흘렀다). 명칭 아래의 줄로 그린다. 창을 고치면 `shot`으로 받아 눈으로 본다.
-- 역할 프리셋(`src/core/RolePlan`, `src/People.cpp`의 `ApplyRole`. `research/22`): 한 사람에게 능력치를 올리고(내리지 않는다), 그 역할에 해로운 특성을 떼고, 재능을 붙인다.
+- 역할 프리셋(`src/core/RolePlan`, `src/PeopleActs.cpp`의 `ApplyRole`. 리팩토링 C 전에는 `People.cpp`. `research/22`): 한 사람에게 능력치를 올리고(내리지 않는다), 그 역할에 해로운 특성을 떼고, 재능을 붙인다.
+  - **되돌리기**(2026-10-07): 입힐 때 된 것(능력치의 전 값, 뗀 특성, 붙인 특성)을 그 사람의 uuid 로 기억한다(`RoleMemory`. `g_RoleMemory`. 이 실행 안에서만, 파일에 남기지 않는다. 두 번 입히면 `MergeRoleMemory`가 더 앞의 전 값을 지킨다).
+    `PlanRoleUndo`가 할 일을 내고(능력치는 전 값으로 — 이때만 내린다, 붙였던 것은 떼고, 뗐던 것은 다시 붙인다) 입히기와 같은 걸음(`RunRoleSteps`)으로 한다. 다 되면 기억을 지운다. 원격 `person <uuid> role_undo`.
   인물 탭의 "역할 프리셋"과 원격 `person <uuid> role name=<Id>`가 같은 길을 탄다(한 사람을 짚어서만. `lords`·`people`에게는 가지 않는다).
   - **표(`RolePresets`)는 사용자가 정한 것이다**: 핵심 능력치 20, 보조 15, 올리기만. 고칠 때는 시험의 크기 표(`Size`)와 넣지 않기로 한 이름들도 함께 본다.
     특성의 이름이 게임에 있는지는 게임을 불러올 때의 로그로 본다(`role presets name N trait(s) this game does not have`. 이 빌드에서는 0).
@@ -287,7 +374,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     붙인 재능의 행동을 게임이 돌리려 한다(`redeemer`·`musician`의 "Trait action …" 경고가 게임의 오류 파일에 남았다).
   - 능력치의 화면 이름은 `main.csv`의 `actor.skill.<열쇠>`에서 읽는다. **전투만 `actor.skill.fight`다**(`SkillCaptionKey`. 여덟이 같은 꼴이라고 어림했다가 틀렸다).
   - **`shot`에는 이름을 준다**(`shot role-before`. 이름이 없으면 찍히지 않는다). 받은 화면은 `ask.ps1`이 `refs\ui\<이름>.png`로 옮긴다. 명령 뒤의 화면은 2초쯤 두고 찍는다.
-- 임신·출생·성장(`src/core/FamilyPlan`, `src/People.cpp`. `research/24`). **플레이어의 영주에게만 한다**(`NlCore::IsPlayersLord`. 주민·손님·다른 진영에게는 불러 본 적이 없다).
+- 임신·출생·성장(`src/core/FamilyPlan`, 행동은 `src/PeopleActs.cpp`, 게임 변수의 일 등록은 `src/People.cpp`. `research/24`). **플레이어의 영주에게만 한다**(`NlCore::IsPlayersLord`. 주민·손님·다른 진영에게는 불러 본 적이 없다).
   - 임신의 단계는 특성이다: `pregnant_st1`·`st2`·`st3`. 출산 뒤 어머니에게 `pregnant_forbid`가 붙는다. 구성요소는 `__soul.__pregnancy`(`__father_soul_uuid`: 아버지의 uuid, 평소에는 빈 글).
     성별은 `SoulBasic.get_gender() -> 1(여성) | 0(남성)`.
   - 다음 단계: `…__pregnancy.debug_pregnancy_next_stage()`(인자 없음). 임신 중인 사람에게만 부르고 부를 때마다 특성을 다시 읽는다(본 바뀜 1→2, 2→3, 3→0 만 된 것으로 친다. `AfterStageCall`).
@@ -296,11 +383,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 임신 시작: 게임의 판정 `is_can_pregant()`를 묻고(수·불리언일 때만 읽는다), 아버지의 uuid 를 `__father_soul_uuid`에 적고(`NlAccess::WriteString`), `trait_attach("pregnant_st1")`.
     그렇게 시작한 임신 49번이 모두 출산이나 유산까지 갔다. **`begin_pregnant()`는 부르지 않는다**: 아버지를 적고 불렀는데 게임이 끝났다("I32 argument is undefined").
   - 아이를 어른으로: `set_age(18)`. 게임이 `kid`를 떼고 `untitled_lord`를 붙이고 진영을 `player_untitled`로 바꾼다(15, 16 에서는 아이 그대로였다. 자란 사람은 플레이어의 영주 목록에서 빠진다).
-  - 표의 셋(게임 변수. `src/Production.cpp`의 일): `no_miscarriage`는 확인됐다(켠 채 임신 25번에 유산 0, 끈 채 27번에 5). `safe_childbirth`(끈 채 22번의 출산에도 죽음이 없어 가리지 못했다)와
+  - 표의 셋(게임 변수. `src/People.cpp`가 `src/Jobs`의 엔진에 등록한 일. 리팩토링 C 전에는 `Production.cpp`): `no_miscarriage`는 확인됐다(켠 채 임신 25번에 유산 0, 끈 채 27번에 5). `safe_childbirth`(끈 채 22번의 출산에도 죽음이 없어 가리지 못했다)와
     `pregnancy_chance`(모듈의 임신 시작은 그 확률을 타지 않는다)는 확인 전이다.
   - **확률로 정해지는 것은 되풀이해 센다**: 멈춘 채로 한 실행에서 임신 시작과 바로 출산을 수십 번 돌렸다. 모듈의 로그의 `people: birth on …` 줄로 센다.
     원격의 답은 첫 줄이 `running …`이다. 결과는 그다음 줄이다.
-- 월드(`src/World.cpp`, `core/SeasonPlan`, `core/WorldPlan`, `core/PlaceKey`. `research/25`). 표의 항목들 아래에 계절 패널을 그린다.
+- 월드(`src/World.cpp`(이벤트·주교·저장), `src/Season.cpp`(계절), `src/Mines.cpp`(광산), `core/SeasonPlan`, `core/WorldPlan`, `core/PlaceKey`. `research/25`). 표의 항목들 아래에 계절 패널을 그린다(`NlSeason::Draw`).
   - **계절**: `inst:o_game_map_controller.__current_local_map.__season_manager`(지도마다 하나). 단계 0..3, 가혹한 계절은 단계 2(게임이 `__get_remain_time_to_phase(2)`를 부른다).
     남은 시간은 시작 시각(`__start_phase_time`)에서 셈한다. 읽을 때는 게임의 함수로(`is_extreme()`, `__get_remain_time_of_current_phase()`, `get_remain_time_to_extreme_season()`: 인자 없음),
     바꿀 때는 시작 시각에 쓰고 **게임의 함수가 돌려주는 남은 시간이 따라 움직였는지** 본다(`RemainMoved`). `__set_phase`는 부르지 않는다: 게임이 매시 정각에 스스로 넘긴다(수 하나로 부른다).
@@ -324,7 +411,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     그래서 누구의 호출이든 바꾼다). 지정은 `set_criminal_scum(false, true)`로 푼다.
   - **읽지 못한 것을 "없다"나 "됐다"로 적지 않는다**: 깃발을 읽지 못한 주민과 특성을 읽지 못한 영주는 따로 센다(`CrimeSummary`·`LordsLine`·`TraitClearReport`의 `Unread`).
     지정 풀기는 부른 뒤 그 자리의 uuid 와 깃발을 다시 읽어 판정하고(`NlCore::AfterClear`), 확인하지 못한 사람은 "부른 뒤 확인하지 못함"으로 센다(`ClearReport`의 `Unsure`).
-  - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)는 되돌리지 않는다**(`NlCore::CanClear`): 게임이 만든 깡패를 본 적이 없어 풀면 어떻게 되는지 재지 못했다.
+  - **깡패(`__is_dummy_thug`. 게임의 `is_thug()`가 읽는 깃발)도 되돌린다**(2026-10-07): `set_criminal_scum(false, true)`는 그 깃발을 건드리지 않으므로 푼 뒤 `__is_dummy_thug`에 0 을 쓰고 두 깃발을 다시 읽어 판정한다
+    (`NlCore::AfterClear`의 넷째·다섯째 인자). 되돌린 깡패의 수는 결과의 글에 따로 적는다(`ClearReport`의 `ThugsDone`). 게임이 만든 깡패에게서 확인했다(`research/28`: 게임의 `is_thug()`가 거짓이 됐다).
   - 훔친 것 되돌리기(`return_back_stolen_to_player_warehouse()`. 인자 없음)는 사람을 짚어 부르고 훔친 금화(`__stolen_gold`)의 앞뒤를 적는다(`StolenReport`). 창의 단추는 훔친 금화가 있는 줄에만 나온다.
     훔친 것이 있는 사람에게서는 보지 못했다(확인 전).
   - **죄는 특성이다**(이름이 `sin_`으로 시작한다. 열두 가지). 영주의 범죄 혐의도 특성이다(`character_crime`, `…_blamed_by_bishop`, `…_blamed_by_fanatics`).
@@ -344,10 +432,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - `variable_instance_exists`·`variable_instance_set`·`array_set`·`variable_global_set`·`is_method`는 이 러너에서 된다(`research/06-cheat-menu.md`).
   - 모드창의 글꼴에는 한글과 라틴-1 만 있다. 창의 글에 화살표나 별 같은 기호를 쓰지 않는다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
-  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`, `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
+  `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end`, `crime list|clear|return_stolen|absolve|acquit`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`, `library list|add|add_all|remove|undo`, `map show|set <열쇠>=<수> …|regenerate|restore|preset save|load|delete name=|seed <수|random>`(생성기 화면에서),
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`, 문화 `culture_set name=<문화>`),
+  `person spawn <soldier|knight|peasant|slave|lord>`(영주는 `[gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
   - **실행 중에 사용자가 모드창의 단추를 누를 수 있다.** 보내지 않은 일이 로그에 있으면 그것이다. 시간이 지나도 남는지를 잴 때는 창을 닫고 잰다(`window close`).
@@ -373,6 +463,10 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 출력은 Aurie의 `DbgPrintEx`로 한다. v5 인터페이스에는 `Print` 계열이 없다.
 - **게임 스크립트를 인자가 틀린 채 부르면 게임이 GML 오류로 끝난다**(정수를 받는 스크립트에 문자열을 넘겨 실측).
   인자의 형을 모르는 스크립트는 부르지 않는다. 위험한 호출은 다른 결과를 파일에 쓴 뒤 맨 마지막에 한다.
+- **인자가 맞아도 때가 틀리면 끝난다**(`research/34`): 게임 화면 밖(부팅 중, 메인 메뉴, 불러오는 중)에서 게임 스크립트를 부르는 길을 만들 때는 그 스크립트가 읽는 전역이 있는지부터 본다.
+  무엇을 읽는지는 기계어로 본다: YYC 의 본문이 읽는 변수 번호의 자리(`mov edx,dword ptr [X]`)의 8바이트 앞에 그 이름을 가리키는 포인터가 있다(exe 의 `{ 이름, 번호 }` 표).
+- **켠 것이 파일에 저장되는 기능은 켠 채로 부팅해 확인한다**: `pwsh -File tools/session.ps1 -Action start -KeepSettings`(사용자의 설정을 치우지 않고 켠다. 쓰기 전에 설정 파일의 해시를 적어 두고 끝난 뒤 견준다).
+  실행 묶음은 보통 설정을 치우고 켜므로, 메뉴에서 켜 보는 것만으로는 첫 틱의 길을 밟지 않는다(그래서 위의 끝남을 놓쳤다).
 - `gameplay_variables.json`의 값은 런타임에서 `global.__gameplay_vars.<키 경로를 _ 로 이은 이름>`에 앉는다
   (`research/01-data-overlay.md`).
 - 데이터 파일의 값은 게임을 켤 때 ds_map으로 읽히고, 게임을 시작하면 일부가 `o_debug`와 `o_province_controller`의
@@ -380,7 +474,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   (`budget_money`는 `default_budget_money`가 되지만 화면의 시작 금화는 달랐다. `research/02-new-game-state.md`).
 - 메인 메뉴와 게임은 같은 룸(`rm_game`)이다. 게임 화면은 `o_main_menu`가 없고 `o_character`가 있는 것으로 알아본다
   (새 게임에서 잰 것이다. 세이브를 불러올 때는 재지 않았다). `o_time_controller`는 메뉴에서 이미 있다.
-- 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다. 러너에 닿는 호출은
+- 러너에 기대지 않는 로직은 `src/core/`에 두고 `tests/native/`에서 시험한다(묶음마다 `test_<묶음>.cpp`. 공용 뼈대는 `common.hpp`, 차례는 `main.cpp`). 러너에 닿는 호출은
   `src/Game.cpp`를 거친다. 빌트인과 문서·소스·실행으로 확인한 인터페이스만 쓴다. `GetInstanceObject`와
   `CRoom`은 러너 내부 구조체의 배치에 기대므로 쓰지 않는다. 없는 이름으로 부르는 `GetInstanceMember`와
   `GetInstanceMemberCount`는 확인하지 못한 빌트인을 구조체에 대고 부르므로 쓰지 않는다(이름은 열거로 찾는다).

@@ -52,6 +52,8 @@ namespace NlAccess
 
 	// 수(불리언 포함)로 읽고 쓴다. 수가 아닌 값은 수로 덮어쓰지 않는다. 형은 원래 값의 것을 따른다.
 	bool ReadNumber(const std::string& Path, double& Out);
+	// 문자열인 자리를 읽는다. 없거나 문자열이 아니면 거짓.
+	bool ReadText(const std::string& Path, std::string& Out);
 	bool WriteNumber(const std::string& Path, double Number, std::string& Why);
 	// 문자열인 자리에만 쓴다.
 	bool WriteString(const std::string& Path, const std::string& Text, std::string& Why);

@@ -17,8 +17,9 @@ namespace NlCore
 	bool IsKingdom(const std::string& SystemName);
 
 	// 바라는 관계. Opinion 은 관계를 보지 않고 평판을 정한 만큼만 움직인다. Pact 는 평판이 아니라 협정을 맺는다(아래).
-	enum class DiplomacyGoal { Friends, Neutral, Hostile, Opinion, Pact };
-	// 원격 명령의 낱말: friends, neutral, hostile, opinion, pact.
+	// Clear 는 붙여 둔 디버그 평판을 뗀다(2026-10-07. 좋은 자료부터, 더 떨어지지 않으면 나쁜 자료로. 아래의 DetachCheck·AfterDetach).
+	enum class DiplomacyGoal { Friends, Neutral, Hostile, Opinion, Pact, Clear };
+	// 원격 명령의 낱말: friends, neutral, hostile, opinion, pact, clear.
 	bool ParseDiplomacyGoal(const std::string& Word, DiplomacyGoal& Out);
 	const char* DiplomacyGoalWord(DiplomacyGoal Goal);
 	// 창에 보일 이름: 우호, 중립, 적대.
@@ -36,6 +37,7 @@ namespace NlCore
 	constexpr int k_OpinionUnit = 5;			// 디버그 평판의 자료에 적힌 크기(opinion_mind_debug_positive·negative 의 __opinion_modify 의 절댓값). 붙이기 전에 견준다
 	constexpr int k_OpinionStepsMax = 40;		// 한 번의 명령이 한쪽에 붙이는 평판의 한도(그 평판의 겹침 한도보다 작게)
 	constexpr int k_OpinionStackLimit = 50;		// 그 평판의 자료에 적힌 겹침 한도(__stack_limit). 모듈은 세지 않는다(세이브를 다시 불러오면 센 수가 게임과 어긋난다)
+	constexpr int k_ClearStepsMax = 120;		// 떼기의 걸음 한도(겹침 한도 50 이 둘, 그리고 여유. 영주의 호감 떼기와 같다)
 	// 평판의 수(Opinion 의 Amount): 붙일 디버그 평판의 개수다(부호가 방향). 0 이 아닌 정수이고 절댓값이 한도 안이어야 한다. 아니면 0(받지 않는다).
 	// 중립에서 우호가 되기까지 드는 개수는 왕국마다 달랐다(1개 ~ 15개. research/19). 그래서 수치를 약속하지 않고 개수로 다룬다.
 	int OpinionSteps(double Amount);
@@ -106,9 +108,6 @@ namespace NlCore
 	// Outcome: PlanStep 의 것과, 'f' 게임의 함수가 실패했다(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국이라 건드리지 않았다,
 	// 's' 같은 평판의 겹침 한도에 닿아 더 붙지 않았다(붙은 수는 Steps 에. AttachCheck 가 가린다).
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why);
-	// 그 결과가 실패인가('l', 'f', 's').
-	bool DiplomacyFailed(char Outcome);
-
 	// 평판 하나가 붙었는가: 붙이기 바로 앞뒤로(같은 걸음 안에서) 그 평판을 갖는 왕의 평판 목록(__opinion_minds)의 원소 수를 견준다.
 	// 우리 왕에게서는 붙을 때마다 원소가 하나 늘었고, 같은 평판이 50개에 닿자 함수가 구조체를 돌려줘도 늘지 않았다(research/19).
 	// 돌려주는 값: 'y' 하나 늘었다(붙었다), 'n' 그대로다(붙지 않았다), 'u' 모른다(세지 못했다, 줄었다, 둘 이상 늘었다).
@@ -119,34 +118,16 @@ namespace NlCore
 	char AfterAttach(char Check, bool Seen);
 	// 확인하지 못하고 센 걸음이 있는 일의 결과 줄에 덧붙이는 글.
 	std::string UnsureNote();
+
+	// 평판 떼기(Clear). 게임의 Faction.detach_opinion_about_faction(대상 세력, 평판 자료)가 하나를 뗀다(붙은 것이 없을 때는 불러 본 적이 없다: 세지 못하면 떼지 않는다).
+	// 뗐는가: 떼기 바로 앞뒤의 그 왕의 평판의 수. 'y' 하나 줄었다, 'n' 그대로다(그 자료는 더 없다), 'u' 모른다(세지 못했다, 둘 이상 줄었다, 늘었다).
+	char DetachCheck(double Before, double After);
+	// 걸음 뒤의 판단. 'c' 뗐다(센다. 같은 자료로 계속), 'n' 그 자료는 더 없다(다음 자료로. 나쁜 것까지 끝났으면 끝), 'u' 모른다(멈춘다: 실패).
+	char AfterDetach(char Check);
+	// 뗀 결과의 글. Good·Bad: 뗀 좋은·나쁜 평판의 수. Outcome: 'd' 다 뗐다, 'a' 뗄 것이 없었다, 'l' 한도에 닿았다, 'f' 실패(Why 에 까닭), 'x' 망했거나 왕이 없는 왕국.
+	std::string ClearOpinionReport(const std::string& Name, char Side, double Before, double After, int Good, int Bad, char Outcome, const std::string& Why);
 	// 평판의 수(목표가 없는 일)를 정한 만큼 붙인 뒤의 글. 붙인 개수와 관계를 따로 적는다(붙인 것을 "바꿨다"고 적지 않는다).
 	// Stopped: 정한 만큼 붙이기 전에 겹침의 한도에 닿아 멈췄다('s'). Steps 는 실제로 붙은 수다(0 일 수 있다).
 	std::string OpinionReport(const std::string& Name, char Side, double Before, double After, int Steps, bool Stopped = false);
 
-	// 명령 하나(또는 쌓인 일들)의 결과를 세고 줄을 모은다. 실패한 줄을 앞에 둔다(창은 앞의 몇 줄만 보인다).
-	// "이미 그 관계였다"와 "건드리지 않았다"는 한 것에 넣지 않는다(그대로 둔 것).
-	class DiplomacyTally
-	{
-	public:
-		void Reset() { *this = DiplomacyTally(); }
-		// 일이 그만큼 쌓였다.
-		void Expect(int Jobs) { m_Asked += Jobs > 0 ? Jobs : 0; }
-		// 일 하나가 끝났다.
-		void Add(char Outcome, const std::string& Line);
-		// 하지 못하고 버린 일들(게임 화면을 떠났다, 다시 읽지 못했다). 실패로 센다.
-		void Drop(int Jobs, const std::string& Why);
-		bool Empty() const { return m_Asked == 0 && m_Lines.empty(); }
-		int Asked() const { return m_Asked; }
-		int Changed() const { return m_Changed; }
-		int Same() const { return m_Same; }
-		int Failed() const { return m_Failed; }
-		int Pending() const { return m_Asked - m_Changed - m_Same - m_Failed; }
-		const std::vector<std::string>& Lines() const { return m_Lines; }
-		std::string Summary() const;
-
-	private:
-		int m_Asked = 0, m_Changed = 0, m_Same = 0, m_Failed = 0;
-		size_t m_FailedLines = 0;			// 줄들의 앞쪽에 있는 실패한 줄의 수
-		std::vector<std::string> m_Lines;
-	};
 }

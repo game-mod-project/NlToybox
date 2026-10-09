@@ -1,6 +1,7 @@
 #include "RolePlan.hpp"
 
 #include "PeoplePlan.hpp"
+#include "Text.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,11 +17,6 @@ namespace NlCore
 				if (std::string(skills[i].Key) == Key)
 					return static_cast<int>(i);
 			return -1;
-		}
-
-		bool Has(const std::vector<std::string>& List, const char* Name)
-		{
-			return std::find(List.begin(), List.end(), Name) != List.end();
 		}
 	}
 
@@ -183,15 +179,86 @@ namespace NlCore
 		return Trait == "stupidity" ? "떼면 그 사람의 생각의 합이 25 내려갑니다 (잰 것. 다시 붙이면 돌아옵니다)" : "";
 	}
 
-	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why)
+	namespace
 	{
-		const std::string head = Name + ": " + Role.Label + " 프리셋 - ";
-		const std::string failed = std::to_string(Failed) + "개" + (Why.empty() ? "" : " (" + Why + ")");
-		// 한 것을 잇는다: 마지막 것만 "…했습니다"로 끝난다.
+		// 한 것을 잇는다: 마지막 것만 "…했습니다"로 끝난다. 하지 못한 것은 뒤에 붙인다.
 		struct Part
 		{
 			std::string And, End;
 		};
+		std::string JoinReport(const std::string& Head, const std::vector<Part>& Parts, int Failed, const std::string& Why)
+		{
+			const std::string failed = std::to_string(Failed) + "개" + (Why.empty() ? "" : " (" + Why + ")");
+			if (Parts.empty())
+				return Head + (Failed > 0 ? "하지 못했습니다: " + failed : std::string("이미 그대로입니다 (바꾼 것이 없습니다)"));
+			std::string text;
+			for (size_t i = 0; i < Parts.size(); i++)
+				text += (i ? ", " : "") + (i + 1 < Parts.size() ? Parts[i].And : Parts[i].End);
+			return Head + text + (Failed > 0 ? ". 하지 못한 것 " + failed : "");
+		}
+	}
+
+	RoleTodo PlanRoleUndo(const RoleMemory& Memory, const std::vector<std::string>& TraitsNow)
+	{
+		RoleTodo todo;
+		todo.Skills = Memory.Skills;
+		for (const std::string& name : Memory.Added)
+			if (Has(TraitsNow, name))
+				todo.Remove.push_back(name);
+		for (const std::string& name : Memory.Removed)
+			if (!Has(TraitsNow, name))
+				todo.Add.push_back(name);
+		return todo;
+	}
+
+	void MergeRoleMemory(RoleMemory& Into, const RoleMemory& Latest)
+	{
+		for (const auto& [index, level] : Latest.Skills)
+		{
+			bool known = false;
+			for (const auto& [seen, unused] : Into.Skills)
+				known = known || seen == index;
+			if (!known)
+				Into.Skills.emplace_back(index, level);
+		}
+		const auto erase = [](std::vector<std::string>& list, const std::string& name) {
+			const auto it = std::find(list.begin(), list.end(), name);
+			if (it == list.end())
+				return false;
+			list.erase(it);
+			return true;
+		};
+		for (const std::string& name : Latest.Added)
+			if (!erase(Into.Removed, name) && !Has(Into.Added, name))
+				Into.Added.push_back(name);
+		for (const std::string& name : Latest.Removed)
+			if (!erase(Into.Added, name) && !Has(Into.Removed, name))
+				Into.Removed.push_back(name);
+	}
+
+	std::string RoleUndoReport(const std::string& Name, int Skills, int Removed, int Added, int Failed, const std::string& Why)
+	{
+		std::vector<Part> parts;
+		if (Skills > 0)
+			parts.push_back({ "능력치 " + std::to_string(Skills) + "개를 되돌리고", "능력치 " + std::to_string(Skills) + "개를 되돌렸습니다" });
+		if (Removed > 0)
+			parts.push_back({ "특성 " + std::to_string(Removed) + "개를 떼고", "특성 " + std::to_string(Removed) + "개를 뗐습니다" });
+		if (Added > 0)
+		{
+			const std::string what = std::string(Removed > 0 ? "" : "특성 ") + std::to_string(Added) + "개를 다시 ";
+			parts.push_back({ what + "붙이고", what + "붙였습니다" });
+		}
+		return JoinReport(Name + ": 역할 프리셋 되돌리기 - ", parts, Failed, Why);
+	}
+
+	std::string RoleUndoNoMemory(const std::string& Name)
+	{
+		return Name + ": 되돌릴 역할 프리셋의 기억이 없습니다 (이 실행에서 입힌 것만 되돌립니다)";
+	}
+
+	std::string RoleReport(const std::string& Name, const RolePreset& Role, int Skills, int Added, int Removed, int Failed, const std::string& Why)
+	{
+		const std::string head = Name + ": " + Role.Label + " 프리셋 - ";
 		std::vector<Part> parts;
 		if (Skills > 0)
 			parts.push_back({ "능력치 " + std::to_string(Skills) + "개를 올리고", "능력치 " + std::to_string(Skills) + "개를 올렸습니다" });
@@ -202,11 +269,6 @@ namespace NlCore
 			const std::string what = std::string(Added > 0 ? "" : "특성 ") + std::to_string(Removed) + "개를 ";
 			parts.push_back({ what + "떼고", what + "뗐습니다" });
 		}
-		if (parts.empty())
-			return head + (Failed > 0 ? "하지 못했습니다: " + failed : std::string("이미 그대로입니다 (바꾼 것이 없습니다)"));
-		std::string text;
-		for (size_t i = 0; i < parts.size(); i++)
-			text += (i ? ", " : "") + (i + 1 < parts.size() ? parts[i].And : parts[i].End);
-		return head + text + (Failed > 0 ? ". 하지 못한 것 " + failed : "");
+		return JoinReport(head, parts, Failed, Why);
 	}
 }

@@ -1,7 +1,9 @@
 #include "Cheats.hpp"
 
 #include "Access.hpp"
+#include "Game.hpp"
 #include "Recorder.hpp"
+#include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Hooks.hpp"
 #include "core/Presets.hpp"
@@ -180,6 +182,26 @@ namespace
 			It.HasBase = true;
 		}
 
+		if (It.On && It.Def->Gate)
+		{
+			// 먼저 있어야 하는 자리(즉시 건설: 영주관). 없으면 쓰지 않고 기다린다 — 새 게임의 영주관 배치 때 켜져 있으면 게임이 끝난다(research/30).
+			YYTK::RValue gate;		// 이 함수 안에서만 든다
+			std::string gate_why;
+			const bool read = NlAccess::Read(NlCore::ParseAskPath(It.Def->Gate), gate, gate_why);
+			const bool present = read && gate.m_Kind != YYTK::VALUE_UNDEFINED && gate.m_Kind != YYTK::VALUE_UNSET && !(NlGame::IsNumber(gate) && gate.ToDouble() < 0);
+			if (NlCore::GateWaits(*It.Def, read, present))
+			{
+				It.Note = NlCore::GateNote(*It.Def);
+				const std::string line = std::string("cheat ") + It.Def->Id + ": waiting for " + It.Def->Gate;
+				if (line != It.Logged)
+				{
+					It.Logged = line;
+					Log(line);
+				}
+				return;
+			}
+		}
+
 		double wanted = current;
 		if (It.On)
 			wanted = number ? It.Number : It.Def->On;
@@ -252,11 +274,11 @@ namespace
 
 	void DrawNumber(Item& It)
 	{
-		double value = It.On ? It.Number : It.Current;
+		double value = It.On ? It.Number : It.Current, typed = 0;
 		ImGui::SetNextItemWidth(130);
-		if (ImGui::InputDouble("##v", &value, 0, 0, "%.6g", ImGuiInputTextFlags_EnterReturnsTrue))
+		if (NlUi::InputNumber("##v", It.Def->Id, value, "%.6g", typed))		// 칸을 떠날 때 넣는다(Enter 로만 받던 것을 고쳤다. research/18 의 끝)
 		{
-			It.Number = std::clamp(value, It.Def->Min, It.Def->Max);
+			It.Number = std::clamp(typed, It.Def->Min, It.Def->Max);
 			It.On = true;
 			It.Restore = false;
 			g_Changed = g_Dirty = true;
@@ -279,7 +301,7 @@ namespace
 			ImGui::TextDisabled("게임을 시작하면 보입니다");
 	}
 
-	// 배율 항목(HookScale, CustomScale): 체크로 켜고 끄고, 수는 Enter 로 넣는다. 1 이 원래 값이다.
+	// 배율 항목(HookScale, CustomScale): 체크로 켜고 끄고, 수는 칸을 떠날 때 넣는다. 1 이 원래 값이다.
 	void DrawScale(Item& It)
 	{
 		bool on = It.On;
@@ -297,11 +319,11 @@ namespace
 				TurnOff(It);
 		}
 		ImGui::SameLine();
-		double value = It.Number > 0 ? It.Number : It.Def->On;
+		double value = It.Number > 0 ? It.Number : It.Def->On, typed = 0;
 		ImGui::SetNextItemWidth(90);
-		if (ImGui::InputDouble("##v", &value, 0, 0, "%.4g", ImGuiInputTextFlags_EnterReturnsTrue))
+		if (NlUi::InputNumber("##v", It.Def->Id, value, "%.4g", typed))		// 칸을 떠날 때 넣는다
 		{
-			It.Number = std::clamp(value, It.Def->Min, It.Def->Max);
+			It.Number = std::clamp(typed, It.Def->Min, It.Def->Max);
 			It.On = true;
 			It.Restore = false;
 			g_Changed = g_Dirty = true;
@@ -426,7 +448,7 @@ void NlCheats::DrawArea(Area Where)
 				TurnOff(item);
 	ImGui::EndDisabled();
 	ImGui::SameLine();
-	ImGui::TextDisabled("(?) 는 효과를 아직 확인하지 않은 항목입니다. 수는 Enter 로 써 넣습니다.");
+	ImGui::TextDisabled("(?) 는 효과를 아직 확인하지 않은 항목입니다. 수는 칸을 떠날 때(Enter, Tab, 다른 곳 누름) 들어갑니다.");
 }
 
 namespace
@@ -497,7 +519,8 @@ void NlCheats::DrawPresets()
 	ImGui::PushTextWrapPos(0.0f);
 	ImGui::TextUnformatted("프리셋은 플레이에서 확인된 항목의 묶음입니다. 누르면 묶음에 없는 표의 항목은 끄고 묶음의 항목은 켭니다. "
 		"탐색기의 잠금, 배율 7개, 한 번 하는 단추(금화, 병사 등)는 건드리지 않습니다. "
-		"건 묶음은 저장되어 다음 실행에서도 켜진 채 시작합니다(세이브를 불러오면 바로 적용됩니다). 끄려면 '기본'을 누릅니다.");
+		"건 묶음은 저장되어 다음 실행에서도 켜진 채 시작합니다(세이브를 불러오면 바로 적용됩니다). 끄려면 '기본'을 누릅니다. "
+		"'좋은 효과의 범위 배율'은 건물이 만들어질 때 먹습니다: 묶음을 건 뒤 세이브를 다시 불러와야 이미 지은 건물에 보입니다.");
 	ImGui::PopTextWrapPos();
 	{
 		// 지금 표의 상태가 어느 묶음과 같은지(항목을 따로 바꿨으면 어느 것과도 다르다).
@@ -515,8 +538,9 @@ void NlCheats::DrawPresets()
 		if (ImGui::Button(preset.Label, ImVec2(150, 0)))
 			ApplyPresetLocked(preset);
 		ImGui::SameLine();
-		ImGui::TextUnformatted(preset.Help);
+		// 설명은 창의 너비에서 줄을 바꾼다(한 줄로 그리자 '신'의 설명이 창의 오른쪽에서 잘렸다. research/32 의 화면). 이어지는 줄은 단추의 오른쪽에서 시작한다.
 		ImGui::PushTextWrapPos(0.0f);
+		ImGui::TextUnformatted(preset.Help);
 		ImGui::TextDisabled("%s", PresetList(preset).c_str());
 		ImGui::PopTextWrapPos();
 		ImGui::Spacing();

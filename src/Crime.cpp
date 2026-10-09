@@ -2,8 +2,13 @@
 
 #include "Access.hpp"
 #include "Game.hpp"
+#include "Jobs.hpp"
+#include "Ui.hpp"
 #include "People.hpp"
 #include "core/AskPath.hpp"
+#include "core/CrimePlan.hpp"
+#include "core/Guard.hpp"
+#include "core/Text.hpp"
 #include "core/PeoplePlan.hpp"
 
 #include <imgui.h>
@@ -56,38 +61,28 @@ namespace
 	std::string g_LastLords;			// 영주에게 마지막으로 한 일
 	double g_Next = 0;					// 다음에 다시 읽을 시각
 
-	struct Busy
-	{
-		Busy() { g_Busy = true; }
-		~Busy() { g_Busy = false; }
-	};
-
 	void Log(const std::string& Line)
 	{
 		if (g_Log)
 			g_Log(Line);
 	}
 
+	// 범죄의 게임 변수 넷(research/26. 열쇠는 core/CrimePlan). 써지고 되돌려지는 것까지만 본다. 엔진은 src/Jobs.
+	bool WalkBanditTurn(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::BanditTurnVars(), Why); }
+	bool WalkCrimeMinds(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::CrimeMindVars(), Why); }
+	bool WalkThugDays(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::ThugDaysVars(), Why); }
+	bool WalkTheftAmount(const NlJobs::Visit& V, std::string& Why) { return NlJobs::WalkVars(V, NlCore::TheftAmountVars(), Why); }
+
 	std::string Base(bool Character, int Index)
 	{
 		return std::string("inst:") + (Character ? "o_character" : "o_dummy") + ":" + std::to_string(Index);
-	}
-
-	bool ReadText(const std::string& Path, std::string& Out)
-	{
-		RValue value;		// 이 함수 안에서만 든다
-		std::string why;
-		if (!NlAccess::Read(NlCore::ParseAskPath(Path), value, why) || !value.IsString())
-			return false;
-		Out = value.ToString();
-		return true;
 	}
 
 	// 그 자리에 아직 그 사람이 있는가(사람이 드나들면 번호가 밀린다).
 	bool StillThere(const std::string& BasePath, const std::string& Uuid)
 	{
 		std::string now;
-		return ReadText(BasePath + ".__soul.__uuid", now) && now == Uuid;
+		return NlAccess::ReadText(BasePath + ".__soul.__uuid", now) && now == Uuid;
 	}
 
 	// 가진 특성의 이름들. 목록을 읽지 못하면 거짓(빈 목록과 가른다).
@@ -214,24 +209,18 @@ namespace
 	}
 
 	// 범죄자 지정을 푼다: 게임의 set_criminal_scum(false, true). 게임이 (true, true)와 (true)로 부르는 것을 봤고, (false, true)로 불러 깃발이 거짓이 되는 것을 봤다
-	// (한 사람씩, 그리고 한 틱에 셋을 잇달아. research/26). 깡패는 풀지 않는다(core 의 CanClear).
+	// (한 사람씩, 그리고 한 틱에 셋을 잇달아. research/26). 깡패도 푼다(2026-10-07): 그 함수는 깡패의 깃발을 건드리지 않으므로(실행 3 에서 본 깡패의 깃발은 따로 참이었다)
+	// 푼 뒤 __is_dummy_thug 에 0 을 쓰고(research/26 에서 0 을 쓰자 게임의 is_thug() 가 거짓이 됐다) 두 깃발을 다시 읽어 판정한다(core 의 AfterClear).
+	// 게임이 만든 깡패(Ulrich. research/28)에게서 확인했다: 두 깃발과 is_thug()·is_criminal_scum() 이 거짓이 됐다.
 	std::vector<std::string> Clear(const View& Seen, const std::string& Who)
 	{
 		std::vector<Vagabond> targets;
-		int thugs = 0;
 		for (const Vagabond& who : Seen.Vagabonds)
-		{
-			if (Who != "all" && who.Uuid != Who)
-				continue;
-			if (NlCore::CanClear(who))
+			if (Who == "all" || who.Uuid == Who)
 				targets.push_back(who);
-			else
-				thugs++;
-		}
-		const std::string thug_note = thugs > 0 ? " (깡패 " + std::to_string(thugs) + "명은 되돌리지 않습니다: 깡패의 지정을 풀면 어떻게 되는지 재지 못했습니다)" : std::string();
 		if (Who != "all" && targets.empty())
-			return { thugs > 0 ? "깡패는 되돌리지 않습니다: 깡패의 지정을 풀면 어떻게 되는지 재지 못했습니다" : "그 사람은 플레이어의 부랑자가 아닙니다" };
-		int done = 0, skipped = 0, unsure = 0;
+			return { "그 사람은 플레이어의 부랑자가 아닙니다" };
+		int done = 0, skipped = 0, unsure = 0, thugs_done = 0;
 		std::string why;
 		for (const Vagabond& who : targets)
 		{
@@ -243,26 +232,39 @@ namespace
 			}
 			RValue result;
 			std::string note;
-			Log("crime call set_criminal_scum(false, true) on " + who.Uuid);		// 부르기 전에 남긴다
+			Log("crime call set_criminal_scum(false, true) on " + who.Uuid + (who.Thug ? ", then write __is_dummy_thug = 0" : ""));		// 부르기 전에 남긴다
 			if (!NlAccess::CallMethod(NlCore::ParseAskPath(base + ".c_criminal.set_criminal_scum"), { RValue(false), RValue(true) }, result, note))
 			{
 				why = "게임의 함수를 부르지 못했습니다 (" + note + ")";
 				continue;
 			}
-			double raw = 0;
-			const bool same = StillThere(base, who.Uuid);
-			const bool read = same && ReadFlag(base, raw);
-			switch (NlCore::AfterClear(same, read, raw))
+			bool same = StillThere(base, who.Uuid);
+			bool thug_read = true;
+			double thug_raw = 0;
+			if (who.Thug && same)
 			{
-			case NlCore::ClearOutcome::Cleared: done++; break;
+				std::string write_why;
+				if (!NlAccess::WriteNumber(base + ".c_criminal.__is_dummy_thug", 0, write_why))
+				{
+					why = "깡패의 깃발에 쓰지 못했습니다 (" + write_why + ")";
+					thug_read = false;
+				}
+				same = StillThere(base, who.Uuid);
+				thug_read = thug_read && same && NlAccess::ReadNumber(base + ".c_criminal.__is_dummy_thug", thug_raw);		// 쓴 뒤 다시 읽는다
+			}
+			double raw = 0;
+			const bool read = same && ReadFlag(base, raw);
+			switch (NlCore::AfterClear(same, read, raw, thug_read, thug_raw))
+			{
+			case NlCore::ClearOutcome::Cleared: done++; thugs_done += who.Thug ? 1 : 0; break;
 			case NlCore::ClearOutcome::Unknown: unsure++; break;		// 깃발을 읽지 못했거나 그 자리의 사람이 바뀌었다: 됐다고 적지 않는다
 			case NlCore::ClearOutcome::Still: why = "게임의 깃발이 그대로입니다"; break;
 			}
 		}
 		if (!targets.empty())
-			Log("crime: clear: " + std::to_string(done) + " of " + std::to_string(targets.size()) + " cleared, " + std::to_string(skipped) + " skipped, "
-				+ std::to_string(unsure) + " unsure" + (why.empty() ? "" : ", " + why));
-		return { NlCore::ClearReport(static_cast<int>(targets.size()), done, skipped, unsure, why) + thug_note };
+			Log("crime: clear: " + std::to_string(done) + " of " + std::to_string(targets.size()) + " cleared (" + std::to_string(thugs_done) + " thug(s)), "
+				+ std::to_string(skipped) + " skipped, " + std::to_string(unsure) + " unsure" + (why.empty() ? "" : ", " + why));
+		return { NlCore::ClearReport(static_cast<int>(targets.size()), done, skipped, unsure, why, thugs_done) };
 	}
 
 	// 게임의 return_back_stolen_to_player_warehouse()(인자 없음)를 부른다. 게임이 부르는 것은 봤지만(사람이 지도에서 없어질 때로 보인다) 훔친 것이 있는 사람에게서는
@@ -407,17 +409,16 @@ namespace
 	}
 
 	// 흐린 글. 창의 너비에서 줄을 바꾼다.
-	void Hint(const char* Text)
-	{
-		ImGui::PushTextWrapPos(0.0f);
-		ImGui::TextDisabled("%s", Text);
-		ImGui::PopTextWrapPos();
-	}
+	constexpr size_t k_MaxQueue = 8;		// 창이 쌓아 둘 명령의 수. 넘치면 받지 않고 결과 줄에 적는다(조용히 버리지 않는다. 2026-10-07 리뷰 R3)
 
 	void Push(CrimeAct Act, const std::string& Who)
 	{
-		if (g_Queue.size() < 8)
-			g_Queue.push_back(CrimeCommand{ Act, Who });
+		if (g_Queue.size() >= k_MaxQueue)
+		{
+			(IsLordAct(Act) ? g_LastLords : g_LastCrime) = NlCore::QueueFullText(k_MaxQueue);
+			return;
+		}
+		g_Queue.push_back(CrimeCommand{ Act, Who });
 	}
 }
 
@@ -425,6 +426,10 @@ void NlCrime::Init(LogFn Log_)
 {
 	std::lock_guard lock(g_Mutex);
 	g_Log = std::move(Log_);
+	NlJobs::Add({ "no_bandit_turn", "bandit turn chance", true, &WalkBanditTurn, nullptr, 15 });
+	NlJobs::Add({ "crime_minds_off", "crime minds", true, &WalkCrimeMinds, nullptr, 15 });
+	NlJobs::Add({ "thug_days", "days to thug", false, &WalkThugDays, nullptr, 15 });
+	NlJobs::Add({ "theft_none", "storage theft amount", true, &WalkTheftAmount, nullptr, 15 });
 }
 
 void NlCrime::GameTick(double Now, bool Visible)
@@ -434,7 +439,7 @@ void NlCrime::GameTick(double Now, bool Visible)
 		return;
 	if (g_Queue.empty() && (!Visible || Now < g_Next))		// 시각부터 본다(이 틱은 오브젝트 이벤트마다 불린다)
 		return;
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	if (!g_Queue.empty())
 	{
 		bool people_busy = false;
@@ -457,7 +462,7 @@ void NlCrime::Draw()
 	std::lock_guard lock(g_Mutex);
 	ImGui::SeparatorText("부랑자 (범죄자가 된 주민)");
 	if (!g_View.Read)
-		Hint(g_View.Why.empty() ? "읽는 중입니다" : g_View.Why.c_str());
+		NlUi::Hint(g_View.Why.empty() ? "읽는 중입니다" : g_View.Why.c_str());
 	else
 	{
 		ImGui::TextUnformatted(NlCore::CrimeSummary(static_cast<int>(g_View.Vagabonds.size()), g_View.Thugs, g_View.UnreadPeople).c_str());
@@ -468,12 +473,9 @@ void NlCrime::Draw()
 		for (const Vagabond& who : g_View.Vagabonds)
 		{
 			ImGui::PushID(who.Uuid.c_str());
-			if (NlCore::CanClear(who))
-			{
-				if (ImGui::SmallButton("되돌리기"))
-					Push(CrimeAct::Clear, who.Uuid);
-				ImGui::SameLine();
-			}
+			if (ImGui::SmallButton(who.Thug ? "되돌리기 (깡패)" : "되돌리기"))
+				Push(CrimeAct::Clear, who.Uuid);
+			ImGui::SameLine();
 			ImGui::TextUnformatted(NlCore::VagabondLine(who, g_View.Now).c_str());
 			if (who.StolenGold > 0)
 			{
@@ -485,9 +487,10 @@ void NlCrime::Draw()
 		}
 	}
 	if (!g_LastCrime.empty())
-		Hint(g_LastCrime.c_str());
-	Hint("게임은 저녁(18:00)에 주민 가운데 몇을 범죄자(부랑자)로 만듭니다(무엇이 그들을 고르는지는 재지 못했습니다). '되돌리기'는 게임의 같은 함수로 그 지정을 풉니다. "
-		"게임이 다시 고를 수 있습니다: 위의 '주민이 부랑자(범죄자)가 되지 않음'을 켠 저녁들에는 게임의 시도 셋이 모두 막혔습니다. 깡패는 되돌리지 않습니다(재지 못했습니다). "
+		NlUi::Hint(g_LastCrime.c_str());
+	NlUi::Hint("게임은 저녁(18:00)에 주민 가운데 몇을 범죄자(부랑자)로 만듭니다(무엇이 그들을 고르는지는 재지 못했습니다). '되돌리기'는 게임의 같은 함수로 그 지정을 풉니다. "
+		"게임이 다시 고를 수 있습니다: 위의 '주민이 부랑자(범죄자)가 되지 않음'을 켠 저녁들에는 게임의 시도 셋이 모두 막혔습니다. "
+		"깡패도 되돌립니다: 지정을 푼 뒤 깡패의 깃발에 0 을 씁니다(게임이 만든 깡패에게서 확인했습니다: 게임의 is_thug() 가 거짓이 됐습니다). "
 		"'훔친 것 되돌리기'는 훔친 금화가 있는 부랑자의 줄에만 나옵니다: 게임의 함수를 부르는 것까지만 했고 효과는 확인 전입니다. "
 		"범죄자의 지정은 세이브에 들어가는 자료입니다. 되돌리는 단추는 없습니다.");
 
@@ -529,8 +532,8 @@ void NlCrime::Draw()
 		}
 	}
 	if (!g_LastLords.empty())
-		Hint(g_LastLords.c_str());
-	Hint("게임에서 죄와 영주의 범죄 혐의는 특성입니다. 지우기는 그 특성을 뗍니다(인물 탭의 특성 떼기와 같은 길). 영주 둘의 죄 셋을 떼어 봤고, 그 가운데 하나에서 생각의 합이 오르는 것을 봤습니다. "
+		NlUi::Hint(g_LastLords.c_str());
+	NlUi::Hint("게임에서 죄와 영주의 범죄 혐의는 특성입니다. 지우기는 그 특성을 뗍니다(인물 탭의 특성 떼기와 같은 길). 영주 둘의 죄 셋을 떼어 봤고, 그 가운데 하나에서 생각의 합이 오르는 것을 봤습니다. "
 		"혐의의 특성을 가진 영주는 보지 못해 '혐의 지우기'는 해 보지 못했습니다(확인 전): 특성을 떼면 게임의 처벌 쪽이 어떻게 되는지도 모릅니다. 되돌리는 단추는 없습니다.");
 }
 
@@ -539,7 +542,7 @@ std::vector<std::string> NlCrime::Do(const NlCore::CrimeCommand& Command)
 	std::lock_guard lock(g_Mutex);
 	if (g_Busy)
 		return { "busy" };
-	const Busy busy;
+	const NlCore::ScopedFlag busy(g_Busy);
 	bool people_busy = false;
 	return DoNow(Command, people_busy);
 }

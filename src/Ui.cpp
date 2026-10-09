@@ -1,6 +1,7 @@
 #include "Ui.hpp"
 
 #include "Game.hpp"
+#include "core/NumberEdit.hpp"
 
 #include <d3d11.h>
 #include <dxgi.h>
@@ -455,7 +456,7 @@ void NlUi::Init(AurieModule* Module, const std::filesystem::path& ModuleDir, Log
 		else if (key == "shot_seconds")
 			g_ShotSeconds = std::atof(value.c_str());
 		else if (key == "drag")
-			g_TestDrag = std::sscanf(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;
+			g_TestDrag = sscanf_s(value.c_str(), "%f,%f,%f,%f", &g_Drag[0], &g_Drag[1], &g_Drag[2], &g_Drag[3]) == 4;		// MSVC 전용 빌드다. %f 에는 크기 인자가 없다
 		else if (key == "set")
 			g_TestSets.push_back(value.substr(0, value.find_last_not_of(" \r\n") + 1));
 		else
@@ -596,4 +597,36 @@ void NlUi::WndProc(FWWndProc& Context)
 	// 입력은 직접 건 창 프로시저(HkWndProc)가 받는다. 여기서는 이 콜백이 오는지만 센다.
 	UNREFERENCED_PARAMETER(Context);
 	g_YytkWndProcCalls++;
+}
+
+void NlUi::Hint(const char* Text)
+{
+	ImGui::PushTextWrapPos(0.0f);
+	ImGui::TextDisabled("%s", Text);
+	ImGui::PopTextWrapPos();
+}
+
+void NlUi::Hint(const std::string& Text)
+{
+	Hint(Text.c_str());
+}
+
+namespace
+{
+	NlCore::NumberEdit g_NumberEdit;		// 잡힌 수 입력 칸의 편집 상태(한 번에 하나)
+	std::string g_NumberEditKey;
+}
+
+bool NlUi::InputNumber(const char* Label, const std::string& Key, double Value, const char* Format, double& Out)
+{
+	const bool typed = ImGui::InputDouble(Label, &Value, 0, 0, Format);
+	const bool active = ImGui::IsItemActive(), left = ImGui::IsItemDeactivatedAfterEdit();
+	if (g_NumberEditKey != Key)
+	{
+		if (!typed && !active && !left)		// 다른 칸의 상태를 건드리지 않는다
+			return false;
+		g_NumberEdit = NlCore::NumberEdit();
+		g_NumberEditKey = Key;
+	}
+	return NlCore::StepNumberEdit(g_NumberEdit, typed, Value, left, active, Out);		// 열쇠가 같으면 매 프레임 부른다(잡혀 있지 않으면 남은 수를 버린다)
 }

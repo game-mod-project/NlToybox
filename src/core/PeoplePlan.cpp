@@ -1,6 +1,9 @@
 #include "PeoplePlan.hpp"
 
+#include "Text.hpp"
+
 #include "FamilyPlan.hpp"
+#include "LibraryPlan.hpp"
 #include "RolePlan.hpp"
 
 #include <algorithm>
@@ -23,7 +26,9 @@ namespace NlCore
 			{ PersonAct::Happy, "happy" }, { PersonAct::Cure, "cure" }, { PersonAct::TraitAdd, "trait_add" }, { PersonAct::TraitRemove, "trait_remove" },
 			{ PersonAct::KnowledgeAll, "knowledge_all" }, { PersonAct::KnowledgeAdd, "knowledge_add" },
 			{ PersonAct::MoneyAdd, "money_add" }, { PersonAct::ItemAdd, "item_add" }, { PersonAct::Equip, "equip" }, { PersonAct::Role, "role" },
+			{ PersonAct::RoleUndo, "role_undo" },
 			{ PersonAct::PregnancyNext, "pregnancy_next" }, { PersonAct::Birth, "birth" }, { PersonAct::GrowUp, "grow_up" }, { PersonAct::Conceive, "conceive" },
+			{ PersonAct::CultureSet, "culture_set" },
 		};
 
 		bool Clamp(double Value, double Low, double High, bool Whole, double& Out)
@@ -100,7 +105,7 @@ namespace NlCore
 	bool NeedsText(PersonAct Act)
 	{
 		return Act == PersonAct::TraitAdd || Act == PersonAct::TraitRemove || Act == PersonAct::KnowledgeAdd || Act == PersonAct::Equip || Act == PersonAct::Role
-			|| Act == PersonAct::Conceive;
+			|| Act == PersonAct::Conceive || Act == PersonAct::CultureSet;
 	}
 
 	bool GoodWho(const std::string& Who)
@@ -170,6 +175,151 @@ namespace NlCore
 				return true;
 			}
 		return false;
+	}
+
+	namespace
+	{
+		struct GenderInfo
+		{
+			LordGender Gender;
+			const char* Word;
+			const char* Label;
+			int Value;		// 게임의 수: 만드는 함수의 첫 인자와 set_gender 가 받는 수(0 이면 m_name…, 1 이면 f_name… 이 붙었다. research/35)
+		};
+		constexpr GenderInfo k_Genders[] = {
+			{ LordGender::Any, "any", "게임에 맡김", -1 },
+			{ LordGender::Male, "male", "남성", 0 },
+			{ LordGender::Female, "female", "여성", 1 },
+		};
+		const GenderInfo& GenderOf(LordGender Gender)
+		{
+			for (const GenderInfo& one : k_Genders)
+				if (one.Gender == Gender)
+					return one;
+			return k_Genders[0];
+		}
+	}
+
+	bool ParseLordGender(const std::string& Word, LordGender& Out)
+	{
+		for (const GenderInfo& one : k_Genders)
+			if (Word == one.Word)
+			{
+				Out = one.Gender;
+				return true;
+			}
+		return false;
+	}
+
+	const char* LordGenderWord(LordGender Gender) { return GenderOf(Gender).Word; }
+	const char* LordGenderLabel(LordGender Gender) { return GenderOf(Gender).Label; }
+	int LordGenderValue(LordGender Gender) { return GenderOf(Gender).Value; }
+
+	bool SpawnAgeValue(double Asked, double& Out)
+	{
+		if (!std::isfinite(Asked))
+			return false;
+		Out = Asked <= 0 ? 0 : std::clamp(std::round(Asked), k_SpawnAgeMin, k_SpawnAgeMax);
+		return true;
+	}
+
+	bool CheckLordSpawn(const LordSpawn& Spawn, std::string& Why)
+	{
+		Why.clear();
+		const bool whole = std::isfinite(Spawn.Age) && Spawn.Age == std::floor(Spawn.Age);
+		if (!whole || (Spawn.Age != 0 && (Spawn.Age < k_SpawnAgeMin || Spawn.Age > k_SpawnAgeMax)))
+			Why = "나이는 18~80 의 정수입니다 (0 은 게임에 맡김)";
+		else if (!Spawn.Culture.empty() && !GoodTraitName(Spawn.Culture))
+			Why = "문화의 이름이 아닙니다";
+		else if (!Spawn.Role.empty() && !FindRole(Spawn.Role))
+			Why = "모르는 역할 프리셋입니다";
+		return Why.empty();
+	}
+
+	bool IsPlainLordSpawn(const LordSpawn& Spawn)
+	{
+		return Spawn.Gender == LordGender::Any && Spawn.Age == 0 && Spawn.Culture.empty() && Spawn.Role.empty();
+	}
+
+	bool ParseLordSpawn(const std::map<std::string, std::string>& Options, LordSpawn& Out, std::string& Why)
+	{
+		LordSpawn spawn;
+		for (const auto& [key, value] : Options)
+		{
+			if (key == "kind")
+				continue;
+			if (key == "gender")
+			{
+				if (!ParseLordGender(value, spawn.Gender))
+				{
+					Why = "gender needs male, female or any";
+					return false;
+				}
+			}
+			else if (key == "age")
+			{
+				if (!ParseNumber(value, spawn.Age))
+				{
+					Why = "age needs a whole number from 18 to 80";
+					return false;
+				}
+			}
+			else if (key == "culture")
+				spawn.Culture = value;
+			else if (key == "role")
+				spawn.Role = value;
+			else
+			{
+				Why = "person spawn lord takes only gender=, age=, culture= and role=";
+				return false;
+			}
+		}
+		if (!CheckLordSpawn(spawn, Why))
+			return false;
+		Out = spawn;
+		return true;
+	}
+
+	std::vector<PersonCommand> LordSpawnSteps(const LordSpawn& Spawn, const std::string& Uuid)
+	{
+		std::vector<PersonCommand> steps;
+		const auto add = [&](PersonAct Act, double Amount, const std::string& Text) {
+			PersonCommand step;
+			step.Act = Act;
+			step.Who = Uuid;
+			step.Amount = Amount;
+			step.Text = Text;
+			steps.push_back(std::move(step));
+		};
+		// 문화를 먼저(외모의 문화 이름과 방언이 따라온다), 그다음 나이, 마지막에 역할(능력치와 특성).
+		if (!Spawn.Culture.empty())
+			add(PersonAct::CultureSet, 0, Spawn.Culture);
+		if (Spawn.Age != 0)
+			add(PersonAct::AgeSet, Spawn.Age, std::string());
+		if (!Spawn.Role.empty())
+			add(PersonAct::Role, 0, Spawn.Role);
+		return steps;
+	}
+
+	std::string NewcomerUuid(const std::vector<std::string>& Before, const std::vector<std::string>& After)
+	{
+		std::string found;
+		for (const std::string& uuid : After)
+		{
+			if (std::find(Before.begin(), Before.end(), uuid) != Before.end())
+				continue;
+			if (uuid.empty() || !found.empty())
+				return std::string();		// 이름 없는 사람이 끼었거나 둘 이상이다: 가리지 못한다
+			found = uuid;
+		}
+		return found;
+	}
+
+	std::string LordSpawnLine(const std::string& Name, bool Found, bool StepsWanted)
+	{
+		if (Found)
+			return "영주를 만들었습니다: " + Name;
+		return StepsWanted ? "영주를 만들었지만 누구인지 가리지 못해 고른 것을 입히지 못했습니다" : "영주를 만들었습니다";
 	}
 
 	const char* SpawnWord(SpawnKind Kind) { return SpawnOf(Kind).Word; }
@@ -276,15 +426,16 @@ namespace NlCore
 			Why = "수가 아닙니다";
 		if (Why.empty() && gift && (std::round(Command.Amount) == 0 || std::fabs(Command.Amount) > k_GiftMax))
 			Why = "줄 수가 0 이거나 너무 큽니다";
-		// 지식의 이름도 특성의 이름과 같은 꼴이다(소문자·숫자·밑줄). 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
+		// 지식의 이름은 특성의 이름의 꼴(소문자·숫자·밑줄)에 느낌표를 더 받는다: 게임의 이름 둘에 있다(core/LibraryPlan 의 GoodKnowledgeName. research/33).
+		// 게임에 있는 이름인지는 부르는 쪽이 게임의 목록으로 본다.
 		if (Why.empty() && Command.Act == PersonAct::Equip && !FindLoadout(Command.Text))
 			Why = "모르는 장비 묶음입니다";
 		if (Why.empty() && Command.Act == PersonAct::Role && !FindRole(Command.Text))
 			Why = "모르는 역할 프리셋입니다";
-		if (Why.empty() && Command.Act == PersonAct::Conceive && (!GoodUuid(Command.Text) || Command.Text == Command.Who))
+		if (Why.empty() && Command.Act == PersonAct::Conceive && (!IsUuid(Command.Text) || Command.Text == Command.Who))
 			Why = "아버지를 uuid 로 짚습니다 (자기 자신은 안 됩니다)";
-		if (Why.empty() && NeedsText(Command.Act) && !GoodTraitName(Command.Text))
-			Why = trait ? "특성 이름이 아닙니다" : "지식 이름이 아닙니다";
+		if (Why.empty() && NeedsText(Command.Act) && !GoodPersonText(Command.Act, Command.Text))
+			Why = trait ? "특성 이름이 아닙니다" : Command.Act == PersonAct::CultureSet ? "문화의 이름이 아닙니다" : "지식 이름이 아닙니다";
 		if (Why.empty() && trait && IsProtectedTrait(Command.Text))
 			Why = "붙이거나 뗄 수 없는 특성입니다";
 		return Why.empty();
@@ -342,6 +493,11 @@ namespace NlCore
 	bool AgeValue(double Asked, double& Out)
 	{
 		return Clamp(Asked, k_AgeMin, k_AgeMax, true, Out);
+	}
+
+	bool GoodPersonText(PersonAct Act, const std::string& Text)
+	{
+		return Act == PersonAct::KnowledgeAdd ? GoodKnowledgeName(Text) : GoodTraitName(Text);
 	}
 
 	bool GoodTraitName(const std::string& Name)

@@ -33,9 +33,21 @@
 //                                                   재능을 붙인다(core/RolePlan). 답은 한 것과 하지 못한 것의 수다
 //   person spawn_soldier amount=<1..20>             플레이어의 병사를 만든다(게임의 디버그 함수. research/13)
 //   person spawn <soldier|knight|peasant|slave|lord>  디버그 소환기로 플레이어의 사람 하나를 마우스 자리에 만든다
+//   person spawn lord [gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]
+//                                                   영주는 성별·나이·문화·역할 프리셋을 정해 만들 수 있다(research/35). 정하지 않은 것은 게임에 맡긴다
+//   person <uuid> culture_set name=<문화의 이름>    플레이어의 영주의 문화를 바꾼다(게임의 set_culture)
 //   preset <normal|easy|sandbox|god>                치트 표의 확인된 항목의 묶음을 건다(모드창의 프리셋과 같다)
 //   time <pause|resume>                             게임의 시간을 멈춘다, 다시 흐르게 한다
 //   world <cooldowns_clear|bishop>                  이벤트 쿨다운을 0 으로 쓴다, 주교를 부른다(research/14)
+//   world events [group=<묶음>] [find=<글>],  world event_cancel,  world event_end kind=<raid|prophecy|conspiracy|guest|unrest>
+//                                                   이벤트의 표, 예약 취소, 확인된 가족의 끝내기(research/29)
+//   world event name=<이름>,  world event_now name=<이름>
+//                                                   그 이벤트를 예약한다(감독이 뽑는 날에 온다), 바로 일으킨다(게임의 조건 함수가 참일 때만. research/32)
+//   map show | set <열쇠>=<수> … | regenerate | restore | preset save|load|delete name=<이름> | seed <수|random>
+//                                                   지도 탭: 생성기 화면에서 영지의 생성 설정 17개를 읽고 쓰고 다시 생성한다(core/MapPlan. research/31)
+//   library list [find=<글>]                        도서관의 책(요약과 있는 책들. find 를 주면 그 글이 든 지식 모두. research/33)
+//   library add name=<지식>,  library add_all,  library remove name=<지식>,  library undo
+//                                                   책 한 권을 넣는다, 없는 책을 모두 넣는다, 한 권을 뺀다, 이 실행에서 모듈이 넣은 책을 뺀다(게임의 change_books)
 //   diplomacy list                                  왕국들과 지금의 관계(그쪽이 우리를, 우리가 그쪽을)
 //   diplomacy <uuid|all> <friends|neutral|hostile> [side=them|us|both]   그 관계가 될 때까지 왕의 평판에 게임의 디버그 평판을 하나씩 붙인다(research/19)
 //   diplomacy <uuid> opinion amount=<개수> [side=…]  디버그 평판을 그 개수만큼 붙인다(양수는 좋은 것, 음수는 나쁜 것. -40 ~ 40)

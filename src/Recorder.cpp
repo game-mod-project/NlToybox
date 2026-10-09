@@ -20,7 +20,6 @@ namespace
 {
 	constexpr int k_Slots = 64;				// 한 실행에 훅을 걸 수 있는 함수의 수. 자리는 다시 쓰지 않는다(24개는 한 실행에서 다 썼다. research/07)
 	constexpr int k_MaxKinds = 16;			// 꼴을 볼 때 보는 인자의 수
-	constexpr int k_KindMask = 0x0ffffff;	// m_Kind 에서 형만 남긴다(VALUE_UNSET 의 폭. YYTK_Shared_Types.hpp 199행)
 
 	struct Slot
 	{
@@ -70,8 +69,8 @@ namespace
 	// 값 하나를 짧은 글로. 훅 안에서 부른다: 빌트인을 부르지 않고 RValue 의 멤버 함수만 쓴다.
 	std::string Brief(const RValue& Value)
 	{
-		const int kind = static_cast<int>(Value.m_Kind) & k_KindMask;
-		if (kind == VALUE_UNDEFINED || kind == k_KindMask)		// k_KindMask 는 VALUE_UNSET 의 값이기도 하다
+		const int kind = static_cast<int>(Value.m_Kind) & NlGame::k_KindMask;
+		if (kind == VALUE_UNDEFINED || kind == NlGame::k_KindMask)		// NlGame::k_KindMask 는 VALUE_UNSET 의 값이기도 하다
 			return "undefined";
 		if (Value.IsString())
 			return NlCore::Quote(Value.ToString(), 60);
@@ -105,7 +104,7 @@ namespace
 			int kinds[k_MaxKinds];
 			const int seen = Count < 0 || !Args ? 0 : (Count > k_MaxKinds ? k_MaxKinds : Count);
 			for (int i = 0; i < seen; i++)
-				kinds[i] = Args[i] ? static_cast<int>(Args[i]->m_Kind) & k_KindMask : -1;
+				kinds[i] = Args[i] ? static_cast<int>(Args[i]->m_Kind) & NlGame::k_KindMask : -1;
 			key = NlCore::ShapeKey(kinds, seen);
 			{
 				std::lock_guard lock(g_Mutex);
@@ -171,13 +170,13 @@ namespace
 		if (forced && value.Skip && value.Kind != 'x')
 		{
 			// 원래 함수를 부르지 않는다. 들어올 때 Result 에 무엇이 있었는지 표본에 남긴다(부른 쪽이 초기화하는지 잰다).
-			const int came = static_cast<int>(Result.m_Kind) & k_KindMask;
+			const int came = static_cast<int>(Result.m_Kind) & NlGame::k_KindMask;
 			write_raw(Result);
 			if (sample)
 			{
 				std::lock_guard lock(g_Mutex);
 				slot.Log.Sample(sample, key, std::move(shape), std::move(args),
-					std::string("(skipped, Result came as ") + (came == k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
+					std::string("(skipped, Result came as ") + (came == NlGame::k_KindMask ? "unset" : KindName(came)) + ") => " + Brief(Result));
 			}
 			return Result;
 		}
@@ -190,7 +189,7 @@ namespace
 		if (forced && value.Kind == 'x')
 		{
 			// 원래 함수가 돌려준 수에 배율을 곱한다. 수가 아니면(undefined, 구조체) 그대로 지나간다.
-			const int kind = static_cast<int>(out.m_Kind) & k_KindMask;
+			const int kind = static_cast<int>(out.m_Kind) & NlGame::k_KindMask;
 			const bool number = kind == VALUE_REAL || kind == VALUE_INT32 || kind == VALUE_INT64;
 			if (number)
 			{
@@ -244,29 +243,21 @@ namespace
 
 	constexpr std::array<PFUNC_YYGMLScript, k_Slots> k_Detours = MakeDetours(std::make_integer_sequence<int, k_Slots>{});
 
-	// 스크립트의 함수를 이름으로 찾는다. "gml_Script_x" 이름으로만 찾는다: 접두 없는 이름에도 러너가 스크립트 범위의 번호를 주지만
-	// 그것은 다른 루틴이다(research/07. 그 이름으로 부른 호출이 이 함수에 걸린 훅에 오지 않았다).
-	// 번호가 100000 미만이면 빌트인, 500000 이상이면 확장 함수다(YYToolkit MI_Public.cpp 55~66행). 스크립트만 받는다.
+	// 스크립트의 함수를 이름으로 찾는다. "gml_Script_x" 이름으로만 찾는다(NlGame::FindScript. 그 이름으로 부른 호출이 이 함수에 걸린 훅에 오지 않았다. research/07).
+	// 스크립트의 자료는 번호에서 스크립트 범위의 시작을 뺀 자리에 있다.
 	bool FindScript(const std::string& Given, std::string& Name, PFUNC_YYGMLScript& Fn, std::string& Why)
 	{
-		const std::string name = NlCore::ScriptRoutineName(Given);
 		int index = -1;
-		if (!name.empty())
-			NlGame::Yytk()->GetNamedRoutineIndex(name.c_str(), &index);
-		if (index < 100000 || index >= 500000)
-		{
-			Why = "no such script: " + Given;
+		if (!NlGame::FindScript(Given, Name, index, Why))
 			return false;
-		}
 
 		CScript* script = nullptr;
-		if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - 100000, script)) || !script || !script->m_Functions
+		if (!AurieSuccess(NlGame::Yytk()->GetScriptData(index - NlGame::k_ScriptIndexMin, script)) || !script || !script->m_Functions
 			|| !script->m_Functions->m_ScriptFunction)
 		{
-			Why = "the script has no function: " + name;
+			Why = "the script has no function: " + Name;
 			return false;
 		}
-		Name = name;
 		Fn = script->m_Functions->m_ScriptFunction;
 		return true;
 	}

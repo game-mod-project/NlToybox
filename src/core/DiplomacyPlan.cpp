@@ -1,5 +1,7 @@
 #include "DiplomacyPlan.hpp"
 
+#include "Text.hpp"
+
 #include <algorithm>
 #include <cmath>
 
@@ -15,7 +17,7 @@ namespace NlCore
 		} k_Goals[] = {
 			{ DiplomacyGoal::Friends, "friends", "우호" }, { DiplomacyGoal::Neutral, "neutral", "중립" },
 			{ DiplomacyGoal::Hostile, "hostile", "적대" }, { DiplomacyGoal::Opinion, "opinion", "평판" },
-			{ DiplomacyGoal::Pact, "pact", "협정" },
+			{ DiplomacyGoal::Pact, "pact", "협정" }, { DiplomacyGoal::Clear, "clear", "평판 떼기" },
 		};
 
 		const struct
@@ -215,9 +217,9 @@ namespace NlCore
 		const int kind = WholeKind(Kind);
 		const bool movable = kind == k_RelationEnemies || kind == k_RelationDeadly || kind == k_RelationOpponent || kind == k_RelationNeutrals
 			|| kind == k_RelationFriends;
-		if (!movable || Goal == DiplomacyGoal::Pact)
+		if (!movable || Goal == DiplomacyGoal::Pact || Goal == DiplomacyGoal::Clear)
 		{
-			step.Outcome = 'k';
+			step.Outcome = 'k';		// 협정과 떼기는 붙이는 걸음이 아니다
 			return step;
 		}
 		int direction = 0;
@@ -303,6 +305,44 @@ namespace NlCore
 		return " (붙었는지는 게임의 함수가 돌려준 값으로만 봤습니다)";
 	}
 
+	char DetachCheck(double Before, double After)
+	{
+		if (!std::isfinite(Before) || !std::isfinite(After) || Before < 0 || After < 0)
+			return 'u';
+		return After == Before - 1 ? 'y' : After == Before ? 'n' : 'u';
+	}
+
+	char AfterDetach(char Check)
+	{
+		return Check == 'y' ? 'c' : Check == 'n' ? 'n' : 'u';
+	}
+
+	std::string ClearOpinionReport(const std::string& Name, char Side, double Before, double After, int Good, int Bad, char Outcome, const std::string& Why)
+	{
+		if (Outcome == 'x')
+			return Name + ": 망했거나 왕이 없는 왕국입니다. 건드리지 않습니다";
+		const std::string who = Name + (Side == 't' ? ": 그쪽이 우리를 보는 평판" : ": 우리가 그쪽을 보는 평판");
+		const std::string before = RelationLabel(Before), after = RelationLabel(After);
+		const std::string relation = "관계는 " + (before == after ? before + " 그대로" : before + " -> " + after);
+		std::string counts;
+		if (Good > 0)
+			counts += "좋은 평판 " + std::to_string(Good) + "개";
+		if (Bad > 0)
+			counts += std::string(counts.empty() ? "" : ", ") + "나쁜 평판 " + std::to_string(Bad) + "개";
+		const std::string why = Why.empty() ? std::string("모릅니다") : Why;
+		switch (Outcome)
+		{
+		case 'd':
+			return counts.empty() ? who + "에 뗄 디버그 평판이 없습니다 (" + relation + ")" : who + "에서 " + counts + "를 뗐습니다 (" + relation + ")";
+		case 'a':
+			return who + "에 뗄 디버그 평판이 없습니다 (" + relation + ")";
+		case 'l':
+			return who + "에서 " + counts + "를 뗐습니다. 한도에 닿아 멈췄습니다 (" + relation + ")";
+		default:
+			return counts.empty() ? who + "을 떼지 못했습니다 (" + why + ")" : who + "에서 " + counts + "를 뗐고 그 뒤로는 떼지 못했습니다 (" + why + ". " + relation + ")";
+		}
+	}
+
 	bool PactUnknown(double Cell)
 	{
 		if (Cell < 0)
@@ -319,14 +359,7 @@ namespace NlCore
 
 	bool GoodFactionWho(const std::string& Who)
 	{
-		if (Who == "all")
-			return true;
-		if (Who.size() != 16)
-			return false;
-		for (const char c : Who)
-			if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
-				return false;
-		return true;
+		return Who == "all" || IsUuid(Who);
 	}
 
 	bool CheckDiplomacy(const DiplomacyCommand& Command, std::string& Why)
@@ -363,48 +396,12 @@ namespace NlCore
 				DiplomacyJob job;
 				job.Uuid = uuid;
 				job.Side = side;
-				job.Left = Command.Goal == DiplomacyGoal::Opinion ? (steps > 0 ? steps : -steps) : k_OpinionStepsMax;
+				job.Left = Command.Goal == DiplomacyGoal::Opinion ? (steps > 0 ? steps : -steps) : Command.Goal == DiplomacyGoal::Clear ? k_ClearStepsMax : k_OpinionStepsMax;
 				job.Sign = steps > 0 ? 1 : steps < 0 ? -1 : 0;
 				jobs.push_back(std::move(job));
 			}
 		}
 		return jobs;
-	}
-
-	void DiplomacyTally::Add(char Outcome, const std::string& Line)
-	{
-		if (DiplomacyFailed(Outcome))
-		{
-			m_Failed++;
-			m_Lines.insert(m_Lines.begin() + static_cast<std::ptrdiff_t>(m_FailedLines), Line);
-			m_FailedLines++;
-			return;
-		}
-		(Outcome == 'd' ? m_Changed : m_Same)++;
-		m_Lines.push_back(Line);
-	}
-
-	void DiplomacyTally::Drop(int Jobs, const std::string& Why)
-	{
-		if (Jobs <= 0)
-			return;
-		m_Failed += Jobs;
-		m_Lines.insert(m_Lines.begin() + static_cast<std::ptrdiff_t>(m_FailedLines), "하지 못하고 버린 일 " + std::to_string(Jobs) + "개: " + Why);
-		m_FailedLines++;
-	}
-
-	std::string DiplomacyTally::Summary() const
-	{
-		std::string text = std::to_string(m_Asked) + "개 가운데 한 것 " + std::to_string(m_Changed) + "개, 그대로 둔 것 " + std::to_string(m_Same)
-			+ "개, 안 된 것 " + std::to_string(m_Failed) + "개";
-		if (Pending() > 0)
-			text += " (남은 일 " + std::to_string(Pending()) + "개)";
-		return text;
-	}
-
-	bool DiplomacyFailed(char Outcome)
-	{
-		return Outcome == 'l' || Outcome == 'f' || Outcome == 's';
 	}
 
 	std::string DiplomacyReport(const std::string& Name, char Side, double Before, double After, int Steps, char Outcome, const std::string& Why)

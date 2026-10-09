@@ -12,6 +12,7 @@ endif()
 # 러너에 기대지 않는 부분. 모듈과 네이티브 시험이 같이 쓴다.
 add_library(nlcore STATIC
   src/core/AskPath.cpp
+  src/core/BuildingPlan.cpp
   src/core/CallLog.cpp
   src/core/CheatState.cpp
   src/core/CheatTable.cpp
@@ -20,8 +21,13 @@ add_library(nlcore STATIC
   src/core/CrimePlan.cpp
   src/core/DiplomacyPlan.cpp
   src/core/EconomyPlan.cpp
+  src/core/EventPlan.cpp
+  src/core/JobTally.cpp
   src/core/Knobs.cpp
+  src/core/LibraryPlan.cpp
+  src/core/NumberEdit.cpp
   src/core/Localization.cpp
+  src/core/MapPlan.cpp
   src/core/PeoplePlan.cpp
   src/core/Presets.cpp
   src/core/FamilyPlan.cpp
@@ -38,7 +44,33 @@ set_target_properties(nlcore PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_compile_options(nlcore PUBLIC /std:c++latest /W3 /utf-8)
 
 # src/core 의 시험. 게임을 켜지 않는다. tools/test-native.ps1 이 돌린다.
-add_executable(nlcore_tests tests/native/core_tests.cpp)
+add_executable(nlcore_tests
+  tests/native/main.cpp
+  tests/native/test_text.cpp
+  tests/native/test_request.cpp
+  tests/native/test_schedule.cpp
+  tests/native/test_askpath.cpp
+  tests/native/test_knobs.cpp
+  tests/native/test_economy.cpp
+  tests/native/test_cheat.cpp
+  tests/native/test_costbook.cpp
+  tests/native/test_building.cpp
+  tests/native/test_hooks.cpp
+  tests/native/test_rate.cpp
+  tests/native/test_remote.cpp
+  tests/native/test_people.cpp
+  tests/native/test_presets.cpp
+  tests/native/test_world.cpp
+  tests/native/test_diplomacy.cpp
+  tests/native/test_court.cpp
+  tests/native/test_localization.cpp
+  tests/native/test_family.cpp
+  tests/native/test_role.cpp
+  tests/native/test_crime.cpp
+  tests/native/test_events.cpp
+  tests/native/test_library.cpp
+  tests/native/test_map.cpp
+)
 set_target_properties(nlcore_tests PROPERTIES MSVC_RUNTIME_LIBRARY "MultiThreadedDLL")
 target_include_directories(nlcore_tests PRIVATE src)
 target_link_libraries(nlcore_tests PRIVATE nlcore)
@@ -53,10 +85,13 @@ add_library(nltoybox SHARED
   src/ModuleMain.cpp
   src/Access.cpp
   src/Build.cpp
+  src/Buildings.cpp
   src/Production.cpp
+  src/Jobs.cpp
   src/Cheats.cpp
   src/Court.cpp
   src/Crime.cpp
+  src/Library.cpp
   src/Dump.cpp
   src/Economy.cpp
   src/Explorer.cpp
@@ -64,6 +99,12 @@ add_library(nltoybox SHARED
   src/Game.cpp
   src/Menu.cpp
   src/People.cpp
+  src/PeopleAccess.cpp
+  src/TraitText.cpp
+  src/Shield.cpp
+  src/Hold.cpp
+  src/PeopleActs.cpp
+  src/PeopleDraw.cpp
   src/Recorder.cpp
   src/Remote.cpp
   src/Search.cpp
@@ -71,6 +112,10 @@ add_library(nltoybox SHARED
   src/Ui.cpp
   src/Diplomacy.cpp
   src/World.cpp
+  src/Events.cpp
+  src/MapGen.cpp
+  src/Season.cpp
+  src/Mines.cpp
   "${YYTK_SHARED}/YYTK_Shared_Types.cpp"
   "${IMGUI_ROOT}/imgui.cpp"
   "${IMGUI_ROOT}/imgui_draw.cpp"

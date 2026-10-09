@@ -37,20 +37,50 @@ bool NlGame::Call(const char* Name, const std::vector<RValue>& Args, RValue& Res
 	return global && AurieSuccess(g_Yytk->CallBuiltinEx(Result, Name, global, global, Args));
 }
 
+bool NlGame::FindScript(const std::string& Given, std::string& Name, int& Index, std::string& Why)
+{
+	Name = NlCore::ScriptRoutineName(Given);
+	Index = -1;
+	if (Name.empty() || !AurieSuccess(g_Yytk->GetNamedRoutineIndex(Name.c_str(), &Index)) || Index < k_ScriptIndexMin || Index >= k_ScriptIndexMax)
+	{
+		Why = "no such script: " + Given;
+		return false;
+	}
+	return true;
+}
+
+AurieStatus NlGame::CallScriptStatus(const std::string& Given, const std::vector<RValue>& Args, RValue& Result, std::string& Why)
+{
+	std::string name;
+	int index = -1;
+	if (!FindScript(Given, name, index, Why))
+		return AURIE_OBJECT_NOT_FOUND;
+	CInstance* global = Global();
+	if (!global)
+	{
+		Why = "no global instance";
+		return AURIE_OBJECT_NOT_FOUND;
+	}
+	const AurieStatus status = g_Yytk->CallGameScriptEx(Result, name, global, global, Args);
+	if (!AurieSuccess(status))
+		Why = AurieStatusToString(status);
+	return status;
+}
+
 bool NlGame::CallScript(const std::string& Name, const std::vector<RValue>& Args, RValue& Result)
 {
-	// 번호가 100000 미만이면 빌트인, 500000 이상이면 확장 함수다(YYToolkit MI_Public.cpp 55~66행).
-	const std::string name = NlCore::ScriptRoutineName(Name);
-	CInstance* global = Global();
-	int index = -1;
-	if (!global || name.empty() || !AurieSuccess(g_Yytk->GetNamedRoutineIndex(name.c_str(), &index)) || index < 100000 || index >= 500000)
-		return false;
-	return AurieSuccess(g_Yytk->CallGameScriptEx(Result, name, global, global, Args));
+	std::string why;
+	return AurieSuccess(CallScriptStatus(Name, Args, Result, why));
 }
 
 bool NlGame::IsNumber(const RValue& Value)
 {
 	return !Value.IsString() && !Value.IsStruct() && !Value.IsArray() && Value.IsNumberConvertible();
+}
+
+bool NlGame::IsRealNumber(const RValue& Value)
+{
+	return IsNumber(Value) && (static_cast<int>(Value.m_Kind) & k_KindMask) != VALUE_BOOL;
 }
 
 double NlGame::CallNumber(const char* Name, const std::vector<RValue>& Args, double Fallback)
@@ -96,46 +126,6 @@ std::string NlGame::RoomName()
 		return "";
 	}
 	return name.ToString();
-}
-
-bool NlGame::Resolve(const std::string& Path, RValue& Out)
-{
-	CInstance* global = Global();
-	if (!global || Path.rfind("global.", 0) != 0)
-		return false;
-
-	RValue current(global);
-	size_t begin = 7;	// "global." 다음
-	while (true)
-	{
-		const size_t dot = Path.find('.', begin);
-		const std::string name = Path.substr(begin, dot == std::string::npos ? std::string::npos : dot - begin);
-		if (!current.IsStruct())
-			return false;
-
-		// 이름이 같은 멤버를 열거로 찾는다. 없는 이름으로 GetInstanceMember 를 부르면 YYToolkit 이 구조체에 대고
-		// variable_instance_exists 를 부르는데(MI_Public.cpp 268~291행), 이 러너에서 그것이 되는지는 확인하지 못했다.
-		// 열거는 단계 0 에서 써 본 길이다.
-		RValue next;
-		bool found = false;
-		g_Yytk->EnumInstanceMembers(current, [&](const char* MemberName, RValue* Value) -> bool
-		{
-			if (!MemberName || !Value || name != MemberName)
-				return false;
-			next = *Value;
-			found = true;
-			return true;	// 찾았으니 그만 돈다
-		});
-		if (!found)
-			return false;
-		current = next;
-
-		if (dot == std::string::npos)
-			break;
-		begin = dot + 1;
-	}
-	Out = current;
-	return true;
 }
 
 int NlGame::MemberCount(const RValue& Struct)

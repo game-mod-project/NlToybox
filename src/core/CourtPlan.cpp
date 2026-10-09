@@ -9,16 +9,6 @@ namespace NlCore
 {
 	namespace
 	{
-		bool IsUuid(const std::string& Text)
-		{
-			if (Text.size() != 16)
-				return false;
-			for (const char c : Text)
-				if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')))
-					return false;
-			return true;
-		}
-
 		// 한 것을 글로: "나쁜 평판 2개 뗌, 좋은 평판 13개 붙임". 뗀 것을 먼저 적는다(걸음의 차례가 그렇다). 한 것이 없으면 빈 글.
 		std::string DoneText(const CourtDone& Done)
 		{

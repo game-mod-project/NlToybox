@@ -1,17 +1,11 @@
 #include "FamilyPlan.hpp"
 
+#include "Text.hpp"
+
 #include <algorithm>
 
 namespace NlCore
 {
-	namespace
-	{
-		bool Has(const std::vector<std::string>& List, const char* Name)
-		{
-			return std::find(List.begin(), List.end(), Name) != List.end();
-		}
-	}
-
 	const char* PregnancyTrait(int Stage)
 	{
 		return Stage == 1 ? "pregnant_st1" : Stage == 2 ? "pregnant_st2" : Stage == 3 ? "pregnant_st3" : "";
@@ -90,11 +84,6 @@ namespace NlCore
 	bool CanFather(double Gender, const std::vector<std::string>& Traits)
 	{
 		return Gender == k_Male && !IsKid(Traits);
-	}
-
-	bool GoodUuid(const std::string& Text)
-	{
-		return Text.size() == 16 && std::all_of(Text.begin(), Text.end(), [](unsigned char c) { return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f'); });
 	}
 
 	const std::vector<const char*>& PregnancyChanceVars()

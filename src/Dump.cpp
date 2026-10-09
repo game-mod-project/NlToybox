@@ -1,8 +1,11 @@
 #include "Dump.hpp"
 
+#include "Access.hpp"
 #include "Finder.hpp"
 #include "Game.hpp"
+#include "core/AskPath.hpp"
 #include "core/Request.hpp"
+#include "core/Guard.hpp"
 #include "core/Schedule.hpp"
 #include "core/Text.hpp"
 
@@ -169,7 +172,8 @@ namespace
 		for (size_t i = 0; i < g_Request.Watches.size(); i++)
 		{
 			RValue value;
-			const std::string text = NlGame::Resolve(g_Request.Watches[i], value) ? NlGame::Describe(value) : "\"kind\":\"missing\"";
+			std::string why;
+			const std::string text = NlAccess::Read(NlCore::ParseAskPath(g_Request.Watches[i]), value, why) ? NlGame::Describe(value) : "\"kind\":\"missing\"";
 			if (text == g_WatchLast[i])
 				continue;
 			g_WatchLast[i] = text;
@@ -355,8 +359,11 @@ namespace
 			}
 
 			RValue result;
-			const AurieStatus status = NlGame::Yytk()->CallGameScriptEx(result, call.Name, global, global, args);
+			std::string why;
+			const AurieStatus status = NlGame::CallScriptStatus(call.Name, args, result, why);		// 정식 이름으로만, 스크립트의 번호 범위만(Game.cpp)
 			out << ",\"status\":" << Quote(AurieStatusToString(status));
+			if (!AurieSuccess(status))
+				out << ",\"why\":" << Quote(why);
 			if (AurieSuccess(status))
 				out << ",\"result\":{" << NlGame::Describe(result) << "}";
 			out << "}";
@@ -453,7 +460,6 @@ void NlDump::Tick(CCode* Code)
 		return;
 	g_LastSample = now;
 
-	g_Busy = true;
+	const NlCore::ScopedFlag busy(g_Busy);
 	Step(now);
-	g_Busy = false;
 }

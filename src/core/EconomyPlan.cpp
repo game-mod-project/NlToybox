@@ -131,26 +131,6 @@ namespace NlCore
 		return std::isfinite(Asked) && Asked <= k_MaxAmount;
 	}
 
-	bool StepFloorEdit(FloorEdit& Edit, bool Typed, double Value, bool Left, bool Active, double& Out)
-	{
-		if (Typed)
-		{
-			Edit.Has = true;
-			Edit.Value = Value;
-		}
-		if (Left)
-		{
-			const bool apply = Edit.Has;
-			if (apply)
-				Out = Edit.Value;
-			Edit = FloorEdit();
-			return apply;
-		}
-		if (!Active)
-			Edit = FloorEdit();
-		return false;
-	}
-
 	bool GoodFloorKey(const std::string& Key)
 	{
 		if (Key.empty() || Key.size() > 40)
@@ -213,7 +193,7 @@ namespace NlCore
 		return round;
 	}
 
-	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Counts,
+	std::vector<EconomyChange> PlanEconomy(const EconomyCommand& Command, double Gold, const std::vector<double>& Basis,
 		const std::vector<double>& Free, const std::vector<int>& Stocked)
 	{
 		std::vector<EconomyChange> changes;
@@ -228,13 +208,13 @@ namespace NlCore
 					return;			// 같은 자원을 두 번 하지 않는다
 			changes.push_back({ resource, delta });
 		};
-		const auto valid = [&](int resource) { return resource >= 0 && static_cast<size_t>(resource) < Counts.size(); };
+		const auto valid = [&](int resource) { return resource >= 0 && static_cast<size_t>(resource) < Basis.size(); };
 		const auto stocked = [&](int resource) {
 			return valid(resource) && std::find(Stocked.begin(), Stocked.end(), resource) != Stocked.end();
 		};
 		// 줄일 수 있는 양: 예약되지 않은 수와 지금 수 가운데 작은 쪽.
 		const auto free_of = [&](int resource) {
-			const double count = Counts[resource];
+			const double count = Basis[resource];
 			return static_cast<size_t>(resource) < Free.size() ? std::min(Free[resource], count) : count;
 		};
 		const double target = std::max(0.0, std::round(Command.Amount));
@@ -253,7 +233,7 @@ namespace NlCore
 			break;
 		case EconomyAct::ResourceSet:
 			if (stocked(Command.Resource))
-				add(Command.Resource, Settle(free_of(Command.Resource), target - Counts[Command.Resource]));
+				add(Command.Resource, Settle(free_of(Command.Resource), target - Basis[Command.Resource]));
 			break;
 		case EconomyAct::AllAdd:
 			for (const int resource : Stocked)

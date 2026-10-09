@@ -1,5 +1,6 @@
 #include "Finder.hpp"
 
+#include "Game.hpp"
 #include "core/Text.hpp"
 
 using namespace YYTK;
@@ -12,11 +13,6 @@ namespace
 	constexpr const char* k_SelfKey = "nltoybox_selfcheck";
 	constexpr double k_SelfMapValue = 918273645;
 	constexpr double k_SelfListValue = 918273646;
-
-	// GML 의 ds 형 상수. 출처: YoYoGames/GameMaker-HTML5 scripts/functions/Function_YoYo.js 36~41행.
-	// 이 러너에서도 맞는지는 FindDataStructures 가 VerifyType 으로 확인한 뒤에만 쓴다.
-	constexpr double k_DsTypeMap = 1;
-	constexpr double k_DsTypeList = 2;
 
 	constexpr size_t k_MaxNested = 200;		// 이름으로 찾은 ds_map·ds_list 의 속을 적는 수
 	constexpr size_t k_MaxPath = 4096;		// 경로는 자르지 않는다. 꼬리에 잎 이름이 있다
@@ -154,7 +150,7 @@ namespace NlDump
 
 		// ds_map_is_map / ds_map_is_list 는 그 키가 map·list 로 표시됐다는 것만 말한다. 대상이 이미 지워졌을 수 있다.
 		// 없는 번호에 ds 함수를 부르면 어떻게 되는지는 확인하지 못했으므로, 있는 것을 본 뒤에만 부른다.
-		if (!DsExists(Id, IsMap ? k_DsTypeMap : k_DsTypeList))
+		if (!DsExists(Id, IsMap ? NlGame::k_DsMap : NlGame::k_DsList))
 		{
 			m_Out << ",\"stale\":true}";
 			m_Out.flush();
@@ -398,8 +394,8 @@ namespace NlDump
 
 		// 형 상수가 이 러너에서 맞는지 먼저 잰다. 틀리면 없는 번호에 ds 함수를 부르게 되므로 훑지 않는다.
 		if (Wanted())
-			types_ok = VerifyType("ds_map_create", "ds_map_destroy", k_DsTypeMap)
-				&& VerifyType("ds_list_create", "ds_list_destroy", k_DsTypeList);
+			types_ok = VerifyType("ds_map_create", "ds_map_destroy", NlGame::k_DsMap)
+				&& VerifyType("ds_list_create", "ds_list_destroy", NlGame::k_DsList);
 
 		if (types_ok)
 		{
@@ -417,13 +413,13 @@ namespace NlDump
 			const int root = m_Paths.Add(-1, "ds");
 			for (int id = 0; id < m_Limits.MaxDsId && !m_Truncated; id++)
 			{
-				if (DsExists(id, k_DsTypeMap))
+				if (DsExists(id, NlGame::k_DsMap))
 				{
 					maps++;
 					highest_map = id;
 					WalkMap(id, root, self_map);
 				}
-				if (DsExists(id, k_DsTypeList))
+				if (DsExists(id, NlGame::k_DsList))
 				{
 					lists++;
 					highest_list = id;
