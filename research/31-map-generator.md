@@ -5,6 +5,7 @@
 
 ## 값의 자리
 
+- **생성기 화면의 표식**(그 실행의 `state`): `in_game 0`, `o_main_menu 0`, `o_debug 1`, `o_character 0`, `global.__new_game_initializer.__is_active` 가 `true`. 메인 메뉴에서는 `o_main_menu 1`, 게임 안에서는 `o_character` 가 있다. 모듈은 이 셋(`__is_active`, 설정 구조체가 읽힘, 게임 안이 아님)으로 화면을 가린다(`NlCore::MapScreen`).
 - **영지(지역)마다의 생성 설정**: `global.__new_game_initializer.__choosed_province.__initial_area.__generator_settings`(`GlobalMapAreaGeneratorSettings`). 칸 17개(모두 수):
   - 지형: `__lakes`(호수. 창의 6단계 `generator.quantity_names_1.0~5`), `__hills`(언덕. 4단계 `_2.0~3`), `__hills_distribution`(언덕 배치. 0 center, 1 edges, 2 random: `global.global_map_generator_hills_distribution_names`), `__mountains`(산. 6단계), `__river`(강. 0/1).
   - 가장자리 막힘: `__blocked_up`·`__blocked_down`·`__blocked_left`·`__blocked_right`(수. 아덴의 영지는 2·0·3·0).
@@ -25,9 +26,14 @@
 
 ## 판단(스파이크의 답)
 
-- **된다.** 모드는 생성기 화면에서 지역의 설정 17개를 읽어 보이고, 지형 5개는 게임의 세터(수 하나)로, 자원 8개와 막힘 4개는 바로 써 넣은 뒤, 게임이 부르는 꼴 그대로 `regenerate_map()` 을 부르면 그 값으로 지도가 다시 생긴다. 씨앗은 `set_generator_seed(수)` 로 고정할 수 있다(같은 지도를 다시 받는 프리셋).
+- **된다.** 모드는 생성기 화면에서 지역의 설정 17개를 읽어 보이고, 17개를 칸에 바로 써 넣은 뒤(세터는 부르지 않는다: 기록한 것은 `set_lakes` 하나뿐이다), 게임이 부르는 꼴 그대로 `regenerate_map()` 을 부르면 그 값으로 지도가 다시 생긴다. 씨앗은 `set_generator_seed(수)` 로는 고정되지 않는다: `regenerate_map()` 이 안에서 `set_generator_seed(-1)` 을 부른다. 남는 길은 `get_generator_seed()` 의 반환값을 훅으로 바꾸는 것이고, 생성기가 그 함수를 읽는지는 확인 전이다.
 - **자원의 단계가 실제로 몇 개를 만드는지는 재지 않았다**: 단계 → 변수 55개의 셈은 `apply_modificators` 안에 있다. 창에 없는 자원 8개는 영지 틀이 정하는 값이라 범위도 어림이다(본 값은 0~5). 기능을 만들 때 단계를 바꿔 생성한 지도의 광산·점토·열매 수를 세어 본다.
 - 더 미세한 조절(광산 수의 최소·최대, 점토 자리의 수, 나무 수 …)은 파일 `generator\genmap\config.json` 의 변수 55개다: 데이터 오버레이(`tools/overlay.ps1`)의 카탈로그에 그 파일을 더하면 지금의 프리셋 길로 입히고 되돌릴 수 있다(게임을 켤 때 읽히므로 켜기 전에 입힌다).
+
+## 구현(0.32.0. 지도 탭)
+
+- `src/MapGen.cpp` + `core/MapPlan`. 17값의 단추, 다시 생성(`regenerate_map()`), 원래대로(stashed), 프리셋 파일, 원격 `map`. 씨앗 고정은 확인 전(꺼져 있다).
+- 확인(Task 7 의 켜기 1): (여기에 적는다 — 스펙 §7 의 1~6: 탭의 값, `map set lakes=3` + 재생성 뒤 게임의 슬라이더, `iron=4 clay=4` 의 광산·점토 수, restore, 프리셋 저장·불러오기·지우기, `get_generator_seed` 의 기록, 창의 `[+]`. 켜기 2 의 적재 판정)
 
 ## 남은 것
 
