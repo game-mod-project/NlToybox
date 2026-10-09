@@ -26,6 +26,7 @@ namespace NlCore
 			{ Area::Events, "events", "이벤트", 6, true },			// 이벤트의 표, 바로 일으키기·예약, 쿨다운 지우기(src/Events.cpp)
 			{ Area::Util, "util", "유틸", 7 },
 			{ Area::Presets, "presets", "프리셋", 7, true },		// 확인된 항목의 묶음(core/Presets, src/Cheats.cpp)
+			{ Area::Map, "map", "지도", 7, true },				// 새 게임의 생성 설정 17개와 프리셋(src/MapGen. research/31)
 		};
 		return areas;
 	}

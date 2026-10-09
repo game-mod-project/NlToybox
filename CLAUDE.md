@@ -90,7 +90,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 ## 모듈을 쓸 때
 
 - **파일 지도(2026-10-07 리팩토링 C)**: 사람은 `src/People.cpp`(상태·훑기·틱·진입점) + `PeopleActs.cpp`(한 사람에게 하는 일) + `PeopleDraw.cpp`(그리기)이고 셋이 `PeopleInternal.hpp`의 상태를 나눠 갖는다.
-  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 도서관의 책은 `Library.cpp`(지식 탭의 둘째 탭). 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산).
+  사람의 자료 도우미는 `PeopleAccess`, 특성의 글은 `TraitText`, 전투 가림은 `Shield`, 인구 바퀴는 `Hold`. 도서관의 책은 `Library.cpp`(지식 탭의 둘째 탭). 월드는 `World.cpp`(주교·지금 저장) + `Events.cpp`(이벤트 탭) + `Season.cpp`(계절) + `Mines.cpp`(광산). 지도 탭(새 게임의 생성 설정)은 `MapGen.cpp`.
   게임의 자료를 돌며 값을 쓰는 일은 `Jobs.cpp`(엔진)에 영역 파일이 등록한다(생산 `Production.cpp`, 종교 `World.cpp`, 임신 `People.cpp`, 범죄 `Crime.cpp`, 건설비·거주 칸·건물의 효과 `Build.cpp`). 건물 종류 걷기는 `Buildings.cpp`.
 - 러너를 건드리는 호출은 게임 스레드의 콜백 안에서 한다. `ModuleInitialize`는 Aurie의 스레드에서 돈다.
 - 게임 스레드 진입점은 `EVENT_OBJECT_CALL`이다. **`EVENT_FRAME`은 불리지 않는다**
@@ -285,6 +285,12 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `__is_available`은 이벤트마다 다르다(같은 때 음유시인은 참, 마녀는 거짓. 손님이 와 있으면 undefined). `__spawn_method`의 스크립트는 가족마다 다르고 모두 묶여 있다.
     **감독의 `on_next_day()`를 불러 뽑게 하지 않는다**: 뽑기는 그날의 운에 달렸고 쿨다운의 날과 국면의 날이 하루씩 넘어간다(조사에서 한 번 불러 그 꼴을 봤다).
     창의 청은 이름과 함께 쌓는다(`Ask{Act, Name, Family}`): 줄 둘을 잇달아 눌러도 섞이지 않는다. 결과의 줄은 표의 위에 있다.
+- **지도 탭**(`src/MapGen.cpp`, `core/MapPlan`. `research/31`. 2026-10-10): 새 게임의 **생성기 화면**(영지 선택 뒤 지도 미리 보기가 보이는 화면. 영주관 자리의 선택과 게임의 "지도 재생성"도 그 화면에 있다)에서만 된다
+  (`NlCore::MapScreen`: 초기화기 `__is_active` + 설정 구조체 + 미리 보기 제어기 구조체 + 게임 안이 아님. 메인 메뉴에서는 쓰지도 부르지도 않는다).
+  영지의 생성 설정 17개(`…__initial_area.__generator_settings.<칸>`: 지형 `__lakes`·`__hills`·`__hills_distribution`·`__mountains`·`__river`, 막힘 `__blocked_*` 4, 자원 `__berry`·`__bush`·`__clay`·`__fertile`·`__hop`·`__iron`·`__plants`·`__tree`)를 칸에 바로 쓴다(세터는 부르지 않는다).
+  **다시 생성은 게임이 부르는 꼴 그대로 `MapPreviewController.regenerate_map()`**(인자 없음). 원래대로는 `__stashed_settings.<열쇠>`. **자원의 단계는 자리의 수다**(철 4·점토 4 로 쓰고 다시 생성하자 광산·점토 자리가 4개씩. 한 영지에서 한 번 잰 것). 쓴 값은 게임의 생성기 창의 슬라이더에 그대로 보인다(호수 5).
+  프리셋은 `mods\Aurie\NlToyBox.maps.txt`(사용자의 설정. 막힘 4개는 들지 않는다). **씨앗 고정은 뺐다**: `regenerate_map()` 이 안에서 `set_generator_seed(-1)` 을 부르고, 생성기는 `get_generator_seed()` 를 읽지 않는다(모듈의 호출과 게임의 "생성" 둘 다 기록 0번. 2026-10-10). 원격 `map seed` 는 그 까닭만 답한다.
+  원격 `map show|set <열쇠>=<수> …|regenerate|restore|preset save|load|delete name=|seed <수|random>`.
 - 종교 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world bishop`이 같은 길을 탄다.
   이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0. 원격 `world cooldowns_clear`)는 아래의 이벤트 탭으로 갔다.
   - **지금 저장**(유틸 영역. `NlWorld::DrawUtil`): 게임의 자동 저장 함수 `gml_Script_save_game(0, 1)`(아침의 꼴. 저녁은 `(0, 2)`)을 부른다. `is_save_disabled`가 참이면 부르지 않는다.
@@ -428,7 +434,7 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
 - 켜져 있는 게임에 도구가 파일로 묻는다(`src/Remote.cpp`, 스펙 §14). 줄의 꼴은 `src/core/RemoteCommand.hpp`에 있다:
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
-  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`, `library list|add|add_all|remove|undo`,
+  `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`, `library list|add|add_all|remove|undo`, `map show|set <열쇠>=<수> …|regenerate|restore|preset save|load|delete name=|seed <수|random>`(생성기 화면에서),
   `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`, 문화 `culture_set name=<문화>`),
   `person spawn <soldier|knight|peasant|slave|lord>`(영주는 `[gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.

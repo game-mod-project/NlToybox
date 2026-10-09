@@ -65,6 +65,7 @@ int main(int argc, char** argv)
 	RunCrimeTests();
 	RunEventsTests();
 	RunLibraryTests();
+	RunMapTests();
 
 	if (g_Failed)
 	{

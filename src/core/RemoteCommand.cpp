@@ -12,6 +12,7 @@
 #include "Presets.hpp"
 #include "CrimePlan.hpp"
 #include "LibraryPlan.hpp"
+#include "MapPlan.hpp"
 #include "WorldPlan.hpp"
 #include "Text.hpp"
 
@@ -501,6 +502,40 @@ namespace NlCore
 				command.Options["find"] = library.Find;
 		}
 
+		void ParseMapLine(const std::vector<std::string>& tokens, RemoteCommand& command)
+		{
+			// map show | set <열쇠>=<수> … | regenerate | restore | preset save|load|delete name=<이름> | seed <수|random>      지도 탭의 단추와 같은 길(core/MapPlan. research/31)
+			const size_t count = tokens.size();
+			if (count < 2)
+				return Fail(command, "map needs one of: show, set, regenerate, restore, preset, seed");
+			command.Target = tokens[1];
+			if (tokens[1] == "set")
+			{
+				if (!Options(tokens, 2, command))
+					return;
+			}
+			else if (tokens[1] == "preset")
+			{
+				if (count < 3)
+					return Fail(command, "map preset needs save|load|delete name=<name>");
+				command.Options["op"] = tokens[2];
+				if (!Options(tokens, 3, command))
+					return;
+			}
+			else if (tokens[1] == "seed")
+			{
+				if (count != 3)
+					return Fail(command, "map seed needs <number|random>");
+				command.Options["value"] = tokens[2];
+			}
+			else if (count != 2)
+				return Fail(command, std::string("map ") + tokens[1] + " takes nothing");
+			MapCommand parsed;
+			std::string why;
+			if (!MapCommandFromParts(command.Target, command.Options, parsed, why))
+				return Fail(command, why);
+		}
+
 		void ParseWorldLine(const std::vector<std::string>& tokens, RemoteCommand& command)
 		{
 			const size_t count = tokens.size();
@@ -776,6 +811,8 @@ namespace NlCore
 			ParseCrimeLine(tokens, command);
 		else if (verb == "library")
 			ParseLibraryLine(tokens, command);
+		else if (verb == "map")
+			ParseMapLine(tokens, command);
 		else if (verb == "world")
 			ParseWorldLine(tokens, command);
 		else if (verb == "diplomacy")

@@ -292,7 +292,7 @@ void RunCheatTests()
 			CHECK(&GetArea(area.Id) == &area);
 			CHECK(area.Stage >= 2 && area.Stage <= 7);
 		}
-		CHECK(Areas().size() == 17);
+		CHECK(Areas().size() == 18);
 		// 범죄 영역(research/26): 제 패널(src/Crime.cpp)이 있다. 표의 차례와 열거의 차례가 같아야 한다(GetArea 가 번호로 집는다).
 		CHECK(FindArea("crime") && FindArea("crime")->Id == Area::Crime && FindArea("crime")->Panel && &GetArea(Area::Crime) == FindArea("crime"));
 		for (const AreaInfo& area : Areas())
@@ -308,7 +308,8 @@ void RunCheatTests()
 				|| area.Id == Area::Events || area.Id == Area::Religion		// 이벤트의 표(src/Events.cpp), 주교 부르기(src/World.cpp)
 				|| area.Id == Area::Diplomacy								// 왕국과의 관계(src/Diplomacy.cpp)
 				|| area.Id == Area::Crime									// 부랑자와 영주의 죄(src/Crime.cpp)
-				|| area.Id == Area::Presets;								// 프리셋: 확인된 항목의 묶음(core/Presets)
+				|| area.Id == Area::Presets								// 프리셋: 확인된 항목의 묶음(core/Presets)
+				|| area.Id == Area::Map;									// 지도: 새 게임의 생성 설정(src/MapGen)
 			CHECK(area.Panel == panel);
 		}
 		CHECK(FindArea("nope") == nullptr);
