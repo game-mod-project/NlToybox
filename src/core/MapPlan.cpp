@@ -114,21 +114,22 @@ namespace NlCore
 			switch (Outcome)
 			{
 			case 's': return "프리셋을 저장했습니다: " + Detail;
-			case 'b': return "프리셋의 이름이 틀렸습니다 (비지 않고 32자 안, 빈칸과 = 없이)";
+			case 'b': return std::string("프리셋의 이름이 틀렸습니다 (") + PresetNameRule() + ")";
 			default: return "프리셋 파일에 쓰지 못했습니다";
 			}
 		case MapAct::PresetLoad:
 			switch (Outcome)
 			{
 			case 'l': return "프리셋을 불러왔습니다: " + Detail + " - 값만 채웠습니다. 생성은 '다시 생성'으로";
-			case 'b': return "프리셋의 이름이 틀렸습니다 (비지 않고 32자 안, 빈칸과 = 없이)";
+			case 'b': return std::string("프리셋의 이름이 틀렸습니다 (") + PresetNameRule() + ")";
 			default: return "그 이름의 프리셋이 없습니다: " + Detail;
 			}
 		case MapAct::PresetDelete:
 			switch (Outcome)
 			{
 			case 'x': return "프리셋을 지웠습니다: " + Detail;
-			case 'b': return "프리셋의 이름이 틀렸습니다 (비지 않고 32자 안, 빈칸과 = 없이)";
+			case 'f': return "프리셋 파일에 쓰지 못했습니다";
+			case 'b': return std::string("프리셋의 이름이 틀렸습니다 (") + PresetNameRule() + ")";
 			default: return "그 이름의 프리셋이 없습니다: " + Detail;
 			}
 		case MapAct::Seed:
@@ -136,6 +137,11 @@ namespace NlCore
 		default:
 			return std::string();
 		}
+	}
+
+	const char* PresetNameRule()
+	{
+		return "비지 않고 32바이트 안(한글 10자), 빈칸과 = 없이";
 	}
 
 	bool GoodPresetName(const std::string& Name)
@@ -162,16 +168,17 @@ namespace NlCore
 			}
 			const std::string key = Word.substr(0, eq), text = Word.substr(eq + 1);
 			double value = 0;
-			if (!ParseNumber(text, value))
+			const bool number = ParseNumber(text, value);
+			if (key == "seed")
+			{
+				Out.Seed = number && ValidSeed(value) ? value : -1;		// 틀린 씨앗(수가 아님, 음수, 소수)은 무작위로(줄은 버리지 않는다. 씨앗 고정은 뺐다)
+				Skip = true;
+				return true;
+			}
+			if (!number)
 			{
 				Why = "not a number: " + Word;
 				return false;
-			}
-			if (key == "seed")
-			{
-				Out.Seed = ValidSeed(value) ? value : -1;		// 틀린 씨앗은 무작위로(줄은 버리지 않는다)
-				Skip = true;
-				return true;
 			}
 			const MapKnob* knob = FindMapKnob(key);
 			if (!knob)
@@ -193,8 +200,12 @@ namespace NlCore
 	{
 		std::vector<MapPreset> out;
 		std::string line;
+		bool first = true;
 		while (std::getline(In, line))
 		{
+			if (first && line.size() >= 3 && line.compare(0, 3, "\xEF\xBB\xBF") == 0)
+				line.erase(0, 3);		// 메모장이 남기는 UTF-8 BOM
+			first = false;
 			if (!line.empty() && line.back() == '\r')
 				line.pop_back();
 			std::istringstream words(line);

@@ -56,7 +56,12 @@ void RunMapTests()
 		CHECK_STR(MapReport(MapAct::Restore, 'd', "17"), "원래 값으로 되돌렸습니다 (17개)");
 		CHECK_STR(MapReport(MapAct::Restore, 'f', "3"), "원래 값을 읽거나 쓰지 못한 칸이 있습니다 (3개)");
 		CHECK_STR(MapReport(MapAct::PresetSave, 's', "평야"), "프리셋을 저장했습니다: 평야");
-		CHECK_STR(MapReport(MapAct::PresetSave, 'b', ""), "프리셋의 이름이 틀렸습니다 (비지 않고 32자 안, 빈칸과 = 없이)");
+		CHECK_STR(PresetNameRule(), "비지 않고 32바이트 안(한글 10자), 빈칸과 = 없이");
+		CHECK_STR(MapReport(MapAct::PresetSave, 'b', ""), "프리셋의 이름이 틀렸습니다 (비지 않고 32바이트 안(한글 10자), 빈칸과 = 없이)");
+		CHECK_STR(MapReport(MapAct::PresetLoad, 'b', ""), "프리셋의 이름이 틀렸습니다 (비지 않고 32바이트 안(한글 10자), 빈칸과 = 없이)");
+		CHECK_STR(MapReport(MapAct::PresetDelete, 'b', ""), "프리셋의 이름이 틀렸습니다 (비지 않고 32바이트 안(한글 10자), 빈칸과 = 없이)");
+		CHECK_STR(MapReport(MapAct::PresetDelete, 'm', "x"), "그 이름의 프리셋이 없습니다: x");
+		CHECK_STR(MapReport(MapAct::PresetDelete, 'f', ""), "프리셋 파일에 쓰지 못했습니다");		// 지웠어도 파일에 못 쓰면 되살아난다: 그렇게 말한다
 		CHECK_STR(MapReport(MapAct::PresetSave, 'f', ""), "프리셋 파일에 쓰지 못했습니다");
 		CHECK_STR(MapReport(MapAct::PresetLoad, 'l', "평야 (13)"), "프리셋을 불러왔습니다: 평야 (13) - 값만 채웠습니다. 생성은 '다시 생성'으로");
 		CHECK_STR(MapReport(MapAct::PresetLoad, 'm', "x"), "그 이름의 프리셋이 없습니다: x");
@@ -103,6 +108,18 @@ void RunMapTests()
 		std::istringstream badseed("preset s lakes=1 seed=-5\npreset t lakes=1 seed=2.5\n");
 		const std::vector<MapPreset> seeds = ParseMapPresets(badseed);
 		CHECK(seeds.size() == 2 && FindPreset(seeds, "s")->Seed == -1 && FindPreset(seeds, "t")->Seed == -1);
+		// 사용자가 손으로 고친 파일: BOM, CRLF, 꼬리 빈칸, 수가 아닌 seed(줄은 산다, 무작위), 한 줄의 같은 열쇠(뒤가 이긴다), 빈 파일
+		std::istringstream bom("\xEF\xBB\xBFpreset a lakes=1\n");
+		const std::vector<MapPreset> bomRead = ParseMapPresets(bom);
+		CHECK(bomRead.size() == 1 && bomRead[0].Name == "a" && bomRead[0].Values.at("lakes") == 1);
+		std::istringstream crlf("preset c lakes=2\r\npreset d lakes=1   \r\n");
+		const std::vector<MapPreset> crlfRead = ParseMapPresets(crlf);
+		CHECK(crlfRead.size() == 2 && FindPreset(crlfRead, "c")->Values.at("lakes") == 2 && FindPreset(crlfRead, "d")->Values.at("lakes") == 1);
+		std::istringstream odd("preset e lakes=1 lakes=3 seed=abc\n");
+		const std::vector<MapPreset> oddRead = ParseMapPresets(odd);
+		CHECK(oddRead.size() == 1 && oddRead[0].Values.at("lakes") == 3 && oddRead[0].Seed == -1);
+		std::istringstream empty("");
+		CHECK(ParseMapPresets(empty).empty());
 	});
 
 	Test("지도: 원격 map 의 낱말", [] {
@@ -126,6 +143,8 @@ void RunMapTests()
 		const RemoteCommand set = ParseRemoteLine("map set lakes=3 iron=4");
 		CHECK(set.Error.empty() && set.Target == "set" && set.Options.at("lakes") == "3" && set.Options.at("iron") == "4");
 		CHECK(!ParseRemoteLine("map set bogus=1").Error.empty() && !ParseRemoteLine("map set lakes=x").Error.empty() && !ParseRemoteLine("map set").Error.empty());
+		const RemoteCommand twice = ParseRemoteLine("map set lakes=1 lakes=3");		// 같은 열쇠 둘: 뒤가 이긴다
+		CHECK(twice.Error.empty() && twice.Options.at("lakes") == "3" && MapCommandFromParts(twice.Target, twice.Options, command, why) && command.Sets.size() == 1 && command.Sets[0].second == 3);
 		CHECK(ParseRemoteLine("map show").Error.empty() && ParseRemoteLine("map regenerate").Error.empty() && ParseRemoteLine("map restore").Error.empty());
 		const RemoteCommand save = ParseRemoteLine("map preset save name=평야");
 		CHECK(save.Error.empty() && save.Target == "preset" && save.Options.at("op") == "save" && save.Options.at("name") == "평야");
