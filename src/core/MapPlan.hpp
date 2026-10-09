@@ -45,7 +45,7 @@ namespace NlCore
 	enum class MapAct { Show, Set, Regenerate, Restore, PresetSave, PresetLoad, PresetDelete, Seed };
 	// 결과의 글. Set: 'n' 화면이 아니다, 'w' 썼다(Detail "열쇠=수"), 'f' 쓰지 못했다(Detail), 'k' 모르는 열쇠(Detail). Regenerate: 'n', 'd' 불렀다, 'f' 부르지 못했다(Detail).
 	// Restore: 'n', 'd' 되돌렸다(Detail 수), 'f' 읽거나 쓰지 못한 칸(Detail 수). PresetSave: 'n', 's' 저장(Detail 이름), 'b' 이름이 틀렸다, 'f' 파일에 쓰지 못했다.
-	// PresetLoad: 'n', 'l' 불러옴(Detail "이름 (수)"), 'm' 없는 이름(Detail), 'b'. PresetDelete: 'x' 지움(Detail), 'm', 'b'. Seed: 언제나 'u'(되지 않는다: 생성기가 씨앗 함수를 읽지 않는다).
+	// PresetLoad: 'n', 'l' 불러옴(Detail "이름 (수)"), 'm' 없는 이름(Detail), 'b'. PresetDelete: 'x' 지움(Detail), 'm', 'b', 'f' 파일에 쓰지 못했다(지운 것이 되살아난다). Seed: 언제나 'u'(되지 않는다: 생성기가 씨앗 함수를 읽지 않는다).
 	std::string MapReport(MapAct Act, char Outcome, const std::string& Detail);
 
 	// 프리셋(NlToyBox.maps.txt. 사용자의 설정). 줄: preset <이름> <열쇠>=<수> … seed=<수>. 막힘 4개는 들지 않는다(InPreset). 씨앗 -1 은 무작위.
@@ -55,8 +55,9 @@ namespace NlCore
 		std::map<std::string, double> Values;		// 열쇠 → 수(범위 안의 정수)
 		double Seed = -1;
 	};
-	// 이름의 꼴: 비지 않고 32바이트 안, 빈칸·'='·제어 문자 없음.
+	// 이름의 꼴: 비지 않고 32바이트 안, 빈칸·'='·제어 문자 없음. 규칙의 글은 PresetNameRule()(창의 안내와 결과의 글이 같이 쓴다).
 	bool GoodPresetName(const std::string& Name);
+	const char* PresetNameRule();
 	// 파일을 읽는다. 틀린 줄(이름이 없거나 틀리다, 모르는 열쇠, 수가 아닌 값)은 버린다. 막힘 열쇠는 무시한다. 범위 밖의 수는 당긴다. 같은 이름은 뒤의 것이 이긴다. '#' 줄은 주석.
 	std::vector<MapPreset> ParseMapPresets(std::istream& In);
 	// 파일로. 이름순. 값은 표의 차례(InPreset 만), 씨앗은 끝.

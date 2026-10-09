@@ -9,7 +9,6 @@
 #include <imgui.h>
 
 #include <algorithm>
-#include <array>
 #include <cmath>
 #include <deque>
 #include <fstream>
@@ -22,13 +21,11 @@ using NlCore::MapKnob;
 
 namespace
 {
-	constexpr size_t k_Knobs = 17;
-
 	struct Snapshot			// 틱이 채우고 Draw 가 읽는다. 글과 수만
 	{
 		bool Ready = false, Screen = false;
-		std::array<double, k_Knobs> Values{}, Stashed{};
-		std::array<bool, k_Knobs> Read{}, StashedRead{};
+		std::vector<double> Values, Stashed;		// MapKnobs() 의 차례. 길이는 ReadSnapshot 이 표의 크기로 잡는다(표에 줄을 더해도 어긋나지 않게)
+		std::vector<bool> Read, StashedRead;
 		double Seed = -1;
 		bool SeedRead = false;
 		std::vector<std::string> Presets;		// 이름순
@@ -43,7 +40,7 @@ namespace
 	std::filesystem::path g_PresetsPath;
 	double g_NextRead = 0;
 	bool g_Busy = false;				// 하는 중이다(다시 생성은 오브젝트 이벤트를 많이 낸다. 다시 들어온 틱은 아무것도 하지 않는다)
-	char g_PresetName[40] = "";			// 창의 입력
+	char g_PresetName[33] = "";			// 창의 입력. 32바이트 + 끝(GoodPresetName 의 한도. Dear ImGui 는 넘치는 글자를 통째로 거절한다)
 
 	void Log(const std::string& Line)
 	{
@@ -71,6 +68,11 @@ namespace
 	void ReadSnapshot()
 	{
 		Snapshot next;
+		const size_t count = NlCore::MapKnobs().size();
+		next.Values.assign(count, 0);
+		next.Stashed.assign(count, 0);
+		next.Read.assign(count, false);
+		next.StashedRead.assign(count, false);
 		next.Screen = Screen();
 		if (next.Screen)
 		{
@@ -202,9 +204,13 @@ namespace
 			return NlCore::MapReport(MapAct::PresetDelete, 'b', std::string());
 		if (!NlCore::ErasePreset(g_Presets, Name))
 			return NlCore::MapReport(MapAct::PresetDelete, 'm', Name);
-		if (!SavePresets())
+		const bool saved = SavePresets();
+		LoadPresets();		// 파일이 가진 것을 보인다(쓰지 못했으면 지운 것이 되살아난다)
+		if (!saved)
+		{
 			Log("map preset file: could not write " + g_PresetsPath.string());
-		LoadPresets();
+			return NlCore::MapReport(MapAct::PresetDelete, 'f', std::string());
+		}
 		Log("map preset deleted: " + Name);
 		return NlCore::MapReport(MapAct::PresetDelete, 'x', Name);
 	}
@@ -405,6 +411,11 @@ void NlMapGen::Draw()
 		Push(command);
 	}
 	ImGui::EndDisabled();
+	if (g_PresetName[0] != '\0' && !NlCore::GoodPresetName(g_PresetName))
+	{
+		ImGui::SameLine();
+		ImGui::TextDisabled("이름: %s", NlCore::PresetNameRule());
+	}
 	for (const std::string& name : g_Now.Presets)
 	{
 		ImGui::TextUnformatted(name.c_str());
