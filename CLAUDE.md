@@ -199,6 +199,15 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   - 지식과 아이템 패널도 이 파일에 있다(`research/12`). **지식은 영주가 가진다**: `__soul.__character_soul.__knowledge`의 `add_all_knowledge()`(인자 없음),
     `add_knowledge(지식 구조체, true, true)`. 지식 구조체는 `inst:o_data.__knowledge_data.__knowledge_list[n]`(121개. `__name`, `__caption_replaced`)에서 얻고 그 자리의 이름을 다시 본다.
     소지금은 `__inventory.change_money(변화량)`, 소지품은 `__inventory.change(자원 번호, 변화량)`으로 바꾼다(더할 정수는 `NlCore::GiftDelta`: 가진 것보다 많이 빼지 않는다).
+  - **소환할 영주의 성별·나이·문화·역할**(`core/PeoplePlan`의 `LordSpawn`, `src/PeopleActs.cpp`의 `SpawnLordNow`. `research/35`. 2026-10-10): 영주 탭의 "마우스 자리에 영주 소환".
+    소환기의 `__spawn_lord()`는 카메라의 `get_mouse_x()`·`get_mouse_y()` → 지도의 그래프(`…__current_local_map.__graph`)의 `get_node_by_pos(x, y)` → 영지의
+    `debug_spawn_new_player_character(성별, 칸)`이 전부다(기계어와 기록). **성별은 그 첫 인자다**(`int64`: 0 남성, 1 여성. 이름 `m_name…`·`f_name…`이 따라온다):
+    성별을 정했으면 그 호출들을 같은 꼴로 직접 하고, 정하지 않았으면 지금까지처럼 `__spawn_lord()`를 부른다. 칸을 얻지 못하면 만드는 함수를 부르지 않는다.
+    **문화는 인자가 아니다**(만드는 함수가 `get_random_culture()`를 두 번 부른다: 첫 번째가 영혼의 문화와 외모, 두 번째가 이름. 소환기의 `__is_culture_change`·`__culture`는 영주에게 듣지 않는다).
+    만든 뒤 게임의 `SoulBasic.set_culture(문화 구조체)`(인자 하나: 기계어)로 바꾼다: 영혼의 문화, 외모의 문화 이름, 방언이 따라온다. 이름은 그대로다.
+    문화 구조체는 `inst:o_data.__cultures_data.__cultures_map.<이름>`에서 얻고 이름을 다시 본다. 받는 문화는 `__cultures_list`의 넷(gwelts, tanaya, makha, voruns)뿐이다(`rosters`는 불러 보지 않았다).
+    나이(18~80)와 역할은 이미 있는 길(`set_age`, 역할 프리셋)로 입힌다. 새 영주는 `o_character`의 uuid 를 앞뒤로 견줘 꼭 하나일 때만 가린다(`NlCore::NewcomerUuid`).
+    문화 바꾸기는 한 사람의 일로도 있다(`PersonAct::CultureSet`. 플레이어의 영주에게만). 고른 설정은 그 실행 안에서만 든다(파일에 남기지 않는다).
   - 사람에게 하는 일을 새로 더할 때는 `core/PeoplePlan`의 `PersonAct`에 한 줄, `CheckPersonCommand`·`BulkAllowed`의 검사와 시험, `src/PeopleActs.cpp`(리팩토링 C 전에는 `People.cpp`)에 `One<할 일>` 함수 하나와 `One()`의 case 한 줄을 더한다(행동마다 함수 하나다. 2026-10-07 에 그렇게 나눴다)
     (창의 단추와 원격 `person`이 같은 길을 탄다).
   - **인자가 없는 함수는 기계어로 가린다**: 본문이 `argc`(r9d)를 레지스터에도 스택에도 옮기지 않으면 인자를 읽지 않는다(`research/11`. 게임이 부르지 않는 디버그 함수에 쓴다).
@@ -420,7 +429,8 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
   `ask`·`about`, `list`, `tree`, `find`·`refine`, `write`·`poke`(`<주소>=<수>`, `<주소>=s:<글>`), `state`, `shot`, `window`·`page`, `record`·`records`, `call`·`method`,
   `statics`·`treecall`, `override`(`n:`·`b:`·`u`·`x:<배율>`)·`unoverride`, `economy`(`floor`·`gold_floor` 포함), `cheat <Id> on|off|<수>`, `ui click|type|key`,
   `world cooldowns_clear|bishop|season|season_delay|season_end|save`, `world event name=<이름>`(예약), `world event_now name=<이름>`(바로), `world events [group=] [find=]`, `world event_cancel`, `world event_end kind=<가족>`, `crime list|clear|return_stolen|absolve|acquit`, `library list|add|add_all|remove|undo`,
-  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
+  `person list|show <uuid>|<uuid·lords·people> <할 일>`(능력치, 욕구, 나이, 특성, 행복, 치료, 지식, 소지금, 소지품, 역할 프리셋 `role name=<Id>`·되돌리기 `role_undo`, 임신 `pregnancy_next`·`birth`·`conceive name=<아버지의 uuid>`, `grow_up`, 문화 `culture_set name=<문화>`),
+  `person spawn <soldier|knight|peasant|slave|lord>`(영주는 `[gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]`), `diplomacy`, `court`(영주와 `bishop`), `traits [find=] [max=]`.
   - **동사를 더하면 두 곳에 한 줄씩이다**: `core/RemoteCommand.cpp`의 `Parse<동사>Line`(읽기. 시험이 붙는다)과 `src/Remote.cpp`의 `k_Handlers` 표(하는 함수). 2026-10-07 에 그렇게 나눴다.
   - **기록의 표본과 `ask`·`method`의 답은 구조체의 주소를 적는다**(`struct@1369ca73600`). 인자로 온 구조체가 어느 것인지(영혼인가, 인물 영혼인가, 어느 자료인가)를 추측하지 않고 주소로 맞춰 본다.
   - 게임이 스스로 부르는 것을 보려면 그 일을 일으킨다: 특성을 붙이자(`person … trait_add`) 게임이 이름 함수와 속성 함수를 불러 꼴이 기록에 남았다. 위험한 호출을 쓰지 않아도 됐다.
