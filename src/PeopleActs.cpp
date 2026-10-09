@@ -227,6 +227,7 @@ namespace NlPeople::Internal
 			Note = "나이가 " + (after == k_Unknown ? std::string("읽히지 않습니다") : Shortest(after) + " 입니다");
 			return false;
 		}
+		Note = "나이 " + Shortest(after);		// 한 사람에게 한 일의 줄에 무엇을 했는지 적는다(소환할 때 여러 일을 잇달아 한다)
 		return true;
 	}
 

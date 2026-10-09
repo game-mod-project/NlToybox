@@ -318,7 +318,7 @@ namespace NlCore
 	std::string LordSpawnLine(const std::string& Name, bool Found, bool StepsWanted)
 	{
 		if (Found)
-			return "영주 '" + Name + "' 을(를) 만들었습니다";
+			return "영주를 만들었습니다: " + Name;
 		return StepsWanted ? "영주를 만들었지만 누구인지 가리지 못해 고른 것을 입히지 못했습니다" : "영주를 만들었습니다";
 	}
 

@@ -599,7 +599,7 @@ void RunPeopleTests()
 			CHECK(!ParseRemoteLine(bad).Error.empty());
 
 		// 결과의 첫 줄: 누구를 만들었는가. 새 영주를 찾지 못했으면 고른 것을 입히지 못했다고 적는다.
-		CHECK_STR(LordSpawnLine("Nata", true, false), "영주 'Nata' 을(를) 만들었습니다");
+		CHECK_STR(LordSpawnLine("Nata", true, false), "영주를 만들었습니다: Nata");
 		CHECK_STR(LordSpawnLine("", false, false), "영주를 만들었습니다");
 		CHECK_STR(LordSpawnLine("", false, true), "영주를 만들었지만 누구인지 가리지 못해 고른 것을 입히지 못했습니다");
 	});
