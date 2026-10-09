@@ -34,8 +34,11 @@ namespace NlCore
 	std::string MapFieldPath(const MapKnob& Knob);		// 설정의 칸
 	std::string MapStashedPath(const MapKnob& Knob);	// 영지의 원래 값(__stashed_settings.<열쇠>)
 
-	// 생성기 화면인가: 초기화기가 활성(__is_active)이고 설정의 구조체가 읽히고 게임 안(o_character 가 있는 화면)이 아니다. 아니면 쓰지도 부르지도 않는다.
-	bool MapScreen(bool InitializerActive, bool SettingsRead, bool InGame);
+	// 생성기 화면인가: 초기화기가 활성(__is_active)이고 설정의 구조체가 읽히고 미리 보기 제어기(regenerate_map 을 가진 구조체)가 읽히고 게임 안(o_character 가 있는 화면)이 아니다.
+	// 아니면 쓰지도 부르지도 않는다(게임 화면 밖에서 부르는 스크립트는 그것이 쓰는 전역이 있는지부터 본다. research/34).
+	bool MapScreen(bool InitializerActive, bool SettingsRead, bool PreviewRead, bool InGame);
+	// 고정할 씨앗으로 쓸 수 있는 수인가: 유한하고 0 이상인 정수(게임은 -1 을 무작위로 쓴다).
+	bool ValidSeed(double Value);
 	// 씨앗 고정의 훅(get_generator_seed 의 반환값 바꾸기)이 확인됐는가. 생성기가 그 함수를 읽는 것을 기록으로 본 뒤에 참으로 바꾼다(research/31).
 	bool SeedHookVerified();
 

@@ -62,15 +62,16 @@ namespace
 		return static_cast<size_t>(&Knob - &NlCore::MapKnobs()[0]);
 	}
 
-	// 생성기 화면인가(core/MapPlan 의 MapScreen): 초기화기의 __is_active, 설정의 구조체, 게임 안이 아님.
+	// 생성기 화면인가(core/MapPlan 의 MapScreen): 초기화기의 __is_active, 설정의 구조체, 미리 보기 제어기(regenerate_map 을 가진 구조체), 게임 안이 아님.
 	bool Screen()
 	{
 		double active = 0;
 		const bool initializer = NlAccess::ReadNumber(std::string(NlCore::k_MapInitializerPath) + ".__is_active", active) && active != 0;
-		RValue settings;		// 이 함수 안에서만 든다
+		RValue settings, preview;		// 이 함수 안에서만 든다
 		std::string why;
 		const bool read = NlAccess::Read(NlCore::ParseAskPath(NlCore::k_MapSettingsPath), settings, why) && settings.IsStruct();
-		return NlCore::MapScreen(initializer, read, NlAccess::InGame());
+		const bool previewRead = NlAccess::Read(NlCore::ParseAskPath(NlCore::k_MapPreviewPath), preview, why) && preview.IsStruct();
+		return NlCore::MapScreen(initializer, read, previewRead, NlAccess::InGame());
 	}
 
 	void ReadSnapshot()
@@ -428,18 +429,27 @@ void NlMapGen::Draw()
 			MapCommand command;
 			command.Act = MapAct::Seed;
 			command.SeedRandom = !fixed;
-			command.Seed = g_SeedValue < 0 ? 1 : g_SeedValue;
+			command.Seed = g_SeedValue < 0 ? 1 : g_SeedValue;		// 칸에 친 수(체크를 켜기 전에 친 것도 g_SeedValue 에 들어 있다)
 			Push(command);
 		}
 		ImGui::SameLine();
 		ImGui::SetNextItemWidth(100);
 		double typed = 0;
-		if (NlUi::InputNumber("##seed", "map_seed", g_SeedValue < 0 ? 1 : g_SeedValue, "%.0f", typed) && g_SeedOn)		// 칸을 떠날 때 넣는다(Cheats.cpp 와 같은 꼴)
+		if (NlUi::InputNumber("##seed", "map_seed", g_SeedValue < 0 ? 1 : g_SeedValue, "%.0f", typed))		// 칸을 떠날 때 넣는다(Cheats.cpp 와 같은 꼴)
 		{
-			MapCommand command;
-			command.Act = MapAct::Seed;
-			command.Seed = std::floor(typed);
-			Push(command);
+			// 체크가 꺼져 있어도 친 수는 든다(켤 때 그 수로 건다. 리뷰에서 찾은 것: 전에는 켜져 있을 때만 받아 "수를 치고 켜기"가 1 로 걸렸다). 틀린 수(음수·소수)는 버린다.
+			const double wanted = std::floor(typed);
+			if (NlCore::ValidSeed(wanted))
+			{
+				g_SeedValue = wanted;
+				if (g_SeedOn)
+				{
+					MapCommand command;
+					command.Act = MapAct::Seed;
+					command.Seed = wanted;
+					Push(command);
+				}
+			}
 		}
 		ImGui::EndDisabled();
 	}

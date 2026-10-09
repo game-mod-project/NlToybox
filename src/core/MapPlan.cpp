@@ -83,9 +83,14 @@ namespace NlCore
 		return std::string(k_MapSettingsPath) + ".__stashed_settings." + Knob.Key;
 	}
 
-	bool MapScreen(bool InitializerActive, bool SettingsRead, bool InGame)
+	bool MapScreen(bool InitializerActive, bool SettingsRead, bool PreviewRead, bool InGame)
 	{
-		return InitializerActive && SettingsRead && !InGame;
+		return InitializerActive && SettingsRead && PreviewRead && !InGame;
+	}
+
+	bool ValidSeed(double Value)
+	{
+		return std::isfinite(Value) && Value >= 0 && std::floor(Value) == Value;
 	}
 
 	bool SeedHookVerified()
@@ -175,7 +180,7 @@ namespace NlCore
 			}
 			if (key == "seed")
 			{
-				Out.Seed = std::floor(value);
+				Out.Seed = ValidSeed(value) ? value : -1;		// 틀린 씨앗은 무작위로(줄은 버리지 않는다)
 				Skip = true;
 				return true;
 			}
@@ -360,7 +365,12 @@ namespace NlCore
 				Why = "map seed: not a number: " + value->second;
 				return false;
 			}
-			Out.Seed = std::floor(seed);
+			if (!ValidSeed(seed))
+			{
+				Why = "map seed: 0 이상의 정수만 (random 은 무작위): " + value->second;
+				return false;
+			}
+			Out.Seed = seed;
 			return true;
 		}
 		Why = "map needs one of: show, set, regenerate, restore, preset, seed";

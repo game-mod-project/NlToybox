@@ -1,6 +1,7 @@
 #include "common.hpp"
 
 #include <cmath>
+#include <limits>
 #include <set>
 
 void RunMapTests()
@@ -40,7 +41,10 @@ void RunMapTests()
 		for (const MapKnob& knob : knobs)
 			CHECK(ParseAskPath(MapFieldPath(knob)).Error.empty() && ParseAskPath(MapStashedPath(knob)).Error.empty());
 		// 생성기 화면인가: 초기화기가 활성이고 설정이 읽히고 게임 안이 아닐 때만(리뷰 포커스 1)
-		CHECK(MapScreen(true, true, false) && !MapScreen(false, true, false) && !MapScreen(true, false, false) && !MapScreen(true, true, true));
+		// 미리 보기 제어기(regenerate_map 을 가진 구조체)가 읽히는 것도 조건이다(리뷰 Important 1: 그 스크립트가 쓰는 전역이 있는지부터 본다)
+		CHECK(MapScreen(true, true, true, false) && !MapScreen(false, true, true, false) && !MapScreen(true, false, true, false) && !MapScreen(true, true, false, false) && !MapScreen(true, true, true, true));
+		// 씨앗: 유한하고 0 이상인 정수만(게임은 -1 을 무작위로 쓴다. 리뷰 Important 2·Minor 5)
+		CHECK(ValidSeed(0) && ValidSeed(12345) && !ValidSeed(-1) && !ValidSeed(-5) && !ValidSeed(2.5) && !ValidSeed(std::nan("")) && !ValidSeed(std::numeric_limits<double>::infinity()));
 		// 씨앗 고정은 확인 전(research/31: 생성기가 get_generator_seed() 를 읽는지 못 봤다)
 		CHECK(!SeedHookVerified());
 		// 결과의 글
@@ -98,6 +102,10 @@ void RunMapTests()
 		std::istringstream clamp("preset c lakes=9 iron=2.7 blocked_up=5 seed=7\n");
 		const std::vector<MapPreset> clamped = ParseMapPresets(clamp);
 		CHECK(clamped.size() == 1 && clamped[0].Values.at("lakes") == 5 && clamped[0].Values.at("iron") == 2 && clamped[0].Values.count("blocked_up") == 0 && clamped[0].Seed == 7);
+		// 프리셋의 틀린 씨앗(음수, 소수)은 줄을 버리지 않고 무작위(-1)로 읽는다
+		std::istringstream badseed("preset s lakes=1 seed=-5\npreset t lakes=1 seed=2.5\n");
+		const std::vector<MapPreset> seeds = ParseMapPresets(badseed);
+		CHECK(seeds.size() == 2 && FindPreset(seeds, "s")->Seed == -1 && FindPreset(seeds, "t")->Seed == -1);
 	});
 
 	Test("지도: 원격 map 의 낱말", [] {
@@ -116,6 +124,7 @@ void RunMapTests()
 		CHECK(MapCommandFromParts("seed", { { "value", "12345" } }, command, why) && command.Act == MapAct::Seed && command.Seed == 12345 && !command.SeedRandom);
 		CHECK(MapCommandFromParts("seed", { { "value", "random" } }, command, why) && command.SeedRandom);
 		CHECK(!MapCommandFromParts("seed", {}, command, why) && !MapCommandFromParts("seed", { { "value", "x" } }, command, why) && !MapCommandFromParts("bogus", {}, command, why));
+		CHECK(!MapCommandFromParts("seed", { { "value", "-5" } }, command, why) && why.find("0 이상의 정수") != std::string::npos && !MapCommandFromParts("seed", { { "value", "2.5" } }, command, why));
 		// 줄의 읽기(ParseRemoteLine)
 		const RemoteCommand set = ParseRemoteLine("map set lakes=3 iron=4");
 		CHECK(set.Error.empty() && set.Target == "set" && set.Options.at("lakes") == "3" && set.Options.at("iron") == "4");
@@ -127,5 +136,6 @@ void RunMapTests()
 		const RemoteCommand seed = ParseRemoteLine("map seed 12345");
 		CHECK(seed.Error.empty() && seed.Target == "seed" && seed.Options.at("value") == "12345");
 		CHECK(ParseRemoteLine("map seed random").Error.empty() && !ParseRemoteLine("map seed").Error.empty() && !ParseRemoteLine("map").Error.empty() && !ParseRemoteLine("map bogus").Error.empty());
+		CHECK(!ParseRemoteLine("map seed -5").Error.empty() && !ParseRemoteLine("map seed 2.5").Error.empty());
 	});
 }
