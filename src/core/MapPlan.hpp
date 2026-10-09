@@ -39,13 +39,13 @@ namespace NlCore
 	bool MapScreen(bool InitializerActive, bool SettingsRead, bool PreviewRead, bool InGame);
 	// 고정할 씨앗으로 쓸 수 있는 수인가: 유한하고 0 이상인 정수(게임은 -1 을 무작위로 쓴다).
 	bool ValidSeed(double Value);
-	// 씨앗 고정의 훅(get_generator_seed 의 반환값 바꾸기)이 확인됐는가. 생성기가 그 함수를 읽는 것을 기록으로 본 뒤에 참으로 바꾼다(research/31).
-	bool SeedHookVerified();
+	// 씨앗 고정은 뺐다(2026-10-10 의 확인: regenerate_map() 이 안에서 set_generator_seed(-1) 을 부르고, 생성기는 get_generator_seed() 를 읽지 않는다 — 모듈의 호출과 게임의 "생성" 둘 다 0번. research/31).
+	// 원격 map seed 는 그 까닭의 글만 돌려준다(MapReport(Seed, 'u')).
 
 	enum class MapAct { Show, Set, Regenerate, Restore, PresetSave, PresetLoad, PresetDelete, Seed };
 	// 결과의 글. Set: 'n' 화면이 아니다, 'w' 썼다(Detail "열쇠=수"), 'f' 쓰지 못했다(Detail), 'k' 모르는 열쇠(Detail). Regenerate: 'n', 'd' 불렀다, 'f' 부르지 못했다(Detail).
 	// Restore: 'n', 'd' 되돌렸다(Detail 수), 'f' 읽거나 쓰지 못한 칸(Detail 수). PresetSave: 'n', 's' 저장(Detail 이름), 'b' 이름이 틀렸다, 'f' 파일에 쓰지 못했다.
-	// PresetLoad: 'n', 'l' 불러옴(Detail "이름 (수)"), 'm' 없는 이름(Detail), 'b'. PresetDelete: 'x' 지움(Detail), 'm', 'b'. Seed: 'u' 확인 전, 'd' 고정(Detail 수), 'r' 풀었다, 'f' 걸지 못했다(Detail).
+	// PresetLoad: 'n', 'l' 불러옴(Detail "이름 (수)"), 'm' 없는 이름(Detail), 'b'. PresetDelete: 'x' 지움(Detail), 'm', 'b'. Seed: 언제나 'u'(되지 않는다: 생성기가 씨앗 함수를 읽지 않는다).
 	std::string MapReport(MapAct Act, char Outcome, const std::string& Detail);
 
 	// 프리셋(NlToyBox.maps.txt. 사용자의 설정). 줄: preset <이름> <열쇠>=<수> … seed=<수>. 막힘 4개는 들지 않는다(InPreset). 씨앗 -1 은 무작위.

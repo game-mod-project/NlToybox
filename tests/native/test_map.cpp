@@ -45,8 +45,7 @@ void RunMapTests()
 		CHECK(MapScreen(true, true, true, false) && !MapScreen(false, true, true, false) && !MapScreen(true, false, true, false) && !MapScreen(true, true, false, false) && !MapScreen(true, true, true, true));
 		// 씨앗: 유한하고 0 이상인 정수만(게임은 -1 을 무작위로 쓴다. 리뷰 Important 2·Minor 5)
 		CHECK(ValidSeed(0) && ValidSeed(12345) && !ValidSeed(-1) && !ValidSeed(-5) && !ValidSeed(2.5) && !ValidSeed(std::nan("")) && !ValidSeed(std::numeric_limits<double>::infinity()));
-		// 씨앗 고정은 확인 전(research/31: 생성기가 get_generator_seed() 를 읽는지 못 봤다)
-		CHECK(!SeedHookVerified());
+		// 씨앗 고정은 뺐다(2026-10-10 의 확인: 생성기가 get_generator_seed() 를 읽지 않는다. 모듈의 호출과 게임의 "생성" 둘 다 0번. research/31)
 		// 결과의 글
 		CHECK_STR(MapReport(MapAct::Set, 'n', ""), "새 게임의 지도 화면(영주관 배치 전)에서만 됩니다");
 		CHECK_STR(MapReport(MapAct::Set, 'w', "lakes=3"), "lakes=3 을 썼습니다");
@@ -62,9 +61,7 @@ void RunMapTests()
 		CHECK_STR(MapReport(MapAct::PresetLoad, 'l', "평야 (13)"), "프리셋을 불러왔습니다: 평야 (13) - 값만 채웠습니다. 생성은 '다시 생성'으로");
 		CHECK_STR(MapReport(MapAct::PresetLoad, 'm', "x"), "그 이름의 프리셋이 없습니다: x");
 		CHECK_STR(MapReport(MapAct::PresetDelete, 'x', "평야"), "프리셋을 지웠습니다: 평야");
-		CHECK_STR(MapReport(MapAct::Seed, 'u', ""), "씨앗 고정은 확인 전입니다 (research/31)");
-		CHECK_STR(MapReport(MapAct::Seed, 'd', "12345"), "씨앗을 고정했습니다: 12345");
-		CHECK_STR(MapReport(MapAct::Seed, 'r', ""), "씨앗 고정을 풀었습니다 (무작위)");
+		CHECK_STR(MapReport(MapAct::Seed, 'u', ""), "씨앗 고정은 되지 않습니다: 생성기가 get_generator_seed() 를 읽지 않습니다 (research/31)");
 	});
 
 	Test("지도: 프리셋 파일 — 읽고 쓰면 같다, 틀린 줄은 버린다, 같은 이름은 덮어쓴다, 막힘은 들지 않는다", [] {

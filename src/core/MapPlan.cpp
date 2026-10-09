@@ -93,11 +93,6 @@ namespace NlCore
 		return std::isfinite(Value) && Value >= 0 && std::floor(Value) == Value;
 	}
 
-	bool SeedHookVerified()
-	{
-		return false;		// research/31: 생성기가 get_generator_seed() 를 읽는지 못 봤다. 본 뒤에 참으로
-	}
-
 	std::string MapReport(MapAct Act, char Outcome, const std::string& Detail)
 	{
 		if (Outcome == 'n')
@@ -137,13 +132,7 @@ namespace NlCore
 			default: return "그 이름의 프리셋이 없습니다: " + Detail;
 			}
 		case MapAct::Seed:
-			switch (Outcome)
-			{
-			case 'd': return "씨앗을 고정했습니다: " + Detail;
-			case 'r': return "씨앗 고정을 풀었습니다 (무작위)";
-			case 'f': return "씨앗 고정을 걸지 못했습니다 (" + Detail + ")";
-			default: return "씨앗 고정은 확인 전입니다 (research/31)";
-			}
+			return "씨앗 고정은 되지 않습니다: 생성기가 get_generator_seed() 를 읽지 않습니다 (research/31)";		// 2026-10-10 의 확인으로 뺐다
 		default:
 			return std::string();
 		}

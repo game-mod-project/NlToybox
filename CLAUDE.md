@@ -285,10 +285,11 @@ C++ 모듈 `NlToyBox.dll`을 올린다.
     `__is_available`은 이벤트마다 다르다(같은 때 음유시인은 참, 마녀는 거짓. 손님이 와 있으면 undefined). `__spawn_method`의 스크립트는 가족마다 다르고 모두 묶여 있다.
     **감독의 `on_next_day()`를 불러 뽑게 하지 않는다**: 뽑기는 그날의 운에 달렸고 쿨다운의 날과 국면의 날이 하루씩 넘어간다(조사에서 한 번 불러 그 꼴을 봤다).
     창의 청은 이름과 함께 쌓는다(`Ask{Act, Name, Family}`): 줄 둘을 잇달아 눌러도 섞이지 않는다. 결과의 줄은 표의 위에 있다.
-- **지도 탭**(`src/MapGen.cpp`, `core/MapPlan`. `research/31`. 2026-10-08): 새 게임의 **생성기 화면**(영지 선택 뒤, 영주관 배치 전)에서만 된다(`NlCore::MapScreen`: 초기화기 `__is_active` + 설정 구조체 + 게임 안이 아님).
+- **지도 탭**(`src/MapGen.cpp`, `core/MapPlan`. `research/31`. 2026-10-10): 새 게임의 **생성기 화면**(영지 선택 뒤 지도 미리 보기가 보이는 화면. 영주관 자리의 선택과 게임의 "지도 재생성"도 그 화면에 있다)에서만 된다
+  (`NlCore::MapScreen`: 초기화기 `__is_active` + 설정 구조체 + 미리 보기 제어기 구조체 + 게임 안이 아님. 메인 메뉴에서는 쓰지도 부르지도 않는다).
   영지의 생성 설정 17개(`…__initial_area.__generator_settings.<칸>`: 지형 `__lakes`·`__hills`·`__hills_distribution`·`__mountains`·`__river`, 막힘 `__blocked_*` 4, 자원 `__berry`·`__bush`·`__clay`·`__fertile`·`__hop`·`__iron`·`__plants`·`__tree`)를 칸에 바로 쓴다(세터는 부르지 않는다).
-  **다시 생성은 게임이 부르는 꼴 그대로 `MapPreviewController.regenerate_map()`**(인자 없음). 원래대로는 `__stashed_settings.<열쇠>`. 자원 8개의 단계가 몇 개를 만드는지는 확인 전.
-  프리셋은 `mods\Aurie\NlToyBox.maps.txt`(사용자의 설정. 막힘 4개는 들지 않는다). **씨앗 고정은 확인 전**(`regenerate_map()` 이 안에서 `set_generator_seed(-1)` 을 부르므로 `get_generator_seed()` 의 반환값을 훅으로 바꾸는 길뿐이다. 생성기가 그 함수를 읽는 것을 본 뒤에 `SeedHookVerified` 를 참으로).
+  **다시 생성은 게임이 부르는 꼴 그대로 `MapPreviewController.regenerate_map()`**(인자 없음). 원래대로는 `__stashed_settings.<열쇠>`. **자원의 단계는 자리의 수다**(철 4·점토 4 로 쓰고 다시 생성하자 광산·점토 자리가 4개씩. 한 영지에서 한 번 잰 것). 쓴 값은 게임의 생성기 창의 슬라이더에 그대로 보인다(호수 5).
+  프리셋은 `mods\Aurie\NlToyBox.maps.txt`(사용자의 설정. 막힘 4개는 들지 않는다). **씨앗 고정은 뺐다**: `regenerate_map()` 이 안에서 `set_generator_seed(-1)` 을 부르고, 생성기는 `get_generator_seed()` 를 읽지 않는다(모듈의 호출과 게임의 "생성" 둘 다 기록 0번. 2026-10-10). 원격 `map seed` 는 그 까닭만 답한다.
   원격 `map show|set <열쇠>=<수> …|regenerate|restore|preset save|load|delete name=|seed <수|random>`.
 - 종교 패널(`src/World.cpp`, `core/WorldPlan`. `research/14`): 주교 부르기(`…__religiosity_manager.debug_force_send_bishop()`. `is_has_bishop()`이 거짓일 때만). 원격 `world bishop`이 같은 길을 탄다.
   이벤트 쿨다운 지우기(`gm.__game_director.__events_cooldowns`·`__events_groups_cooldowns`의 0 보다 큰 수에 0. 원격 `world cooldowns_clear`)는 아래의 이벤트 탭으로 갔다.

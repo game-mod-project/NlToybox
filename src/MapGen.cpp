@@ -1,8 +1,6 @@
 #include "MapGen.hpp"
 
 #include "Access.hpp"
-#include "Game.hpp"
-#include "Recorder.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
 #include "core/Guard.hpp"
@@ -46,10 +44,6 @@ namespace
 	double g_NextRead = 0;
 	bool g_Busy = false;				// 하는 중이다(다시 생성은 오브젝트 이벤트를 많이 낸다. 다시 들어온 틱은 아무것도 하지 않는다)
 	char g_PresetName[40] = "";			// 창의 입력
-	// 씨앗 고정(Task 5): 훅의 이름과 바라는 상태
-	bool g_SeedOn = false;
-	double g_SeedValue = -1;
-	std::string g_SeedHook;
 
 	void Log(const std::string& Line)
 	{
@@ -174,7 +168,7 @@ namespace
 			if (knob.InPreset && NlAccess::ReadNumber(NlCore::MapFieldPath(knob), value))
 				preset.Values[knob.Key] = value;
 		}
-		preset.Seed = g_SeedOn ? g_SeedValue : -1;
+		preset.Seed = -1;		// 씨앗 고정은 뺐다(파일의 seed= 칸은 꼴만 남는다. 언제나 무작위)
 		NlCore::UpsertPreset(g_Presets, std::move(preset));
 		if (!SavePresets())
 			return NlCore::MapReport(MapAct::PresetSave, 'f', std::string());
@@ -198,11 +192,6 @@ namespace
 			if (knob && WriteKnob(*knob, value, why))
 				written++;
 		}
-		if (preset->Seed >= 0 && NlCore::SeedHookVerified())
-		{
-			g_SeedOn = true;
-			g_SeedValue = preset->Seed;
-		}
 		Log("map preset loaded: " + Name + " (" + std::to_string(written) + " written)");
 		return NlCore::MapReport(MapAct::PresetLoad, 'l', Name + " (" + std::to_string(written) + ")");
 	}
@@ -221,31 +210,11 @@ namespace
 	}
 
 
-	// 씨앗 고정: 게임의 regenerate_map() 이 안에서 set_generator_seed(-1) 로 무작위로 되돌리므로(research/31), get_generator_seed() 의 반환값을 훅으로 바꾸는 길뿐이다.
-	// 생성기가 그 함수를 읽는 것을 기록으로 본 뒤에만 켠다(core/MapPlan 의 SeedHookVerified). 그 전에는 'u'.
-	std::string SeedNow(const MapCommand& C)
+	// 씨앗 고정은 뺐다(2026-10-10 의 확인. research/31): regenerate_map() 이 안에서 set_generator_seed(-1) 을 부르고, 생성기는 get_generator_seed() 를 읽지 않는다
+	// (모듈의 호출과 게임의 "생성" 둘 다 기록 0번). 원격 map seed 는 그 까닭만 답한다.
+	std::string SeedNow(const MapCommand&)
 	{
-		if (!NlCore::SeedHookVerified())
-			return NlCore::MapReport(MapAct::Seed, 'u', std::string());
-		if (C.SeedRandom)
-		{
-			if (!g_SeedHook.empty())
-				NlRecorder::Unoverride(g_SeedHook);
-			g_SeedOn = false;
-			Log("map seed: random");
-			return NlCore::MapReport(MapAct::Seed, 'r', std::string());
-		}
-		NlRecorder::Forced forced;
-		forced.Kind = 'n';
-		forced.Number = C.Seed;
-		std::string name, why;
-		Log("map seed: overriding get_generator_seed -> " + NlCore::Shortest(C.Seed));		// 걸기 전에 남긴다
-		if (!NlRecorder::Override(std::string(NlCore::k_MapInitializerPath) + ".get_generator_seed", forced, name, why))
-			return NlCore::MapReport(MapAct::Seed, 'f', why);
-		g_SeedHook = name;
-		g_SeedOn = true;
-		g_SeedValue = C.Seed;
-		return NlCore::MapReport(MapAct::Seed, 'd', NlCore::Shortest(C.Seed));
+		return NlCore::MapReport(MapAct::Seed, 'u', std::string());
 	}
 
 	// 한 일. 화면이 아니면 쓰지도 부르지도 않는다(프리셋 지우기와 씨앗은 화면과 무관하다).
@@ -419,42 +388,9 @@ void NlMapGen::Draw()
 		ImGui::SameLine();
 		if (ImGui::Button("새로 읽기"))
 			g_NextRead = 0;
-		ImGui::SameLine();
-		ImGui::Text("씨앗 %s", g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed).c_str() : "?");
-		ImGui::SameLine();
-		ImGui::BeginDisabled(!NlCore::SeedHookVerified());
-		bool fixed = g_SeedOn;
-		if (ImGui::Checkbox(NlCore::SeedHookVerified() ? "씨앗 고정" : "씨앗 고정 (확인 전)", &fixed))
-		{
-			MapCommand command;
-			command.Act = MapAct::Seed;
-			command.SeedRandom = !fixed;
-			command.Seed = g_SeedValue < 0 ? 1 : g_SeedValue;		// 칸에 친 수(체크를 켜기 전에 친 것도 g_SeedValue 에 들어 있다)
-			Push(command);
-		}
-		ImGui::SameLine();
-		ImGui::SetNextItemWidth(100);
-		double typed = 0;
-		if (NlUi::InputNumber("##seed", "map_seed", g_SeedValue < 0 ? 1 : g_SeedValue, "%.0f", typed))		// 칸을 떠날 때 넣는다(Cheats.cpp 와 같은 꼴)
-		{
-			// 체크가 꺼져 있어도 친 수는 든다(켤 때 그 수로 건다. 리뷰에서 찾은 것: 전에는 켜져 있을 때만 받아 "수를 치고 켜기"가 1 로 걸렸다). 틀린 수(음수·소수)는 버린다.
-			const double wanted = std::floor(typed);
-			if (NlCore::ValidSeed(wanted))
-			{
-				g_SeedValue = wanted;
-				if (g_SeedOn)
-				{
-					MapCommand command;
-					command.Act = MapAct::Seed;
-					command.Seed = wanted;
-					Push(command);
-				}
-			}
-		}
-		ImGui::EndDisabled();
 	}
 	NlUi::Hint("값은 게임의 생성기 창이 쓰는 자리(영지의 생성 설정)에 바로 씁니다. '다시 생성'은 게임의 함수(regenerate_map)를 부릅니다(창의 '생성'과 같습니다). "
-		"'원래대로'는 영지의 원래 값으로 되돌립니다. 자원 8개는 창에 없는 값이라 단계의 효과(몇 개가 생기는가)는 확인 전입니다. 막힘 4개는 영지의 모양이라 프리셋에 들지 않습니다.");
+		"'원래대로'는 영지의 원래 값으로 되돌립니다. 자원 8개는 창에 없는 값입니다: 단계는 자리의 수로 보였습니다(철 4, 점토 4 로 쓰자 광산과 점토 자리가 4개씩. 한 영지에서 한 번 잰 것). 씨앗 고정은 없습니다(생성기가 씨앗 함수를 읽지 않습니다). 막힘 4개는 영지의 모양이라 프리셋에 들지 않습니다.");
 
 	ImGui::SeparatorText("프리셋");
 	ImGui::SetNextItemWidth(160);
@@ -491,7 +427,7 @@ void NlMapGen::Draw()
 			Push(command);
 		}
 	}
-	NlUi::Hint("프리셋은 지형 5개와 자원 8개(와 씨앗)를 mods\\Aurie\\NlToyBox.maps.txt 에 이름으로 저장합니다. 불러오면 값만 채웁니다. 생성은 '다시 생성'으로.");
+	NlUi::Hint("프리셋은 지형 5개와 자원 8개를 mods\\Aurie\\NlToyBox.maps.txt 에 이름으로 저장합니다. 불러오면 값만 채웁니다. 생성은 '다시 생성'으로.");
 	if (!g_Last.empty())
 		NlUi::Hint(g_Last.c_str());
 }
@@ -514,7 +450,7 @@ std::vector<std::string> NlMapGen::Do(const NlCore::MapCommand& Command)
 				const size_t i = IndexOf(knob);
 				lines.push_back(std::string(knob.Key) + " " + (g_Now.Read[i] ? NlCore::Shortest(g_Now.Values[i]) : "?") + " (original " + (g_Now.StashedRead[i] ? NlCore::Shortest(g_Now.Stashed[i]) : "?") + ")");
 			}
-			lines.push_back("seed " + (g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed) : std::string("?")) + (g_SeedOn ? " (fixed " + NlCore::Shortest(g_SeedValue) + ")" : std::string()));
+			lines.push_back("seed " + (g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed) : std::string("?")) + " (fixing not available)");
 		}
 		std::string names;
 		for (const std::string& name : g_Now.Presets)
