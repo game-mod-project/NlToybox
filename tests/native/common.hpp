@@ -21,6 +21,7 @@
 #include "core/Knobs.hpp"
 #include "core/LibraryPlan.hpp"
 #include "core/Localization.hpp"
+#include "core/MapPlan.hpp"
 #include "core/NumberEdit.hpp"
 #include "core/PathTable.hpp"
 #include "core/PeoplePlan.hpp"
@@ -91,3 +92,4 @@ void RunRoleTests();
 void RunCrimeTests();
 void RunEventsTests();
 void RunLibraryTests();
+void RunMapTests();
