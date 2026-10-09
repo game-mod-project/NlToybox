@@ -477,6 +477,133 @@ void RunPeopleTests()
 		CHECK(!ParseRemoteLine("person spawn knight 2").Error.empty());
 	});
 
+	Test("영주: 소환할 때 정하는 성별·나이·문화·역할", [] {
+		// 성별: 게임의 수는 0 남성, 1 여성이다(만드는 함수의 첫 인자. research/35). 정하지 않으면 게임에 맡긴다.
+		LordGender gender = LordGender::Any;
+		CHECK(ParseLordGender("male", gender) && gender == LordGender::Male && ParseLordGender("female", gender) && gender == LordGender::Female);
+		CHECK(ParseLordGender("any", gender) && gender == LordGender::Any);
+		CHECK(!ParseLordGender("", gender) && !ParseLordGender("Male", gender) && !ParseLordGender("1", gender) && gender == LordGender::Any);
+		CHECK(LordGenderValue(LordGender::Male) == 0 && LordGenderValue(LordGender::Female) == 1 && LordGenderValue(LordGender::Any) == -1);
+		CHECK_STR(LordGenderWord(LordGender::Female), "female");
+		CHECK_STR(LordGenderLabel(LordGender::Any), "게임에 맡김");
+		CHECK_STR(LordGenderLabel(LordGender::Male), "남성");
+		CHECK_STR(LordGenderLabel(LordGender::Female), "여성");
+
+		// 나이: 0 은 게임에 맡김, 아니면 어른(18~80)의 정수로 당긴다. 수가 아니면 받지 않는다.
+		double age = -1;
+		CHECK(SpawnAgeValue(0, age) && age == 0);
+		CHECK(SpawnAgeValue(30, age) && age == 30 && SpawnAgeValue(30.4, age) && age == 30);
+		CHECK(SpawnAgeValue(5, age) && age == 18 && SpawnAgeValue(17.6, age) && age == 18 && SpawnAgeValue(200, age) && age == 80);
+		CHECK(SpawnAgeValue(-3, age) && age == 0);		// 음수는 "정하지 않음"으로 읽는다
+		CHECK(!SpawnAgeValue(std::numeric_limits<double>::quiet_NaN(), age) && !SpawnAgeValue(std::numeric_limits<double>::infinity(), age));
+
+		// 설정의 검사. 아무것도 정하지 않은 것은 지금까지의 소환과 같다(IsPlainLordSpawn).
+		std::string why;
+		LordSpawn spawn;
+		CHECK(CheckLordSpawn(spawn, why) && IsPlainLordSpawn(spawn));
+		spawn.Gender = LordGender::Female;
+		spawn.Age = 30;
+		spawn.Culture = "gwelts";
+		spawn.Role = "king";
+		CHECK(CheckLordSpawn(spawn, why) && !IsPlainLordSpawn(spawn));
+		for (const double bad : { 17.0, 81.0, 30.5, -1.0, std::numeric_limits<double>::quiet_NaN() })
+		{
+			LordSpawn one = spawn;
+			one.Age = bad;
+			why.clear();
+			CHECK(!CheckLordSpawn(one, why) && !why.empty());
+		}
+		for (const char* bad : { "Gwelts", "a b", "a.b", "gwelts!" })		// 문화의 이름은 게임의 이름의 꼴(소문자·숫자·밑줄)
+		{
+			LordSpawn one = spawn;
+			one.Culture = bad;
+			CHECK(!CheckLordSpawn(one, why));
+		}
+		{
+			LordSpawn one = spawn;
+			one.Role = "emperor";		// 표에 없는 역할 프리셋
+			CHECK(!CheckLordSpawn(one, why));
+		}
+		{
+			LordSpawn one;
+			one.Age = 18;
+			CHECK(CheckLordSpawn(one, why) && !IsPlainLordSpawn(one));
+			one = LordSpawn();
+			one.Role = "general";
+			CHECK(CheckLordSpawn(one, why) && !IsPlainLordSpawn(one));
+		}
+
+		// 만든 뒤에 그 영주에게 할 일: 문화, 나이, 역할의 차례. 정하지 않은 것은 없다. 성별은 만들 때 정하므로 여기에 없다.
+		const std::string uuid = "b913b075f7b18bdf";
+		const std::vector<PersonCommand> steps = LordSpawnSteps(spawn, uuid);
+		CHECK(steps.size() == 3);
+		if (steps.size() == 3)
+		{
+			CHECK(steps[0].Act == PersonAct::CultureSet && steps[0].Who == uuid && steps[0].Text == "gwelts");
+			CHECK(steps[1].Act == PersonAct::AgeSet && steps[1].Who == uuid && steps[1].Amount == 30);
+			CHECK(steps[2].Act == PersonAct::Role && steps[2].Who == uuid && steps[2].Text == "king");
+		}
+		for (const PersonCommand& step : steps)
+			CHECK(CheckPersonCommand(step, why));
+		CHECK(LordSpawnSteps(LordSpawn(), uuid).empty());
+		{
+			LordSpawn one;
+			one.Gender = LordGender::Male;
+			CHECK(LordSpawnSteps(one, uuid).empty());
+			one.Age = 45;
+			const std::vector<PersonCommand> only = LordSpawnSteps(one, uuid);
+			CHECK(only.size() == 1 && only.front().Act == PersonAct::AgeSet && only.front().Amount == 45);
+		}
+
+		// 새로 생긴 사람: 앞의 목록에 없고 뒤의 목록에 있는 것이 꼭 하나일 때 그것. 없거나 둘 이상이면 모른다(엉뚱한 사람에게 입히지 않는다).
+		CHECK_STR(NewcomerUuid({ "a", "b" }, { "a", "b", "c" }), "c");
+		CHECK_STR(NewcomerUuid({ "a", "b" }, { "c", "b", "a" }), "c");
+		CHECK_STR(NewcomerUuid({}, { "x" }), "x");
+		CHECK(NewcomerUuid({ "a", "b" }, { "a", "b" }).empty());
+		CHECK(NewcomerUuid({ "a" }, { "a", "b", "c" }).empty());
+		CHECK(NewcomerUuid({ "a", "b" }, { "a" }).empty() && NewcomerUuid({ "a" }, { "a", "" }).empty());
+
+		// 문화 바꾸기의 명령(게임의 set_culture. research/35): 한 사람을 짚어서만, 이름은 게임의 문화의 이름의 꼴.
+		PersonAct act = PersonAct::Cure;
+		CHECK(ParsePersonAct("culture_set", act) && act == PersonAct::CultureSet);
+		CHECK_STR(PersonActWord(PersonAct::CultureSet), "culture_set");
+		CHECK(NeedsText(PersonAct::CultureSet) && !NeedsAmount(PersonAct::CultureSet) && !NeedsIndex(PersonAct::CultureSet));
+		PersonCommand culture;
+		culture.Act = PersonAct::CultureSet;
+		culture.Who = uuid;
+		culture.Text = "tanaya";
+		CHECK(CheckPersonCommand(culture, why));
+		culture.Text = "Tanaya";
+		CHECK(!CheckPersonCommand(culture, why));
+		culture.Text = "tanaya";
+		culture.Who = "lords";
+		CHECK(!CheckPersonCommand(culture, why) && !BulkAllowed("lords", PersonAct::CultureSet) && !BulkAllowed("people", PersonAct::CultureSet));
+		CHECK(ParseRemoteLine("person " + uuid + " culture_set name=voruns").Error.empty());
+		CHECK(!ParseRemoteLine("person " + uuid + " culture_set").Error.empty() && !ParseRemoteLine("person lords culture_set name=voruns").Error.empty());
+
+		// 원격: person spawn lord [gender=male|female] [age=<18..80>] [culture=<이름>] [role=<Id>]. 옵션은 영주에게만 받는다.
+		const auto option = [](const RemoteCommand& c, const char* key) {
+			const auto at = c.Options.find(key);
+			return at == c.Options.end() ? std::string() : at->second;
+		};
+		RemoteCommand c = ParseRemoteLine("person spawn lord gender=female age=30 culture=gwelts role=king");
+		CHECK(c.Error.empty() && c.Target == "spawn" && option(c, "kind") == "lord" && option(c, "gender") == "female" && option(c, "age") == "30"
+			&& option(c, "culture") == "gwelts" && option(c, "role") == "king");
+		LordSpawn parsed;
+		CHECK(ParseLordSpawn(c.Options, parsed, why) && parsed.Gender == LordGender::Female && parsed.Age == 30 && parsed.Culture == "gwelts" && parsed.Role == "king");
+		c = ParseRemoteLine("person spawn lord");
+		CHECK(c.Error.empty() && ParseLordSpawn(c.Options, parsed, why) && IsPlainLordSpawn(parsed));		// kind= 는 설정이 아니다
+		CHECK(ParseRemoteLine("person spawn lord gender=male").Error.empty() && ParseRemoteLine("person spawn lord age=18 role=general").Error.empty());
+		for (const char* bad : { "person spawn lord gender=robot", "person spawn lord age=17", "person spawn lord age=abc", "person spawn lord role=emperor",
+			"person spawn lord culture=Gwelts", "person spawn lord colour=red", "person spawn lord female", "person spawn peasant gender=female", "person spawn knight age=30" })
+			CHECK(!ParseRemoteLine(bad).Error.empty());
+
+		// 결과의 첫 줄: 누구를 만들었는가. 새 영주를 찾지 못했으면 고른 것을 입히지 못했다고 적는다.
+		CHECK_STR(LordSpawnLine("Nata", true, false), "영주를 만들었습니다: Nata");
+		CHECK_STR(LordSpawnLine("", false, false), "영주를 만들었습니다");
+		CHECK_STR(LordSpawnLine("", false, true), "영주를 만들었지만 누구인지 가리지 못해 고른 것을 입히지 못했습니다");
+	});
+
 	Test("군대: 한 번에 만드는 병사의 수와 원격 명령", [] {
 		int count = 0;
 		CHECK(SoldierBatch(3, count) && count == 3);

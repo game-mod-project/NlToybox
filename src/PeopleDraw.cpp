@@ -76,6 +76,72 @@ namespace NlPeople::Internal
 		}
 	}
 
+	// "마우스 자리에 영주 소환": 성별·나이·문화·역할을 골라 두고 만든다(research/35). 고른 것은 이 실행 안에서만 든다.
+	// 아무것도 고르지 않으면 지금까지의 소환(소환기의 __spawn_lord)과 같은 길로 간다. 그리는 쪽은 청만 쌓는다.
+	void DrawSpawnLord()
+	{
+		ImGui::SeparatorText("마우스 자리에 영주 소환");
+		ImGui::SetNextItemWidth(120);
+		if (ImGui::BeginCombo("성별##lord_spawn", NlCore::LordGenderLabel(g_LordSpawn.Gender)))
+		{
+			for (const NlCore::LordGender gender : { NlCore::LordGender::Any, NlCore::LordGender::Male, NlCore::LordGender::Female })
+				if (ImGui::Selectable(NlCore::LordGenderLabel(gender), gender == g_LordSpawn.Gender))
+					g_LordSpawn.Gender = gender;
+			ImGui::EndCombo();
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(70);
+		double typed = g_LordSpawn.Age, age = 0;
+		if (NlUi::InputNumber("나이 (0 = 게임에 맡김, 18~80)##lord_spawn", "lord_spawn_age", g_LordSpawn.Age, "%.0f", typed) && NlCore::SpawnAgeValue(typed, age))
+			g_LordSpawn.Age = age;
+
+		// 문화: 게임에서 읽은 목록. 고른 이름이 이 게임에 없으면(다른 세이브, 게임 갱신) 게임에 맡김으로 되돌린다.
+		const CultureName* picked = nullptr;
+		for (const CultureName& one : g_Now.Cultures)
+			if (one.Name == g_LordSpawn.Culture)
+				picked = &one;
+		if (!picked)
+			g_LordSpawn.Culture.clear();
+		ImGui::SetNextItemWidth(170);
+		if (ImGui::BeginCombo("문화##lord_spawn", picked ? picked->Label.c_str() : "게임에 맡김"))
+		{
+			if (ImGui::Selectable("게임에 맡김", picked == nullptr))
+				g_LordSpawn.Culture.clear();
+			for (const CultureName& one : g_Now.Cultures)
+				if (ImGui::Selectable((one.Label + "##" + one.Name).c_str(), picked == &one))
+					g_LordSpawn.Culture = one.Name;
+			ImGui::EndCombo();
+		}
+		ImGui::SameLine();
+		const NlCore::RolePreset* role = g_LordSpawn.Role.empty() ? nullptr : NlCore::FindRole(g_LordSpawn.Role);
+		ImGui::SetNextItemWidth(200);
+		if (ImGui::BeginCombo("역할 프리셋##lord_spawn", role ? role->Label : "없음"))
+		{
+			if (ImGui::Selectable("없음", role == nullptr))
+				g_LordSpawn.Role.clear();
+			for (const NlCore::RolePreset& one : NlCore::RolePresets())
+				if (ImGui::Selectable((std::string(one.Label) + "##" + one.Id).c_str(), role == &one))
+					g_LordSpawn.Role = one.Id;
+			ImGui::EndCombo();
+		}
+
+		if (ImGui::Button("영주 +1"))
+		{
+			// 아무것도 정하지 않았으면 지금까지의 길로(소환기). 정한 것이 있으면 그것과 함께 쌓는다.
+			if (NlCore::IsPlainLordSpawn(g_LordSpawn))
+			{
+				if (g_SpawnKinds.size() < 20)
+					g_SpawnKinds.push_back(NlCore::SpawnKind::Lord);
+			}
+			else if (g_LordSpawns.size() < 20)
+				g_LordSpawns.push_back(g_LordSpawn);
+		}
+		NlUi::Hint("플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다. "
+			"성별은 게임이 영주를 만드는 함수에 그대로 넘깁니다(이름과 외모가 그 성별로 만들어집니다). 문화는 만든 뒤 게임의 세터(set_culture)로 바꿉니다: "
+			"영주의 문화와 외모의 문화 이름이 바뀌고 그 문화의 방언이 더해집니다. 이름은 게임이 처음 붙인 대로입니다(게임의 소환기도 이름의 문화를 따로 뽑습니다). "
+			"나이는 어른만(18~80), 역할 프리셋은 '인물'의 것과 같습니다(능력치를 올리고 재능을 붙입니다). 고르지 않은 것은 게임에 맡깁니다.");
+	}
+
 	// 특성의 설명을 풍선 글로(바로 앞에 그린 것 위에 마우스가 있을 때).
 	void TraitTooltip(const std::string& Name)
 	{
@@ -686,8 +752,7 @@ void NlPeople::DrawLords()
 	}
 	ImGui::EndDisabled();
 	NlUi::Hint("임신한 영주마다 게임의 다음 단계 함수를 출산까지 부릅니다. 게임의 확률을 그대로 타서 유산으로 끝날 수 있습니다('인구·욕구'의 '유산 없음'을 켜 두면 나지 않았습니다).");
-	DrawSpawnHere({ NlCore::SpawnKind::Lord });
-	NlUi::Hint("게임의 디버그 소환기로 플레이어의 영주 하나를 만듭니다: 단추를 누른 그 자리(모드창 아래의 지도)에 나타납니다. 되돌릴 수 없습니다.");
+	DrawSpawnLord();
 	DrawLast();
 }
 

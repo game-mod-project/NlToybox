@@ -3,6 +3,7 @@
 // tests/native 가 직접 부른다. 자리와 게임의 함수는 research/11. 스펙: 치트 메뉴 §8(인물, 영주, 인구·욕구).
 
 #include <cstddef>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -37,6 +38,7 @@ namespace NlCore
 		// 임신·출생·성장(core/FamilyPlan, research/24). PregnancyNext: 임신의 다음 단계. Birth: 출산까지. GrowUp: 아이를 어른으로(나이 18).
 		// Conceive: 임신을 시작한다(Text 는 아버지의 uuid).
 		PregnancyNext, Birth, GrowUp, Conceive,
+		CultureSet,	// 문화를 바꾼다(Text 는 게임의 문화의 이름. 게임의 SoulBasic.set_culture. research/35). 한 사람을 짚어서만, 플레이어의 영주에게만
 	};
 
 	struct PersonCommand
@@ -105,6 +107,37 @@ namespace NlCore
 	const char* SpawnWord(SpawnKind Kind);		// 원격 명령의 낱말
 	const char* SpawnMethod(SpawnKind Kind);	// 소환기의 메서드 이름(인자 없음)
 	const char* SpawnLabel(SpawnKind Kind);		// 창에 보일 이름
+
+	// 영주를 소환할 때 정하는 것(research/35). 정하지 않은 것은 게임에 맡긴다: 아무것도 정하지 않으면 지금까지의 소환(소환기의 __spawn_lord)과 같다.
+	// 성별은 만들 때 정한다: 소환기가 부르는 영지의 debug_spawn_new_player_character(성별, 지도의 칸)을 같은 꼴로 부른다(성별의 수: 0 남성, 1 여성).
+	// 문화·나이·역할은 만든 뒤에 그 영주에게 입힌다(LordSpawnSteps).
+	enum class LordGender { Any, Male, Female };
+	bool ParseLordGender(const std::string& Word, LordGender& Out);		// any, male, female
+	const char* LordGenderWord(LordGender Gender);
+	const char* LordGenderLabel(LordGender Gender);						// 창에 보일 말
+	int LordGenderValue(LordGender Gender);								// 게임의 수. Any 는 -1
+	constexpr double k_SpawnAgeMin = 18, k_SpawnAgeMax = 80;			// 어른만(아이로 만드는 것은 재지 않았다)
+	struct LordSpawn
+	{
+		LordGender Gender = LordGender::Any;
+		double Age = 0;				// 0: 게임에 맡김. 아니면 18~80 의 정수
+		std::string Culture;		// 빈 글: 게임에 맡김. 아니면 게임의 문화의 이름(gwelts, tanaya …). 게임에 있는 이름인지는 부르는 쪽이 본다
+		std::string Role;			// 빈 글: 없음. 아니면 역할 프리셋의 Id(core/RolePlan)
+	};
+	// 창의 나이 칸에 친 수를 다듬는다: 0 이하는 0(게임에 맡김), 그 밖은 18~80 의 정수로 당긴다. 수가 아니면 거짓.
+	bool SpawnAgeValue(double Asked, double& Out);
+	// 설정이 온전한가: 나이가 0 이거나 18~80 의 정수, 문화가 이름의 꼴, 역할이 표에 있다. 아니면 거짓이고 Why 에 까닭.
+	bool CheckLordSpawn(const LordSpawn& Spawn, std::string& Why);
+	// 아무것도 정하지 않았는가.
+	bool IsPlainLordSpawn(const LordSpawn& Spawn);
+	// 원격 줄의 옵션(gender=, age=, culture=, role=)에서 읽고 검사한다. kind= 는 건너뛴다. 모르는 열쇠가 있으면 거짓.
+	bool ParseLordSpawn(const std::map<std::string, std::string>& Options, LordSpawn& Out, std::string& Why);
+	// 만든 뒤에 그 영주(Uuid)에게 할 일들. 차례: 문화, 나이, 역할. 정하지 않은 것은 넣지 않는다.
+	std::vector<PersonCommand> LordSpawnSteps(const LordSpawn& Spawn, const std::string& Uuid);
+	// 새로 생긴 사람의 uuid: 앞의 목록에 없고 뒤의 목록에 있는 것이 꼭 하나일 때 그것. 없거나 둘 이상이면 빈 글(엉뚱한 사람에게 입히지 않는다).
+	std::string NewcomerUuid(const std::vector<std::string>& Before, const std::vector<std::string>& After);
+	// 결과의 첫 줄. Found: 새 영주를 가렸다. StepsWanted: 입힐 것이 있었다.
+	std::string LordSpawnLine(const std::string& Name, bool Found, bool StepsWanted);
 
 	// 한 번에 만드는 병사의 수: 1~20 의 정수. 0 이하이거나 수가 아니면 거짓(research/13 의 디버그 소환을 그만큼 부른다).
 	constexpr int k_SoldierBatchMax = 20;
