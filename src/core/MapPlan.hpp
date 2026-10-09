@@ -44,4 +44,32 @@ namespace NlCore
 	// Restore: 'n', 'd' 되돌렸다(Detail 수), 'f' 읽거나 쓰지 못한 칸(Detail 수). PresetSave: 'n', 's' 저장(Detail 이름), 'b' 이름이 틀렸다, 'f' 파일에 쓰지 못했다.
 	// PresetLoad: 'n', 'l' 불러옴(Detail "이름 (수)"), 'm' 없는 이름(Detail), 'b'. PresetDelete: 'x' 지움(Detail), 'm', 'b'. Seed: 'u' 확인 전, 'd' 고정(Detail 수), 'r' 풀었다, 'f' 걸지 못했다(Detail).
 	std::string MapReport(MapAct Act, char Outcome, const std::string& Detail);
+
+	// 프리셋(NlToyBox.maps.txt. 사용자의 설정). 줄: preset <이름> <열쇠>=<수> … seed=<수>. 막힘 4개는 들지 않는다(InPreset). 씨앗 -1 은 무작위.
+	struct MapPreset
+	{
+		std::string Name;
+		std::map<std::string, double> Values;		// 열쇠 → 수(범위 안의 정수)
+		double Seed = -1;
+	};
+	// 이름의 꼴: 비지 않고 32바이트 안, 빈칸·'='·제어 문자 없음.
+	bool GoodPresetName(const std::string& Name);
+	// 파일을 읽는다. 틀린 줄(이름이 없거나 틀리다, 모르는 열쇠, 수가 아닌 값)은 버린다. 막힘 열쇠는 무시한다. 범위 밖의 수는 당긴다. 같은 이름은 뒤의 것이 이긴다. '#' 줄은 주석.
+	std::vector<MapPreset> ParseMapPresets(std::istream& In);
+	// 파일로. 이름순. 값은 표의 차례(InPreset 만), 씨앗은 끝.
+	std::string FormatMapPresets(const std::vector<MapPreset>& Presets);
+	void UpsertPreset(std::vector<MapPreset>& Presets, MapPreset Preset);		// 같은 이름이면 바꾼다(InPreset 이 아닌 열쇠는 뗀다)
+	bool ErasePreset(std::vector<MapPreset>& Presets, const std::string& Name);
+	const MapPreset* FindPreset(const std::vector<MapPreset>& Presets, const std::string& Name);
+
+	// 원격 map … 과 창의 단추가 같은 길을 탄다. Target: show|set|regenerate|restore|preset|seed. Options: set 은 열쇠 → 수의 글, preset 은 op(save|load|delete)·name, seed 는 value(수|random).
+	struct MapCommand
+	{
+		MapAct Act = MapAct::Show;
+		std::vector<std::pair<std::string, double>> Sets;		// set: (열쇠, 당긴 수)
+		std::string Name;										// preset
+		double Seed = -1;										// seed
+		bool SeedRandom = false;
+	};
+	bool MapCommandFromParts(const std::string& Target, const std::map<std::string, std::string>& Options, MapCommand& Out, std::string& Why);
 }

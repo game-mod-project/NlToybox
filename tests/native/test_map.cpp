@@ -62,4 +62,70 @@ void RunMapTests()
 		CHECK_STR(MapReport(MapAct::Seed, 'd', "12345"), "씨앗을 고정했습니다: 12345");
 		CHECK_STR(MapReport(MapAct::Seed, 'r', ""), "씨앗 고정을 풀었습니다 (무작위)");
 	});
+
+	Test("지도: 프리셋 파일 — 읽고 쓰면 같다, 틀린 줄은 버린다, 같은 이름은 덮어쓴다, 막힘은 들지 않는다", [] {
+		CHECK(GoodPresetName("평야") && GoodPresetName("map_1") && !GoodPresetName("") && !GoodPresetName("a b") && !GoodPresetName("a=b") && !GoodPresetName(std::string(33, 'x')) && !GoodPresetName("a\tb"));
+		std::vector<MapPreset> presets;
+		MapPreset plain;
+		plain.Name = "평야";
+		plain.Values = { { "lakes", 3 }, { "hills", 0 }, { "mountains", 1 }, { "iron", 4 }, { "blocked_up", 2 } };		// 막힘은 쓰지 않는다
+		plain.Seed = 12345;
+		UpsertPreset(presets, plain);
+		MapPreset hills;
+		hills.Name = "산악";
+		hills.Values = { { "mountains", 5 }, { "hills", 3 } };
+		UpsertPreset(presets, hills);
+		const std::string text = FormatMapPresets(presets);
+		CHECK(text.find("preset 산악 ") != std::string::npos && text.find("preset 평야 ") != std::string::npos);
+		CHECK(text.find("blocked_up") == std::string::npos);										// 막힘은 들지 않는다
+		CHECK(text.find("preset 평야 lakes=3 hills=0 mountains=1 iron=4 seed=12345\n") != std::string::npos);		// 표의 차례, 씨앗은 끝
+		CHECK(text.find("preset 산악 hills=3 mountains=5 seed=-1\n") != std::string::npos);
+		std::istringstream in(text);
+		const std::vector<MapPreset> again = ParseMapPresets(in);
+		CHECK(again.size() == 2 && FindPreset(again, "평야") && FindPreset(again, "평야")->Values.at("iron") == 4 && FindPreset(again, "평야")->Seed == 12345 && FindPreset(again, "산악")->Seed == -1);
+		CHECK(FindPreset(again, "없음") == nullptr);
+		// 같은 이름으로 다시 저장하면 한 줄로 덮어쓴다(리뷰 포커스 3)
+		MapPreset plain2;
+		plain2.Name = "평야";
+		plain2.Values = { { "lakes", 1 } };
+		UpsertPreset(presets, plain2);
+		CHECK(presets.size() == 2 && FindPreset(presets, "평야")->Values.size() == 1 && FormatMapPresets(presets).find("preset 평야 lakes=1 seed=-1\n") != std::string::npos);
+		CHECK(ErasePreset(presets, "산악") && presets.size() == 1 && !ErasePreset(presets, "산악"));
+		// 틀린 줄: 이름 없음, 모르는 열쇠, 수가 아닌 값, 이름에 =. 범위 밖은 당기고 소수는 내린다. 막힘 열쇠는 무시한다(줄은 산다). 같은 이름은 뒤의 것(리뷰 포커스 2)
+		std::istringstream bad("preset\npreset x bogus=1\npreset y lakes=abc\npreset a=b lakes=1\n# 주석\npreset ok lakes=9 iron=2.7 blocked_up=5 seed=7\npreset ok lakes=2\n");
+		const std::vector<MapPreset> parsed = ParseMapPresets(bad);
+		CHECK(parsed.size() == 1 && parsed[0].Name == "ok" && parsed[0].Values.at("lakes") == 2 && parsed[0].Values.count("iron") == 0 && parsed[0].Values.count("blocked_up") == 0 && parsed[0].Seed == -1);
+		std::istringstream clamp("preset c lakes=9 iron=2.7 blocked_up=5 seed=7\n");
+		const std::vector<MapPreset> clamped = ParseMapPresets(clamp);
+		CHECK(clamped.size() == 1 && clamped[0].Values.at("lakes") == 5 && clamped[0].Values.at("iron") == 2 && clamped[0].Values.count("blocked_up") == 0 && clamped[0].Seed == 7);
+	});
+
+	Test("지도: 원격 map 의 낱말", [] {
+		MapCommand command;
+		std::string why;
+		CHECK(MapCommandFromParts("show", {}, command, why) && command.Act == MapAct::Show);
+		CHECK(MapCommandFromParts("set", { { "lakes", "3" }, { "iron", "4" }, { "blocked_up", "1" } }, command, why) && command.Act == MapAct::Set && command.Sets.size() == 3);		// 막힘도 받는다(리뷰 포커스 4)
+		CHECK(!MapCommandFromParts("set", { { "bogus", "1" } }, command, why) && why.find("bogus") != std::string::npos);
+		CHECK(!MapCommandFromParts("set", { { "lakes", "x" } }, command, why) && !MapCommandFromParts("set", {}, command, why));
+		CHECK(MapCommandFromParts("regenerate", {}, command, why) && command.Act == MapAct::Regenerate);
+		CHECK(MapCommandFromParts("restore", {}, command, why) && command.Act == MapAct::Restore);
+		CHECK(MapCommandFromParts("preset", { { "op", "save" }, { "name", "평야" } }, command, why) && command.Act == MapAct::PresetSave && command.Name == "평야");
+		CHECK(MapCommandFromParts("preset", { { "op", "load" }, { "name", "a" } }, command, why) && command.Act == MapAct::PresetLoad);
+		CHECK(MapCommandFromParts("preset", { { "op", "delete" }, { "name", "a" } }, command, why) && command.Act == MapAct::PresetDelete);
+		CHECK(!MapCommandFromParts("preset", { { "op", "load" } }, command, why) && !MapCommandFromParts("preset", { { "op", "x" }, { "name", "a" } }, command, why) && !MapCommandFromParts("preset", { { "op", "save" }, { "name", "a b" } }, command, why));
+		CHECK(MapCommandFromParts("seed", { { "value", "12345" } }, command, why) && command.Act == MapAct::Seed && command.Seed == 12345 && !command.SeedRandom);
+		CHECK(MapCommandFromParts("seed", { { "value", "random" } }, command, why) && command.SeedRandom);
+		CHECK(!MapCommandFromParts("seed", {}, command, why) && !MapCommandFromParts("seed", { { "value", "x" } }, command, why) && !MapCommandFromParts("bogus", {}, command, why));
+		// 줄의 읽기(ParseRemoteLine)
+		const RemoteCommand set = ParseRemoteLine("map set lakes=3 iron=4");
+		CHECK(set.Error.empty() && set.Target == "set" && set.Options.at("lakes") == "3" && set.Options.at("iron") == "4");
+		CHECK(!ParseRemoteLine("map set bogus=1").Error.empty() && !ParseRemoteLine("map set lakes=x").Error.empty() && !ParseRemoteLine("map set").Error.empty());
+		CHECK(ParseRemoteLine("map show").Error.empty() && ParseRemoteLine("map regenerate").Error.empty() && ParseRemoteLine("map restore").Error.empty());
+		const RemoteCommand save = ParseRemoteLine("map preset save name=평야");
+		CHECK(save.Error.empty() && save.Target == "preset" && save.Options.at("op") == "save" && save.Options.at("name") == "평야");
+		CHECK(!ParseRemoteLine("map preset load").Error.empty() && !ParseRemoteLine("map preset").Error.empty());
+		const RemoteCommand seed = ParseRemoteLine("map seed 12345");
+		CHECK(seed.Error.empty() && seed.Target == "seed" && seed.Options.at("value") == "12345");
+		CHECK(ParseRemoteLine("map seed random").Error.empty() && !ParseRemoteLine("map seed").Error.empty() && !ParseRemoteLine("map").Error.empty() && !ParseRemoteLine("map bogus").Error.empty());
+	});
 }

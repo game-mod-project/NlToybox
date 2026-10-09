@@ -43,6 +43,8 @@
 //                                                   이벤트의 표, 예약 취소, 확인된 가족의 끝내기(research/29)
 //   world event name=<이름>,  world event_now name=<이름>
 //                                                   그 이벤트를 예약한다(감독이 뽑는 날에 온다), 바로 일으킨다(게임의 조건 함수가 참일 때만. research/32)
+//   map show | set <열쇠>=<수> … | regenerate | restore | preset save|load|delete name=<이름> | seed <수|random>
+//                                                   지도 탭: 생성기 화면에서 영지의 생성 설정 17개를 읽고 쓰고 다시 생성한다(core/MapPlan. research/31)
 //   library list [find=<글>]                        도서관의 책(요약과 있는 책들. find 를 주면 그 글이 든 지식 모두. research/33)
 //   library add name=<지식>,  library add_all,  library remove name=<지식>,  library undo
 //                                                   책 한 권을 넣는다, 없는 책을 모두 넣는다, 한 권을 뺀다, 이 실행에서 모듈이 넣은 책을 뺀다(게임의 change_books)

@@ -2,7 +2,9 @@
 
 #include "Text.hpp"
 
+#include <algorithm>
 #include <cmath>
+#include <sstream>
 
 namespace NlCore
 {
@@ -140,5 +142,228 @@ namespace NlCore
 		default:
 			return std::string();
 		}
+	}
+
+	bool GoodPresetName(const std::string& Name)
+	{
+		if (Name.empty() || Name.size() > 32)
+			return false;
+		for (const unsigned char c : Name)
+			if (c == ' ' || c == '=' || c < 0x20 || c == 0x7f)
+				return false;
+		return true;
+	}
+
+	namespace
+	{
+		// "열쇠=수" 를 읽는다. 모르는 열쇠나 수가 아닌 값은 거짓(Why). 막힘 열쇠와 seed 는 Out 에 넣지 않고 참(Skip).
+		bool ReadPair(const std::string& Word, MapPreset& Out, bool& Skip, std::string& Why)
+		{
+			Skip = false;
+			const size_t eq = Word.find('=');
+			if (eq == std::string::npos || eq == 0)
+			{
+				Why = "expected key=value: " + Word;
+				return false;
+			}
+			const std::string key = Word.substr(0, eq), text = Word.substr(eq + 1);
+			double value = 0;
+			if (!ParseNumber(text, value))
+			{
+				Why = "not a number: " + Word;
+				return false;
+			}
+			if (key == "seed")
+			{
+				Out.Seed = std::floor(value);
+				Skip = true;
+				return true;
+			}
+			const MapKnob* knob = FindMapKnob(key);
+			if (!knob)
+			{
+				Why = "unknown key: " + key;
+				return false;
+			}
+			if (!knob->InPreset)
+			{
+				Skip = true;		// 막힘은 프리셋에 들지 않는다
+				return true;
+			}
+			Out.Values[key] = ClampMapValue(*knob, value);
+			return true;
+		}
+	}
+
+	std::vector<MapPreset> ParseMapPresets(std::istream& In)
+	{
+		std::vector<MapPreset> out;
+		std::string line;
+		while (std::getline(In, line))
+		{
+			if (!line.empty() && line.back() == '\r')
+				line.pop_back();
+			std::istringstream words(line);
+			std::string head, name;
+			if (!(words >> head) || head != "preset" || !(words >> name) || !GoodPresetName(name))
+				continue;
+			MapPreset preset;
+			preset.Name = name;
+			bool ok = true;
+			std::string word, why;
+			while (ok && words >> word)
+			{
+				bool skip = false;
+				ok = ReadPair(word, preset, skip, why);
+			}
+			if (ok)
+				UpsertPreset(out, std::move(preset));
+		}
+		return out;
+	}
+
+	std::string FormatMapPresets(const std::vector<MapPreset>& Presets)
+	{
+		std::vector<const MapPreset*> sorted;
+		for (const MapPreset& preset : Presets)
+			sorted.push_back(&preset);
+		std::sort(sorted.begin(), sorted.end(), [](const MapPreset* A, const MapPreset* B) { return A->Name < B->Name; });
+		std::string out = "# NlToyBox 의 지도 프리셋. 지도 탭에서 저장하면 여기에 쓰인다. 줄: preset <이름> <열쇠>=<수> … seed=<수>(-1 은 무작위).\n";
+		for (const MapPreset* preset : sorted)
+		{
+			out += "preset " + preset->Name;
+			for (const MapKnob& knob : MapKnobs())
+			{
+				const auto found = preset->Values.find(knob.Key);
+				if (knob.InPreset && found != preset->Values.end())
+					out += std::string(" ") + knob.Key + "=" + Shortest(found->second);
+			}
+			out += " seed=" + Shortest(preset->Seed) + "\n";
+		}
+		return out;
+	}
+
+	void UpsertPreset(std::vector<MapPreset>& Presets, MapPreset Preset)
+	{
+		for (auto it = Preset.Values.begin(); it != Preset.Values.end();)
+		{
+			const MapKnob* knob = FindMapKnob(it->first);
+			if (!knob || !knob->InPreset)
+				it = Preset.Values.erase(it);
+			else
+			{
+				it->second = ClampMapValue(*knob, it->second);
+				++it;
+			}
+		}
+		for (MapPreset& have : Presets)
+			if (have.Name == Preset.Name)
+			{
+				have = std::move(Preset);
+				return;
+			}
+		Presets.push_back(std::move(Preset));
+	}
+
+	bool ErasePreset(std::vector<MapPreset>& Presets, const std::string& Name)
+	{
+		for (auto it = Presets.begin(); it != Presets.end(); ++it)
+			if (it->Name == Name)
+			{
+				Presets.erase(it);
+				return true;
+			}
+		return false;
+	}
+
+	const MapPreset* FindPreset(const std::vector<MapPreset>& Presets, const std::string& Name)
+	{
+		for (const MapPreset& preset : Presets)
+			if (preset.Name == Name)
+				return &preset;
+		return nullptr;
+	}
+
+	bool MapCommandFromParts(const std::string& Target, const std::map<std::string, std::string>& Options, MapCommand& Out, std::string& Why)
+	{
+		Out = MapCommand{};
+		if (Target == "show") { Out.Act = MapAct::Show; return true; }
+		if (Target == "regenerate") { Out.Act = MapAct::Regenerate; return true; }
+		if (Target == "restore") { Out.Act = MapAct::Restore; return true; }
+		if (Target == "set")
+		{
+			Out.Act = MapAct::Set;
+			for (const auto& [key, text] : Options)
+			{
+				const MapKnob* knob = FindMapKnob(key);
+				double value = 0;
+				if (!knob)
+				{
+					Why = "map set: unknown key " + key + " (keys: lakes, hills, hills_distribution, mountains, river, blocked_up/down/left/right, berry, bush, clay, fertile, hop, iron, plants, tree)";
+					return false;
+				}
+				if (!ParseNumber(text, value))
+				{
+					Why = "map set: not a number: " + key + "=" + text;
+					return false;
+				}
+				Out.Sets.emplace_back(key, ClampMapValue(*knob, value));
+			}
+			if (Out.Sets.empty())
+			{
+				Why = "map set needs <key>=<number> …";
+				return false;
+			}
+			return true;
+		}
+		if (Target == "preset")
+		{
+			const auto op = Options.find("op"), name = Options.find("name");
+			if (op == Options.end() || name == Options.end())
+			{
+				Why = "map preset needs save|load|delete name=<name>";
+				return false;
+			}
+			if (op->second == "save") Out.Act = MapAct::PresetSave;
+			else if (op->second == "load") Out.Act = MapAct::PresetLoad;
+			else if (op->second == "delete") Out.Act = MapAct::PresetDelete;
+			else
+			{
+				Why = "map preset needs save|load|delete";
+				return false;
+			}
+			if (!GoodPresetName(name->second))
+			{
+				Why = "map preset: bad name (1-32 bytes, no space or =)";
+				return false;
+			}
+			Out.Name = name->second;
+			return true;
+		}
+		if (Target == "seed")
+		{
+			const auto value = Options.find("value");
+			if (value == Options.end())
+			{
+				Why = "map seed needs <number|random>";
+				return false;
+			}
+			Out.Act = MapAct::Seed;
+			if (value->second == "random")
+			{
+				Out.SeedRandom = true;
+				return true;
+			}
+			double seed = 0;
+			if (!ParseNumber(value->second, seed))
+			{
+				Why = "map seed: not a number: " + value->second;
+				return false;
+			}
+			Out.Seed = std::floor(seed);
+			return true;
+		}
+		Why = "map needs one of: show, set, regenerate, restore, preset, seed";
+		return false;
 	}
 }
