@@ -12,6 +12,7 @@
 #include "Economy.hpp"
 #include "Events.hpp"
 #include "Library.hpp"
+#include "MapGen.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Explorer.hpp"
@@ -171,6 +172,7 @@ void NlMenu::GameTick()
 	NlJobs::GameTick(now);
 	NlWorld::GameTick(now);
 	NlEvents::Tick(now, visible && page == Area::Events);
+	NlMapGen::Tick(now, visible && page == Area::Map);
 	NlSeason::Tick(now, visible && page == Area::World);
 	NlMines::Tick(now);
 	NlDiplomacy::GameTick(now, visible && page == Area::Diplomacy);
@@ -324,6 +326,9 @@ void NlMenu::Draw()
 		NlTweaks::DrawArea(page);
 		ImGui::Separator();
 		NlPeople::DrawPeople();
+		break;
+	case Area::Map:
+		NlMapGen::Draw();
 		break;
 	case Area::Util:
 		NlCheats::DrawArea(page);

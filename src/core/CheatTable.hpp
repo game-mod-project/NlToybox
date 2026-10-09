@@ -13,6 +13,7 @@ namespace NlCore
 	{
 		Explorer, Economy, Build, Person, Lord, People, Knowledge, Items, Army, Crime,
 		Diplomacy, Religion, Time, World, Events, Util, Presets,
+		Map,		// 새 게임의 생성 설정(src/MapGen. research/31)
 	};
 
 	struct AreaInfo

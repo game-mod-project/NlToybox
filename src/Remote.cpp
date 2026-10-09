@@ -8,6 +8,7 @@
 #include "Diplomacy.hpp"
 #include "Economy.hpp"
 #include "Events.hpp"
+#include "MapGen.hpp"
 #include "People.hpp"
 #include "World.hpp"
 #include "Game.hpp"
@@ -16,6 +17,7 @@
 #include "Search.hpp"
 #include "Ui.hpp"
 #include "core/AskPath.hpp"
+#include "core/MapPlan.hpp"
 #include "core/RemoteCommand.hpp"
 #include "core/Text.hpp"
 
@@ -439,6 +441,21 @@ namespace
 		Say("  " + NlEconomy::Do(command));
 	}
 
+	// 지도 패널의 단추와 같은 길(NlMapGen::Do). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
+	void DoMap(const RemoteCommand& C)
+	{
+		NlCore::MapCommand command;
+		std::string why;
+		if (!NlCore::MapCommandFromParts(C.Target, C.Options, command, why))
+		{
+			Say("  : " + why);
+			return;
+		}
+		Say("  running map " + C.Target);		// 죽으면 여기까지 남는다
+		for (const std::string& line : NlMapGen::Do(command))
+			Say("  " + line);
+	}
+
 	// 종교·유틸·이벤트 패널의 단추와 같은 길(NlWorld::Do, NlEvents). 줄의 꼴은 ParseRemoteLine 이 이미 봤다.
 	void DoWorld(const RemoteCommand& C)
 	{
@@ -763,7 +780,7 @@ namespace
 		{ "find", DoFind }, { "refine", DoRefine }, { "write", DoWriteOrPoke }, { "poke", DoWriteOrPoke },
 		{ "record", DoRecord }, { "unrecord", DoUnrecord }, { "records", DoRecords },
 		{ "call", DoCall }, { "method", DoMethod }, { "treecall", DoTreeCall }, { "override", DoOverride }, { "unoverride", DoUnoverride },
-		{ "economy", DoEconomy }, { "person", DoPerson }, { "crime", DoCrime }, { "library", DoLibrary }, { "world", DoWorld }, { "diplomacy", DoDiplomacy }, { "court", DoCourt }, { "traits", DoTraits },
+		{ "economy", DoEconomy }, { "person", DoPerson }, { "crime", DoCrime }, { "library", DoLibrary }, { "map", DoMap }, { "world", DoWorld }, { "diplomacy", DoDiplomacy }, { "court", DoCourt }, { "traits", DoTraits },
 		{ "preset", DoPreset }, { "time", DoTime }, { "cheat", DoCheat }, { "page", DoPage },
 		{ "state", DoStateLine }, { "shot", DoShot }, { "window", DoWindow }, { "ui", DoUi },
 	};
