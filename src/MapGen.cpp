@@ -301,7 +301,145 @@ void NlMapGen::Tick(double Now, bool Visible)
 void NlMapGen::Draw()
 {
 	std::lock_guard lock(g_Mutex);
-	NlUi::Hint("지도 탭은 Task 4 에서 그린다.");
+	ImGui::SeparatorText("영지의 생성 설정");
+	if (!g_Now.Ready)
+		NlUi::Hint("상태를 읽습니다.");
+	else if (!g_Now.Screen)
+		NlUi::Hint("새 게임의 지도 화면(영주관 배치 전)에서만 됩니다. 영지를 고른 뒤 생성기 창이 보이는 화면에서 이 탭을 여세요.");
+	else
+	{
+		// 수 하나의 줄: 이름 [값] [-][+]. 누르면 큐에 set 하나(틱이 쓴다. 범위는 코어가 당긴다)
+		const auto knobLine = [&](const MapKnob& knob) {
+			const size_t i = IndexOf(knob);
+			const double value = g_Now.Values[i];
+			ImGui::Text("%s %s", knob.Label, g_Now.Read[i] ? NlCore::Shortest(value).c_str() : "?");
+			ImGui::SameLine();
+			ImGui::BeginDisabled(!g_Now.Read[i] || value <= knob.Min);
+			if (ImGui::SmallButton((std::string("-##") + knob.Key).c_str()))
+			{
+				MapCommand command;
+				command.Act = MapAct::Set;
+				command.Sets.emplace_back(knob.Key, value - 1);
+				Push(command);
+			}
+			ImGui::EndDisabled();
+			ImGui::SameLine();
+			ImGui::BeginDisabled(!g_Now.Read[i] || value >= knob.Max);
+			if (ImGui::SmallButton((std::string("+##") + knob.Key).c_str()))
+			{
+				MapCommand command;
+				command.Act = MapAct::Set;
+				command.Sets.emplace_back(knob.Key, value + 1);
+				Push(command);
+			}
+			ImGui::EndDisabled();
+		};
+		for (const NlCore::MapGroup group : { NlCore::MapGroup::Terrain, NlCore::MapGroup::Blocked, NlCore::MapGroup::Resource })
+		{
+			ImGui::TextDisabled("%s", NlCore::MapGroupWord(group));
+			int shown = 0;
+			for (const MapKnob& knob : NlCore::MapKnobs())
+			{
+				if (knob.Group != group)
+					continue;
+				if (shown++ % 4 != 0)
+					ImGui::SameLine(0, 24);
+				if (std::string(knob.Key) == "hills_distribution")
+				{
+					// 언덕 배치는 콤보(중심, 가장자리, 무작위)
+					const size_t i = IndexOf(knob);
+					ImGui::Text("%s", knob.Label);
+					ImGui::SameLine();
+					ImGui::SetNextItemWidth(110);
+					if (ImGui::BeginCombo("##hills_distribution", NlCore::HillsDistributionWord(g_Now.Values[i]).c_str()))
+					{
+						for (int option = 0; option <= 2; option++)
+							if (ImGui::Selectable(NlCore::HillsDistributionWord(option).c_str(), g_Now.Values[i] == option))
+							{
+								MapCommand command;
+								command.Act = MapAct::Set;
+								command.Sets.emplace_back(knob.Key, option);
+								Push(command);
+							}
+						ImGui::EndCombo();
+					}
+				}
+				else if (std::string(knob.Key) == "river")
+				{
+					const size_t i = IndexOf(knob);
+					bool on = g_Now.Values[i] != 0;
+					if (ImGui::Checkbox("강", &on))
+					{
+						MapCommand command;
+						command.Act = MapAct::Set;
+						command.Sets.emplace_back(knob.Key, on ? 1.0 : 0.0);
+						Push(command);
+					}
+				}
+				else
+					knobLine(knob);
+			}
+		}
+		if (ImGui::Button("다시 생성"))
+		{
+			MapCommand command;
+			command.Act = MapAct::Regenerate;
+			Push(command);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("원래대로"))
+		{
+			MapCommand command;
+			command.Act = MapAct::Restore;
+			Push(command);
+		}
+		ImGui::SameLine();
+		if (ImGui::Button("새로 읽기"))
+			g_NextRead = 0;
+		ImGui::SameLine();
+		ImGui::TextDisabled("씨앗 %s", g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed).c_str() : "?");
+	}
+	NlUi::Hint("값은 게임의 생성기 창이 쓰는 자리(영지의 생성 설정)에 바로 씁니다. '다시 생성'은 게임의 함수(regenerate_map)를 부릅니다(창의 '생성'과 같습니다). "
+		"'원래대로'는 영지의 원래 값으로 되돌립니다. 자원 8개는 창에 없는 값이라 단계의 효과(몇 개가 생기는가)는 확인 전입니다. 막힘 4개는 영지의 모양이라 프리셋에 들지 않습니다.");
+
+	ImGui::SeparatorText("프리셋");
+	ImGui::SetNextItemWidth(160);
+	ImGui::InputText("이름", g_PresetName, sizeof(g_PresetName));
+	ImGui::SameLine();
+	ImGui::BeginDisabled(!g_Now.Screen || !NlCore::GoodPresetName(g_PresetName));
+	if (ImGui::Button("저장"))
+	{
+		MapCommand command;
+		command.Act = MapAct::PresetSave;
+		command.Name = g_PresetName;
+		Push(command);
+	}
+	ImGui::EndDisabled();
+	for (const std::string& name : g_Now.Presets)
+	{
+		ImGui::TextUnformatted(name.c_str());
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!g_Now.Screen);
+		if (ImGui::SmallButton(("불러오기##" + name).c_str()))
+		{
+			MapCommand command;
+			command.Act = MapAct::PresetLoad;
+			command.Name = name;
+			Push(command);
+		}
+		ImGui::EndDisabled();
+		ImGui::SameLine();
+		if (ImGui::SmallButton(("지우기##" + name).c_str()))
+		{
+			MapCommand command;
+			command.Act = MapAct::PresetDelete;
+			command.Name = name;
+			Push(command);
+		}
+	}
+	NlUi::Hint("프리셋은 지형 5개와 자원 8개(와 씨앗)를 mods\\Aurie\\NlToyBox.maps.txt 에 이름으로 저장합니다. 불러오면 값만 채웁니다. 생성은 '다시 생성'으로.");
+	if (!g_Last.empty())
+		NlUi::Hint(g_Last.c_str());
 }
 
 std::vector<std::string> NlMapGen::Do(const NlCore::MapCommand& Command)
