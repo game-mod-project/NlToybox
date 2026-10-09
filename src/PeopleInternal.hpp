@@ -36,6 +36,13 @@ namespace NlPeople::Internal
 	constexpr const char* k_PreferredData = "inst:o_data.__preferred_equipment_data";
 	// 게임의 디버그 소환기(CreatureSpawner. research/13). __spawn_soldier 같은 메서드는 인자가 없고(기계어) 마우스가 가리키는 지도의 자리에 만든다.
 	constexpr const char* k_Spawner = "inst:o_debug.debug_spawner";
+	// 영주를 성별을 정해 만드는 길(research/35). 소환기의 __spawn_lord 는 카메라의 get_mouse_x()·get_mouse_y() 로 자리를, 지도의 그래프의 get_node_by_pos(x, y) 로 칸을 얻어
+	// 영지의 debug_spawn_new_player_character(성별, 칸)을 부르는 것이 전부다(기계어와 기록). 같은 꼴로 부른다. 그래프는 지도의 get_graph() 가 돌려주는 구조체와 같다(주소).
+	constexpr const char* k_Camera = "global.__current_camera";
+	constexpr const char* k_MapGraph = "inst:o_game_map_controller.__current_local_map.__graph";
+	constexpr const char* k_Province = "inst:o_game_map_controller.__province";
+	// 문화의 자료(CulturesData): __cultures_list(게임이 무작위로 고르는 넷), __cultures_map(이름 → 문화 구조체). 문화 구조체: __name, __caption(화면 이름의 열쇠), __dialect …
+	constexpr const char* k_Cultures = "inst:o_data.__cultures_data";
 	struct Detail			// 고른 사람의 값. RValue 를 담지 않는다
 	{
 		bool Ready = false;
@@ -55,12 +62,18 @@ namespace NlPeople::Internal
 		std::string Name, Caption, Category;		// 게임의 이름("building_mine"), 화면의 이름("광산"), 갈래(economic, cultural_knowledge, textbooks)
 	};
 
+	struct CultureName
+	{
+		std::string Name, Label;		// 게임의 이름("gwelts"), 창에 보일 이름(게임의 글이 있으면 "화면 이름 (gwelts)")
+	};
+
 	struct Snapshot			// 틱이 채우고 Draw 가 읽는다
 	{
 		bool Ready = false;
 		std::string Why;
 		std::vector<PersonRow> People;
 		std::vector<KnowledgeName> Knowledge;	// 게임에 있는 지식(게임의 목록의 차례. 자리가 __knowledge_list 의 번호다)
+		std::vector<CultureName> Cultures;		// 게임의 문화(__cultures_list 의 차례. 넷을 봤다)
 		std::vector<std::string> Resources;		// 자원 번호 → 창에 보일 이름
 		Detail One;
 		std::string Last;						// 마지막으로 한 일
@@ -87,6 +100,8 @@ namespace NlPeople::Internal
 	extern char g_KnowledgeFilter[48];
 	extern int g_SpawnQueued;
 	extern std::deque<NlCore::SpawnKind> g_SpawnKinds;
+	extern NlCore::LordSpawn g_LordSpawn;
+	extern std::deque<NlCore::LordSpawn> g_LordSpawns;
 	extern bool g_BulkKnowledgeArmed;
 	extern bool g_AliveLogged, g_Busy;
 
@@ -104,6 +119,7 @@ namespace NlPeople::Internal
 	std::string WhoText(const std::string& Who);
 	std::string SpawnSoldiersNow(double Asked);
 	std::string SpawnHereNow(NlCore::SpawnKind Kind);
+	std::vector<std::string> SpawnLordNow(const NlCore::LordSpawn& Options);
 	// PeopleDraw.cpp
 	std::string NumberText(double Value, int Digits);
 }

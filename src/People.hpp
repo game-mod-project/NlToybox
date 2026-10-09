@@ -34,6 +34,8 @@ namespace NlPeople
 	std::vector<std::string> SpawnSoldiers(double Count);
 	// 게임의 디버그 소환기로 플레이어의 사람 하나를 마우스가 가리키는 지도의 자리에 만든다.
 	std::vector<std::string> SpawnHere(NlCore::SpawnKind Kind);
+	// 성별·나이·문화·역할을 정해 플레이어의 영주 하나를 마우스 자리에 만든다(core 의 LordSpawn. research/35). 돌려주는 것: 만든 것의 줄과 입힌 일마다의 줄.
+	std::vector<std::string> SpawnLord(const NlCore::LordSpawn& Options);
 	std::vector<std::string> List(bool All);
 	// 한 사람의 값. 인물 패널도 그 사람을 고른다.
 	std::vector<std::string> Show(const std::string& Uuid);

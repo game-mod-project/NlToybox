@@ -595,8 +595,19 @@ namespace
 		else if (C.Target == "spawn")
 		{
 			NlCore::SpawnKind kind = NlCore::SpawnKind::Soldier;
+			NlCore::LordSpawn lord;
+			std::string why;
 			if (!NlCore::ParseSpawnKind(C.Options.count("kind") ? C.Options.at("kind") : std::string(), kind))
 				lines = { "person spawn needs a kind" };
+			else if (kind == NlCore::SpawnKind::Lord && !NlCore::ParseLordSpawn(C.Options, lord, why))
+				lines = { why };
+			else if (kind == NlCore::SpawnKind::Lord && !NlCore::IsPlainLordSpawn(lord))
+			{
+				// 무언가를 정한 영주 소환(research/35). 아무것도 정하지 않은 것은 아래의 지금까지의 길로 간다.
+				Say("  running person spawn lord (gender " + std::string(NlCore::LordGenderWord(lord.Gender)) + ", age " + NlCore::Shortest(lord.Age)
+					+ ", culture " + (lord.Culture.empty() ? "-" : lord.Culture) + ", role " + (lord.Role.empty() ? "-" : lord.Role) + ")");		// 죽으면 여기까지 남는다
+				lines = NlPeople::SpawnLord(lord);
+			}
 			else
 			{
 				Say(std::string("  running person spawn ") + NlCore::SpawnWord(kind));		// 죽으면 여기까지 남는다

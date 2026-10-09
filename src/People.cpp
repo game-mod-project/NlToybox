@@ -57,6 +57,8 @@ namespace NlPeople::Internal
 	char g_KnowledgeFilter[48] = "";
 	int g_SpawnQueued = 0;				// 창이 청한 병사의 수(틱이 만든다)
 	std::deque<NlCore::SpawnKind> g_SpawnKinds;		// 창이 청한 "마우스 자리에 소환"(틱마다 하나씩 한다)
+	NlCore::LordSpawn g_LordSpawn;					// 창의 선택: 소환할 영주의 성별·나이·문화·역할(이 실행 안에서만 든다. 파일에 남기지 않는다)
+	std::deque<NlCore::LordSpawn> g_LordSpawns;		// 창이 청한, 무언가를 정한 영주 소환(틱마다 하나씩 한다)
 	bool g_BulkKnowledgeArmed = false;	// "영주 전원에게 모든 지식"은 이것을 켠 뒤에만 눌린다(되돌릴 수 없다)
 
 	bool g_AliveLogged = false;			// is_alive() 를 부른다고 로그에 남겼는가(게임마다 한 번)
@@ -108,7 +110,21 @@ namespace NlPeople::Internal
 					g_Now.Resources[at] = NlCore::ResourceLabel(NlCore::ResourceKey(caption.ToString()));
 				return true;
 			});
-		Log("people: " + std::to_string(g_Now.Knowledge.size()) + " knowledge names, " + std::to_string(g_Now.Resources.size()) + " resources");
+		// 문화: 게임이 무작위로 고르는 목록(__cultures_list)의 이름들. 영주를 소환할 때 고른다(research/35).
+		RValue cultures;
+		g_Now.Cultures.clear();
+		if (NlAccess::Read(NlCore::ParseAskPath(std::string(k_Cultures) + ".__cultures_list"), cultures, why) && cultures.IsArray())
+			NlAccess::ForEachChild(cultures, Holder::Array, [&](const PathStep&, const RValue& item) {
+				CultureName one;
+				if (item.IsStruct() && FollowString(item, { { '.', "__name", 0 } }, one.Name) && NlCore::GoodTraitName(one.Name))
+				{
+					one.Label = NlTraitText::CultureLabel(one.Name);
+					g_Now.Cultures.push_back(std::move(one));
+				}
+				return true;
+			});
+		Log("people: " + std::to_string(g_Now.Knowledge.size()) + " knowledge names, " + std::to_string(g_Now.Resources.size()) + " resources, "
+			+ std::to_string(g_Now.Cultures.size()) + " cultures");
 	}
 
 	// 사람들을 다시 읽는다. 읽지 못하면 거짓이고 g_Now.Why 에 까닭.
@@ -303,6 +319,17 @@ void NlPeople::GameTick(double Now, bool Active)
 		g_NextScan = 0;
 	}
 
+	if (!g_LordSpawns.empty())
+	{
+		const NlCore::LordSpawn spawn = g_LordSpawns.front();
+		g_LordSpawns.pop_front();		// 틱마다 하나씩
+		std::string said;
+		for (const std::string& line : SpawnLordNow(spawn))
+			said += std::string(said.empty() ? "" : " / ") + line;
+		g_Now.Last = said;
+		g_NextScan = 0;
+	}
+
 	if (g_SpawnQueued > 0)
 	{
 		const int count = g_SpawnQueued;
@@ -347,6 +374,18 @@ std::vector<std::string> NlPeople::SpawnHere(NlCore::SpawnKind Kind)
 	const NlCore::ScopedFlag busy(g_Busy);
 	g_Now.Last = SpawnHereNow(Kind);
 	return { g_Now.Last };
+}
+
+std::vector<std::string> NlPeople::SpawnLord(const NlCore::LordSpawn& Options)
+{
+	std::lock_guard lock(g_Mutex);
+	if (g_Busy)
+		return { "busy" };
+	const NlCore::ScopedFlag busy(g_Busy);
+	std::vector<std::string> lines = SpawnLordNow(Options);
+	if (!lines.empty())
+		g_Now.Last = lines.front();
+	return lines;
 }
 
 std::vector<std::string> NlPeople::SpawnSoldiers(double Count)
