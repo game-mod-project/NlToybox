@@ -219,7 +219,33 @@ namespace
 		return NlCore::MapReport(MapAct::PresetDelete, 'x', Name);
 	}
 
-	std::string SeedNow(const MapCommand& C);		// Task 5
+
+	// 씨앗 고정: 게임의 regenerate_map() 이 안에서 set_generator_seed(-1) 로 무작위로 되돌리므로(research/31), get_generator_seed() 의 반환값을 훅으로 바꾸는 길뿐이다.
+	// 생성기가 그 함수를 읽는 것을 기록으로 본 뒤에만 켠다(core/MapPlan 의 SeedHookVerified). 그 전에는 'u'.
+	std::string SeedNow(const MapCommand& C)
+	{
+		if (!NlCore::SeedHookVerified())
+			return NlCore::MapReport(MapAct::Seed, 'u', std::string());
+		if (C.SeedRandom)
+		{
+			if (!g_SeedHook.empty())
+				NlRecorder::Unoverride(g_SeedHook);
+			g_SeedOn = false;
+			Log("map seed: random");
+			return NlCore::MapReport(MapAct::Seed, 'r', std::string());
+		}
+		NlRecorder::Forced forced;
+		forced.Kind = 'n';
+		forced.Number = C.Seed;
+		std::string name, why;
+		Log("map seed: overriding get_generator_seed -> " + NlCore::Shortest(C.Seed));		// 걸기 전에 남긴다
+		if (!NlRecorder::Override(std::string(NlCore::k_MapInitializerPath) + ".get_generator_seed", forced, name, why))
+			return NlCore::MapReport(MapAct::Seed, 'f', why);
+		g_SeedHook = name;
+		g_SeedOn = true;
+		g_SeedValue = C.Seed;
+		return NlCore::MapReport(MapAct::Seed, 'd', NlCore::Shortest(C.Seed));
+	}
 
 	// 한 일. 화면이 아니면 쓰지도 부르지도 않는다(프리셋 지우기와 씨앗은 화면과 무관하다).
 	std::string DoNow(const MapCommand& C)
@@ -256,10 +282,6 @@ namespace
 		g_Queue.push_back(std::move(Command));
 	}
 
-	std::string SeedNow(const MapCommand&)
-	{
-		return NlCore::MapReport(MapAct::Seed, 'u', std::string());		// Task 5 가 채운다
-	}
 }
 
 void NlMapGen::Init(LogFn Log_, const std::filesystem::path& ModuleDir)
@@ -397,7 +419,29 @@ void NlMapGen::Draw()
 		if (ImGui::Button("새로 읽기"))
 			g_NextRead = 0;
 		ImGui::SameLine();
-		ImGui::TextDisabled("씨앗 %s", g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed).c_str() : "?");
+		ImGui::Text("씨앗 %s", g_Now.SeedRead ? NlCore::Shortest(g_Now.Seed).c_str() : "?");
+		ImGui::SameLine();
+		ImGui::BeginDisabled(!NlCore::SeedHookVerified());
+		bool fixed = g_SeedOn;
+		if (ImGui::Checkbox(NlCore::SeedHookVerified() ? "씨앗 고정" : "씨앗 고정 (확인 전)", &fixed))
+		{
+			MapCommand command;
+			command.Act = MapAct::Seed;
+			command.SeedRandom = !fixed;
+			command.Seed = g_SeedValue < 0 ? 1 : g_SeedValue;
+			Push(command);
+		}
+		ImGui::SameLine();
+		ImGui::SetNextItemWidth(100);
+		double typed = 0;
+		if (NlUi::InputNumber("##seed", "map_seed", g_SeedValue < 0 ? 1 : g_SeedValue, "%.0f", typed) && g_SeedOn)		// 칸을 떠날 때 넣는다(Cheats.cpp 와 같은 꼴)
+		{
+			MapCommand command;
+			command.Act = MapAct::Seed;
+			command.Seed = std::floor(typed);
+			Push(command);
+		}
+		ImGui::EndDisabled();
 	}
 	NlUi::Hint("값은 게임의 생성기 창이 쓰는 자리(영지의 생성 설정)에 바로 씁니다. '다시 생성'은 게임의 함수(regenerate_map)를 부릅니다(창의 '생성'과 같습니다). "
 		"'원래대로'는 영지의 원래 값으로 되돌립니다. 자원 8개는 창에 없는 값이라 단계의 효과(몇 개가 생기는가)는 확인 전입니다. 막힘 4개는 영지의 모양이라 프리셋에 들지 않습니다.");
